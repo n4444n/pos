@@ -1173,8 +1173,8 @@ function DesignTab({ v, set, catalog, test, testing, lineOn }: {
               <Field label="ปุ่มท้ายการ์ด" hint="เว้นว่าง = ไม่มีปุ่ม">
                 <Input value={st.buttonLabel} onChange={(t) => setStyle({ buttonLabel: t })} placeholder="เช่น เปิดระบบ POS" max={40} />
               </Field>
-              <Field label="ลิงก์ของปุ่ม" hint="เช่น ลิงก์ ngrok ของร้าน">
-                <Input value={st.buttonUrl} onChange={(t) => setStyle({ buttonUrl: t.trim() })} placeholder="https://xxxx.ngrok-free.app" max={500} />
+              <Field label="ลิงก์ของปุ่ม" hint="เช่น เว็บไซต์หรือ LINE OA ของร้าน">
+                <Input value={st.buttonUrl} onChange={(t) => setStyle({ buttonUrl: t.trim() })} placeholder="https://" max={500} />
               </Field>
             </Grid>
           </Card>
