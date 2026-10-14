@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ติดตั้ง Clothing POS บน VPS (Ubuntu 24.04) — รันครั้งเดียวด้วย root
-#   sudo bash /opt/pos/deploy/setup-vps.sh pos.greenthread.online
+#   sudo bash /opt/pos/deploy/setup-vps.sh pos.sh0p.tech
 # รันซ้ำได้ (ขั้นที่ทำไปแล้วจะข้าม)
 set -euo pipefail
 
