@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, View } from 'react-native';
 import { api } from './src/api';
 import { useAppSettings } from './src/appSettings';
+import { desktop } from './src/desktop';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NavDrawer, refreshStockBadge, type Route } from './src/components/NavMenu';
 import { HistoryScreen } from './src/screens/HistoryScreen';
@@ -112,6 +113,13 @@ function Main({ me }: { me: Me }) {
     const branch = shop.branchName || shop.name;
     document.title = [page[route], branch, 'Clothing POS'].filter(Boolean).join(' · ');
   }, [route, shop.branchName, shop.name]);
+
+  // แอปเดสก์ท็อป: หัวหน้าต่าง "Clothing POS - Version: x | ร้าน <ร้าน>, <สาขา> | <IP>"
+  useEffect(() => {
+    const d = desktop();
+    d?.setTitleInfo?.({ shop: shop.name, branch: shop.branchName && shop.branchName !== shop.name ? shop.branchName : '' });
+    return () => d?.setTitleInfo?.({ shop: '', branch: '' }); // ออกจากระบบ
+  }, [shop.name, shop.branchName]);
 
   // ป้ายแจ้งเตือนสต็อกบนเมนู: โหลดใหม่เมื่อเปลี่ยนหน้า/สต็อกเปลี่ยน (ขาย คืน แก้บิล)
   useEffect(() => {
