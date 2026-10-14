@@ -20,7 +20,7 @@ export interface CardStyle {
   color: string;
   /** โลโก้ร้าน (URL รูปที่เปิดได้จากอินเทอร์เน็ต) */
   logoUrl: string;
-  /** ปุ่มท้ายการ์ด เช่น "เปิดระบบ POS" → ลิงก์ ngrok */
+  /** ปุ่มท้ายการ์ด เช่น "เปิดระบบ POS" → ลิงก์ที่ต้องการให้เปิด */
   buttonLabel: string;
   buttonUrl: string;
   /** ขนาดการ์ด */

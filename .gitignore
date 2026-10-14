@@ -7,15 +7,12 @@ data/
 *.db-shm
 .env*.local
 .DS_Store
-ngrok-url.txt
 
 *.js
 !babel.config.js
 .pin-secret
 uploads/
-typecheck.log
 desktop/release/
 desktop/runtime/
-build-desktop.log
 # กุญแจแอป — ห้ามขึ้น GitHub (repo เป็นสาธารณะ)
 desktop/app-key.txt

@@ -9,7 +9,7 @@ import type {
 /**
  * ที่อยู่ API:
  * - ถ้าตั้ง EXPO_PUBLIC_API_URL ไว้ จะใช้ค่านั้น
- * - บนเว็บที่ serve จาก server เดียวกัน (production / ngrok) ใช้ path เดียวกัน ("")
+ * - บนเว็บที่ serve จาก server เดียวกัน (production บน VPS) ใช้ path เดียวกัน ("")
  * - ตอน dev ด้วย `expo start --web` (พอร์ต 8081) จะชี้ไปที่ API พอร์ต 3000
  */
 function resolveBase(): string {
@@ -60,7 +60,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       signal: ctrl.signal,
       headers: {
         'Content-Type': 'application/json',
-        'ngrok-skip-browser-warning': '1', // ข้ามหน้าเตือนของ ngrok สำหรับ request API
         ...(auth.get() ? { Authorization: `Bearer ${auth.get()}` } : {}),
         ...(init?.headers ?? {}),
       },
