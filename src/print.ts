@@ -6,18 +6,10 @@ import type { FooterBlock } from './appSettings';
 import type { Order } from './types';
 import { getAppSettings } from './appSettings';
 import { code128 } from './components/stock/Barcode';
+import { desktop } from './desktop';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const m = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-/** สะพานจากแอปเดสก์ท็อป (desktop/preload.cjs) — ไม่มีเมื่อเปิดผ่านเบราว์เซอร์ */
-type DesktopBridge = {
-  version: string;
-  paperWidth: () => 58 | 80 | null;
-  print: (html: string, opts: { paperWidth: 58 | 80 }) => Promise<{ ok: boolean; error?: string }>;
-};
-export const desktop = (): DesktopBridge | null =>
-  (typeof window !== 'undefined' && (window as unknown as { posDesktop?: DesktopBridge }).posDesktop) || null;
 
 /** ขนาดกระดาษม้วน: ตั้งค่าของเครื่องนี้ (แอปเดสก์ท็อป) มาก่อน ถ้าไม่ได้ตั้งใช้ ตั้งค่าร้าน → ใบเสร็จ */
 export function paperWidth(): 58 | 80 {

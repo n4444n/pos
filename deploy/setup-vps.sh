@@ -65,7 +65,7 @@ systemctl enable --now pos
 systemctl restart pos
 
 step "ตั้งค่า Caddy สำหรับ $DOMAIN"
-sed "s/{\$POS_DOMAIN}/$DOMAIN/g" "$APP_DIR/deploy/Caddyfile" > /etc/caddy/Caddyfile
+sed -e "s/{\$POS_DOMAIN}/$DOMAIN/g" -e '/# DOWNLOAD-BEGIN/,/# DOWNLOAD-END/d' "$APP_DIR/deploy/Caddyfile" > /etc/caddy/Caddyfile
 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 systemctl reload caddy || systemctl restart caddy
 

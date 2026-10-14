@@ -1,0 +1,117 @@
+# สร้างตัวติดตั้ง Clothing POS (.exe) อัตโนมัติ แล้วส่งขึ้น VPS
+# - ทำงานเมื่อ push ขึ้น main และมีการแก้ไฟล์ใน desktop/  (หรือกด Run workflow เองในแท็บ Actions)
+# - ข้ามถ้าเวอร์ชันใน desktop/package.json ถูกส่งขึ้นไปแล้ว → ต้องเพิ่มเลข version ทุกครั้งที่ออกตัวใหม่
+# - ผลลัพธ์: ร้านได้ปุ่ม "อัปเดต" ในโปรแกรม + https://<VPS_HOST>/download/ มีตัวติดตั้งล่าสุด
+# ⚠️ repo นี้เป็นสาธารณะ: ห้ามเก็บไฟล์ .exe เป็น artifact หรือ GitHub Release (มีกุญแจแอปฝังอยู่)
+# ต้องตั้ง secrets: VPS_HOST, VPS_SSH_KEY, APP_KEY — ดู deploy/release-setup.sh
+name: Desktop installer
+
+on:
+  push:
+    branches: [main]
+    paths: ['desktop/**']
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Read version
+        id: v
+        shell: bash
+        run: echo "version=$(node -p "require('./desktop/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Check secrets
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          APP_KEY: ${{ secrets.APP_KEY }}
+        run: |
+          for n in VPS_HOST VPS_SSH_KEY APP_KEY; do
+            [ -n "${!n}" ] || { echo "::error::ยังไม่ได้ตั้ง secret $n — รัน bash /opt/pos/deploy/release-setup.sh บน VPS แล้วทำตาม"; exit 1; }
+          done
+
+      - name: Set up SSH
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Skip if already published
+        id: check
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          if ssh "posrelease@$VPS_HOST" "test -f /var/www/pos-updates/ClothingPOS-Setup-$V.exe"; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::เวอร์ชัน $V มีบนเซิร์ฟเวอร์แล้ว — ถ้าต้องการออกตัวใหม่ ให้เพิ่ม version ใน desktop/package.json"
+          fi
+
+      - name: Build installer
+        if: steps.check.outputs.skip != 'true'
+        shell: bash
+        working-directory: desktop
+        env:
+          APP_KEY: ${{ secrets.APP_KEY }}
+        run: |
+          printf '%s' "$APP_KEY" > app-key.txt
+          npm install --no-audit --no-fund
+          npx electron-builder --win nsis --x64 --publish never
+          rm -f app-key.txt
+
+      - name: Publish to VPS
+        if: steps.check.outputs.skip != 'true'
+        shell: bash
+        working-directory: desktop/release
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          EXE="ClothingPOS-Setup-$V.exe"
+          R="posrelease@$VPS_HOST"
+          # ตัวติดตั้งก่อน latest.yml ทีหลัง → แอปที่ร้านเห็นเวอร์ชันใหม่เมื่อไฟล์ครบแล้วเท่านั้น
+          scp "$EXE" "$EXE.blockmap" "$R:/var/www/pos-updates/"
+          scp latest.yml "$R:/var/www/pos-updates/latest.yml.tmp"
+          ssh "$R" "mv /var/www/pos-updates/latest.yml.tmp /var/www/pos-updates/latest.yml"
+          # หน้าดาวน์โหลด: เก็บเฉพาะตัวล่าสุด
+          ssh "$R" "rm -f /var/www/pos-download/*.exe && cp /var/www/pos-updates/$EXE /var/www/pos-download/"
+          DATE=$(date -u -d '+7 hours' '+%d/%m/%Y %H:%M')
+          SIZE=$(( $(stat -c %s "$EXE") / 1024 / 1024 ))
+          cat > index.html <<HTML
+          <!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+          <title>ดาวน์โหลด Clothing POS</title>
+          <style>body{margin:0;font-family:'Segoe UI',Tahoma,sans-serif;background:#f4f6fb;color:#1b1f27;display:flex;min-height:100vh;align-items:center;justify-content:center}
+          .c{background:#fff;border-radius:20px;padding:32px 36px;max-width:440px;box-shadow:0 6px 24px rgba(0,0,0,.08);text-align:center}
+          .logo{width:64px;height:64px;border-radius:16px;background:#2f6bff;color:#fff;font-size:30px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+          h1{font-size:22px;margin:14px 0 4px}.s{color:#6b7280;font-size:14px;margin:0 0 22px}
+          a.b{display:inline-block;background:#2f6bff;color:#fff;text-decoration:none;padding:13px 26px;border-radius:12px;font-weight:600}
+          ol{text-align:left;color:#4b5563;font-size:13px;line-height:1.8;margin:24px 0 0;padding-left:20px}</style></head>
+          <body><div class="c"><div class="logo">P</div><h1>Clothing POS</h1>
+          <p class="s">เวอร์ชัน $V · Windows 64-bit · $SIZE MB · อัปเดต $DATE</p>
+          <a class="b" href="$EXE">ดาวน์โหลดตัวติดตั้ง</a>
+          <ol><li>เปิดไฟล์ที่ดาวน์โหลด ถ้า Windows เตือน กด <b>More info → Run anyway</b></li>
+          <li>เปิดโปรแกรม → เมนู <b>ระบบ → ตั้งค่าเครื่องนี้</b> เลือกเครื่องพิมพ์และขนาดกระดาษ แล้วกดพิมพ์ทดสอบ</li>
+          <li>เข้าสู่ระบบด้วย PIN ของพนักงานสาขานั้น</li>
+          <li>ครั้งต่อไปโปรแกรมอัปเดตเอง (ปุ่มสีเขียว "อัปเดต")</li></ol>
+          <p class="s" style="margin-top:20px;font-size:12px">สำหรับพนักงานร้านเท่านั้น · ห้ามส่งต่อไฟล์หรือรหัสผ่านให้บุคคลภายนอก</p></div></body></html>
+          HTML
+          scp index.html "$R:/var/www/pos-download/index.html"
+          echo "::notice::ส่ง Clothing POS $V ขึ้นเซิร์ฟเวอร์แล้ว → https://$VPS_HOST/download/"
