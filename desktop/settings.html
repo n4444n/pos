@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><title>ตั้งค่าเครื่องนี้</title>
+<style>
+  html,body{margin:0;font-family:'Segoe UI',Tahoma,sans-serif;background:#f4f6fb;color:#1b1f27;font-size:14px}
+  main{padding:20px 24px 88px}
+  h1{font-size:18px;margin:0 0 4px} .sub{color:#6b7280;font-size:12px;margin:0 0 16px}
+  .card{background:#fff;border-radius:12px;padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .card h2{font-size:14px;margin:0 0 10px}
+  label{display:block;font-size:12px;color:#4b5563;margin:10px 0 4px} label:first-of-type{margin-top:0}
+  input[type=text],select{width:100%;box-sizing:border-box;font:inherit;padding:8px 10px;border:1px solid #d6dbe6;border-radius:8px;background:#fff}
+  .seg{display:flex;gap:6px} .seg button{flex:1}
+  .hint{font-size:12px;color:#6b7280;margin-top:6px;line-height:1.5}
+  .row{display:flex;gap:8px;align-items:center}
+  button{font:inherit;border:0;border-radius:8px;padding:8px 14px;cursor:pointer;background:#e6eaf3;color:#1b1f27}
+  button.on{background:#2f6bff;color:#fff}
+  .check{display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:13px;color:#1b1f27} .check input{margin-top:3px}
+  footer{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #e3e7ef;padding:12px 24px;display:flex;justify-content:space-between;align-items:center}
+  .primary{background:#2f6bff;color:#fff;padding:9px 20px} #msg{font-size:12px;color:#6b7280}
+  .ok{color:#109e5e!important} .err{color:#d33!important}
+</style></head>
+<body>
+<main>
+  <h1>ตั้งค่าเครื่องนี้</h1>
+  <p class="sub">ใช้เฉพาะคอมพิวเตอร์เครื่องนี้ · เวอร์ชัน <span id="ver"></span></p>
+
+  <section class="card">
+    <h2>เครื่องพิมพ์ใบเสร็จ</h2>
+    <label for="printer">เครื่องพิมพ์</label>
+    <div class="row"><select id="printer"></select><button id="refresh" title="โหลดรายชื่อใหม่">↻</button></div>
+    <div class="hint">ใช้ได้กับเครื่องพิมพ์ใบเสร็จทุกรุ่นที่ติดตั้งไดรเวอร์ใน Windows แล้ว (USB / LAN / Bluetooth)</div>
+
+    <label>ขนาดกระดาษ</label>
+    <div class="seg" id="paper">
+      <button data-v="">ตามตั้งค่าร้าน</button><button data-v="58">58 มม.</button><button data-v="80">80 มม.</button>
+    </div>
+    <div class="hint">"ตามตั้งค่าร้าน" ใช้ค่าจากเมนู ตั้งค่า → ใบเสร็จ ในระบบ · เลือก 58/80 เมื่อเครื่องพิมพ์ของสาขานี้ต่างจากสาขาอื่น</div>
+
+    <label class="check"><input type="checkbox" id="silent"> <span>พิมพ์ทันทีโดยไม่ถาม (แนะนำ)<br><span class="hint" style="margin:0">ถ้าปิด จะแสดงกล่องเลือกเครื่องพิมพ์ทุกครั้ง</span></span></label>
+
+    <div class="row" style="margin-top:12px"><button id="test">🖨 พิมพ์ทดสอบ</button><span id="testmsg" class="hint" style="margin:0"></span></div>
+  </section>
+
+  <section class="card">
+    <h2>เซิร์ฟเวอร์</h2>
+    <label for="server">ที่อยู่ระบบ POS</label>
+    <input type="text" id="server" spellcheck="false">
+    <div class="hint">ทุกสาขาต้องใช้ที่อยู่เดียวกัน · ค่าเริ่มต้น <span id="defsrv"></span></div>
+  </section>
+</main>
+<footer>
+  <span id="msg"></span>
+  <div class="row"><button id="cancel">ยกเลิก</button><button class="primary" id="save">บันทึก</button></div>
+</footer>
+<script>
+  const api = window.desktopShell;
+  const $ = (id) => document.getElementById(id);
+  let paper = null;
+
+  function setPaper(v) {
+    paper = v ? Number(v) : null;
+    for (const b of $('paper').children) b.classList.toggle('on', (b.dataset.v || null) === (paper ? String(paper) : null));
+  }
+  for (const b of $('paper').children) b.onclick = () => setPaper(b.dataset.v);
+
+  async function loadPrinters(selected) {
+    const list = await api.listPrinters();
+    const sel = $('printer');
+    sel.innerHTML = '';
+    const def = list.find((p) => p.isDefault);
+    sel.append(new Option(`เครื่องพิมพ์หลักของ Windows${def ? ` (${def.displayName})` : ''}`, ''));
+    for (const p of list) sel.append(new Option(p.displayName + (p.isDefault ? ' ★' : ''), p.name));
+    if (selected && !list.some((p) => p.name === selected)) sel.append(new Option(`${selected} (ไม่พบ — ตรวจการเชื่อมต่อ)`, selected));
+    sel.value = selected || '';
+  }
+  const current = () => ({ printer: $('printer').value, paperWidth: paper, silent: $('silent').checked, serverUrl: $('server').value.trim() });
+
+  (async () => {
+    const c = await api.getConfig();
+    $('ver').textContent = c.version;
+    $('defsrv').textContent = c.defaultServer;
+    $('server').value = c.serverUrl;
+    $('silent').checked = c.silent;
+    setPaper(c.paperWidth);
+    await loadPrinters(c.printer);
+  })();
+
+  $('refresh').onclick = () => loadPrinters($('printer').value);
+  $('test').onclick = async () => {
+    $('testmsg').className = 'hint'; $('testmsg').textContent = 'กำลังพิมพ์…';
+    const r = await api.testPrint(current());
+    $('testmsg').className = r.ok ? 'hint ok' : 'hint err';
+    $('testmsg').textContent = r.ok ? 'ส่งงานพิมพ์แล้ว ✓' : r.error;
+  };
+  $('cancel').onclick = () => api.closeSettings();
+  $('save').onclick = async () => {
+    const c = current();
+    if (!/^https?:\/\/[^/\s]+\/?$/i.test(c.serverUrl)) { $('msg').className = 'err'; $('msg').textContent = 'ที่อยู่เซิร์ฟเวอร์ไม่ถูกต้อง (เช่น https://pos.sh0p.tech)'; return; }
+    await api.saveConfig(c);
+  };
+</script>
+</body></html>
