@@ -339,7 +339,7 @@ const server = createServer(async (req, res) => {
       res.writeHead(204, {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, X-Branch, ngrok-skip-browser-warning',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, X-Branch',
       });
       return res.end();
     }
