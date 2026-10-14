@@ -10,6 +10,46 @@ import { code128 } from './components/stock/Barcode';
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const m = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/** สะพานจากแอปเดสก์ท็อป (desktop/preload.cjs) — ไม่มีเมื่อเปิดผ่านเบราว์เซอร์ */
+type DesktopBridge = {
+  version: string;
+  paperWidth: () => 58 | 80 | null;
+  print: (html: string, opts: { paperWidth: 58 | 80 }) => Promise<{ ok: boolean; error?: string }>;
+};
+export const desktop = (): DesktopBridge | null =>
+  (typeof window !== 'undefined' && (window as unknown as { posDesktop?: DesktopBridge }).posDesktop) || null;
+
+/** ขนาดกระดาษม้วน: ตั้งค่าของเครื่องนี้ (แอปเดสก์ท็อป) มาก่อน ถ้าไม่ได้ตั้งใช้ ตั้งค่าร้าน → ใบเสร็จ */
+export function paperWidth(): 58 | 80 {
+  const d = desktop()?.paperWidth();
+  if (d === 58 || d === 80) return d;
+  return getAppSettings().receipt.paperWidth === 58 ? 58 : 80;
+}
+/** ความกว้างพื้นที่พิมพ์จริง (มม.) */
+const bodyWidth = (pw: 58 | 80) => (pw === 58 ? 50 : 72);
+/** CSS หน้ากระดาษม้วน */
+const rollPage = (pw: 58 | 80) => `@page { size: ${pw}mm auto; margin: ${pw === 58 ? 2 : 4}mm }`;
+
+const AUTO_PRINT = '<script>window.onload = () => { window.print(); setTimeout(() => window.close(), 300) }</script>';
+/**
+ * ส่งเอกสารกระดาษม้วนไปพิมพ์
+ * - แอปเดสก์ท็อป: พิมพ์ตรงเข้าเครื่องพิมพ์ที่ตั้งไว้ ไม่ขึ้นกล่องเลือกเครื่องพิมพ์
+ * - เบราว์เซอร์: เปิดหน้าต่างพิมพ์ตามเดิม
+ */
+function output(doc: string, features: string, win?: Window | null) {
+  const d = desktop();
+  if (d) {
+    win?.close();
+    void d.print(doc, { paperWidth: paperWidth() });
+    return;
+  }
+  const w = win ?? window.open('', '_blank', features);
+  if (!w) return;
+  w.document.open();
+  w.document.write(doc.replace('</body>', `${AUTO_PRINT}</body>`));
+  w.document.close();
+}
+
 /** บาร์โค้ด Code128 ของเลขที่บิลเป็น SVG (พิมพ์บนใบเสร็จ) */
 function barcodeSvg(text: string) {
   const w = code128(text);
@@ -53,10 +93,9 @@ export function printReceipt(order: Order) {
   const { receipt: r, shop } = getAppSettings();
   const { t, pay, date, vat, lang } = receiptText(r);
   const shopName = r.shopName?.trim() || shop.name;
-  const w = window.open('', '_blank', `width=${r.paperWidth === 58 ? 300 : 380},height=640`);
-  if (!w) return;
+  const pw = paperWidth();
   const fs = r.fontSize === 'small' ? 11 : r.fontSize === 'large' ? 14 : 12;
-  const bodyW = r.paperWidth === 58 ? 50 : 72;
+  const bodyW = bodyWidth(pw);
   const lines = (t: string) => t.split(/\r?\n/).filter(Boolean).map((l) => `<div class="c">${esc(l)}</div>`).join('');
   const rows = order.items
     .map(
@@ -92,9 +131,9 @@ export function printReceipt(order: Order) {
   ${footerBlocksHtml(r.footerBlocks, bodyW, fs)}
   ${r.showOrderBarcode ? `<div class="c" style="margin-top:6px">${barcodeSvg(order.orderNo)}</div>` : ''}`;
   const copies = Array.from({ length: Math.max(1, r.copies) }, (_, i) => `<section${i ? ' class="pb"' : ''}>${one}</section>`).join('');
-  w.document.write(`<!doctype html><html lang="${lang === 'en' ? 'en' : 'th'}"><head><meta charset="utf-8"><title>${esc(order.orderNo)}</title>
+  const doc = `<!doctype html><html lang="${lang === 'en' ? 'en' : 'th'}"><head><meta charset="utf-8"><title>${esc(order.orderNo)}</title>
 <style>
-  @page { size: ${r.paperWidth}mm auto; margin: ${r.paperWidth === 58 ? 2 : 4}mm }
+  ${rollPage(pw)}
   body { font-family: 'IBM Plex Sans Thai', system-ui, sans-serif; font-size: ${fs}px; width: ${bodyW}mm; margin: 0 auto; color:#000 }
   h1 { font-size: ${fs + 4}px; text-align: center; margin: 4px 0 }
   .c { text-align: center } .b { font-weight: 700 } .r { text-align: right; white-space: nowrap; vertical-align: top }
@@ -105,16 +144,14 @@ export function printReceipt(order: Order) {
   .it .q { text-align: center; white-space: nowrap; vertical-align: top; width: 14% } .it th.r { text-align: right }
   img { filter: grayscale(1) }
 </style></head><body>${copies}
-  <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 300) }</script>
-</body></html>`);
-  w.document.close();
+</body></html>`;
+  output(doc, `width=${pw === 58 ? 300 : 380},height=640`);
 }
 
-/** พิมพ์รายงานปิดกะ ขนาด 80mm */
+/** พิมพ์รายงานปิดกะ (กระดาษม้วน 58/80 มม.) */
 export function printShiftReport(s: import('./types').Shift, shopName = getAppSettings().shop.name) {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-  const w = window.open('', '_blank', 'width=380,height=700');
-  if (!w) return;
+  const pw = paperWidth();
   const verdict = s.verdict === 'match' ? 'ยอดเงินตรงกัน' : s.verdict === 'short' ? 'เงินขาด' : s.verdict === 'over' ? 'เงินเกิน' : 'ยังไม่ปิดกะ';
   const row = (l: string, r: string, b = false) => `<tr${b ? ' class="t"' : ''}><td>${esc(l)}</td><td class="r">${r}</td></tr>`;
   const denoms = s.denominations
@@ -123,10 +160,10 @@ export function printShiftReport(s: import('./types').Shift, shopName = getAppSe
         .map(([d, n]) => row(`${Number(d).toLocaleString()} × ${n}`, m(Number(d) * n)))
         .join('')
     : '';
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Shift ${s.shiftNo}</title>
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><title>Shift ${s.shiftNo}</title>
 <style>
-  @page { size: 80mm auto; margin: 4mm }
-  body { font-family: 'IBM Plex Sans Thai', system-ui, sans-serif; font-size: 12px; width: 72mm; margin: 0 auto; color:#000 }
+  ${rollPage(pw)}
+  body { font-family: 'IBM Plex Sans Thai', system-ui, sans-serif; font-size: 12px; width: ${bodyWidth(pw)}mm; margin: 0 auto; color:#000 }
   h1 { font-size: 16px; text-align: center; margin: 4px 0 } .c { text-align: center } .r { text-align: right; white-space: nowrap }
   table { width: 100%; border-collapse: collapse } td { padding: 2px 0 } hr { border: 0; border-top: 1px dashed #000; margin: 6px 0 }
   .t td { font-weight: 700; font-size: 14px } .v { text-align: center; font-size: 16px; font-weight: 700; border: 1px solid #000; padding: 6px; margin: 6px 0 }
@@ -156,24 +193,22 @@ export function printShiftReport(s: import('./types').Shift, shopName = getAppSe
   </table>
   ${s.closeNote ? `<hr><div>หมายเหตุ: ${esc(s.closeNote)}</div>` : ''}
   <br><br><div class="c">ลงชื่อ ____________________</div>
-  <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 300) }</script>
-</body></html>`);
-  w.document.close();
+</body></html>`;
+  output(doc, 'width=380,height=700');
 }
 
 /** เปิดหน้าต่างพิมพ์ล่วงหน้า (ต้องเปิดตอนกดปุ่ม ไม่งั้นเบราว์เซอร์บล็อกป๊อปอัป) */
 export function openPrintWindow(width = 380) {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
+  if (Platform.OS !== 'web' || typeof window === 'undefined' || desktop()) return null; // แอปเดสก์ท็อปพิมพ์ตรง ไม่ต้องเปิดหน้าต่าง
   const w = window.open('', '_blank', `width=${width},height=720`);
   if (w) w.document.write('<p style="font-family:system-ui;padding:20px;color:#666">กำลังเตรียมรายงาน…</p>');
   return w;
 }
 
-/** พิมพ์สรุปยอดประจำวัน (80 มม.) — ยอดขาย ช่องทางชำระ เงินในลิ้นชักของกะ ค่าใช้จ่าย สินค้าขายดี */
+/** พิมพ์สรุปยอดประจำวัน (กระดาษม้วน 58/80 มม.) — ยอดขาย ช่องทางชำระ เงินในลิ้นชักของกะ ค่าใช้จ่าย สินค้าขายดี */
 export function printDaySummary(d: import('./api').DaySummary, closed?: import('./types').Shift | null, win?: Window | null) {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-  const w = win ?? window.open('', '_blank', 'width=380,height=720');
-  if (!w) return;
+  const pw = paperWidth();
   const { receipt: r, shop } = getAppSettings();
   const row = (l: string, v: string, cls = '') => `<tr class="${cls}"><td>${esc(l)}</td><td class="r">${v}</td></tr>`;
   const PAY: Record<string, string> = { cash: 'เงินสด', promptpay: 'พร้อมเพย์', card: 'บัตร', transfer: 'โอน' };
@@ -226,18 +261,16 @@ export function printDaySummary(d: import('./api').DaySummary, closed?: import('
   ${d.top.length ? `<div class="b">สินค้าขายดี</div><table>${d.top.map((x, i) => row(`${i + 1}. ${x.name}`, `${x.qty} ชิ้น`)).join('')}</table><hr>` : ''}
   <div class="c"><small>พิมพ์เมื่อ ${esc(now)}</small></div>
   <br><div class="c">ลงชื่อ ____________________</div>`;
-  w.document.open();
-  w.document.write(`<!doctype html><html lang="th"><head><meta charset="utf-8"><title>สรุปยอด ${esc(d.date)}</title>
+  const doc = `<!doctype html><html lang="th"><head><meta charset="utf-8"><title>สรุปยอด ${esc(d.date)}</title>
 <style>
-  @page { size: 80mm auto; margin: 4mm }
-  body { font-family: 'IBM Plex Sans Thai', system-ui, sans-serif; font-size: 12px; width: 72mm; margin: 0 auto; color:#000 }
+  ${rollPage(pw)}
+  body { font-family: 'IBM Plex Sans Thai', system-ui, sans-serif; font-size: 12px; width: ${bodyWidth(pw)}mm; margin: 0 auto; color:#000 }
   h1 { font-size: 16px; text-align: center; margin: 4px 0 } .c { text-align: center } .b { font-weight: 700 }
   .r { text-align: right; white-space: nowrap; vertical-align: top } table { width: 100%; border-collapse: collapse } td { padding: 2px 0 }
   hr { border: 0; border-top: 1px dashed #000; margin: 6px 0 } .t td { font-weight: 700; font-size: 15px } small { color: #444 }
 </style></head><body>${html}
-  <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 300) }</script>
-</body></html>`);
-  w.document.close();
+</body></html>`;
+  output(doc, 'width=380,height=720', win);
 }
 
 /** บาร์โค้ด Code128 ขนาดกำหนดเอง (ใบส่งของ: เล็ก ไม่เต็มหัวกระดาษ) */
