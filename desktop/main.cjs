@@ -4,7 +4,7 @@
 // - อัปเดตตัวเองผ่าน electron-updater (ไฟล์อยู่ที่ <เซิร์ฟเวอร์>/updates/)
 // ตั้งค่าของเครื่องนี้เก็บที่ %APPDATA%\Clothing POS\config.json
 // พัฒนาต้นแบบโดย n4444n (MIT + Attribution — ดูไฟล์ LICENSE)
-const { app, BrowserWindow, Menu, dialog, shell, ipcMain, net } = require('electron');
+const { app, BrowserWindow, Menu, dialog, shell, ipcMain, net, session } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -49,6 +49,30 @@ function saveConfig(next) {
   return config;
 }
 const serverOrigin = () => new URL(config.serverUrl).origin;
+
+// ---------------------------------------------------------------- กุญแจแอป (ใช้ได้เฉพาะโปรแกรมนี้)
+// เซิร์ฟเวอร์ (Caddy) รับเฉพาะคำขอที่มี header X-POS-App ตรงกับกุญแจ → เปิด URL ในเบราว์เซอร์ไม่ได้
+// กุญแจอยู่ในไฟล์ desktop/app-key.txt (ไม่อยู่ใน git) ใส่ตอน build — ดู deploy/README.md หัวข้อ "ล็อกให้ใช้ได้เฉพาะแอป"
+const APP_KEY = (() => {
+  try {
+    return fs.readFileSync(path.join(__dirname, 'app-key.txt'), 'utf8').trim();
+  } catch {
+    return '';
+  }
+})();
+const appHeaders = () => (APP_KEY ? { 'X-POS-App': APP_KEY } : {});
+function installAppKey() {
+  if (!APP_KEY) return;
+  // ทุกคำขอไปยังเซิร์ฟเวอร์ (หน้าเว็บ API รูป หน้าพิมพ์) แนบกุญแจ — เฉพาะเซิร์ฟเวอร์ที่ตั้งไว้เท่านั้น
+  session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['https://*/*', 'http://*/*'] }, (d, cb) => {
+    let same = false;
+    try {
+      same = new URL(d.url).origin === serverOrigin();
+    } catch {}
+    if (same) d.requestHeaders['X-POS-App'] = APP_KEY;
+    cb({ requestHeaders: d.requestHeaders });
+  });
+}
 const updatesUrl = () => `${config.serverUrl}/updates/`;
 
 // ---------------------------------------------------------------- หน้าต่างหลัก
@@ -250,7 +274,7 @@ const cmpVer = (a, b) => {
 };
 async function minVersionPolicy() {
   try {
-    const res = await net.fetch(`${updatesUrl()}min-version.json`, { cache: 'no-store' });
+    const res = await net.fetch(`${updatesUrl()}min-version.json`, { cache: 'no-store', headers: appHeaders() });
     if (!res.ok) return null;
     const j = await res.json();
     return j && j.minVersion ? { minVersion: String(j.minVersion), message: String(j.message || '') } : null;
@@ -267,6 +291,7 @@ function installNow() {
 function setupUpdater() {
   if (!app.isPackaged) return; // โหมดพัฒนาไม่อัปเดต
   autoUpdater.setFeedURL({ provider: 'generic', url: updatesUrl() });
+  autoUpdater.requestHeaders = appHeaders(); // electron-updater ใช้ session แยก → แนบกุญแจเอง
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
@@ -351,6 +376,7 @@ app.on('second-instance', () => {
   }
 });
 app.whenReady().then(() => {
+  installAppKey();
   createWindow();
   setupUpdater();
 });

@@ -1,0 +1,28 @@
+# Caddy — ล็อกให้ใช้ได้เฉพาะแอป Clothing POS (.exe)
+# ติดตั้งด้วย: bash /opt/pos/deploy/app-lock.sh on   ({$POS_DOMAIN} / {$POS_APP_KEY} ถูกแทนที่ตอนติดตั้ง)
+{$POS_DOMAIN} {
+	encode gzip
+
+	route {
+		# ผ่านได้เฉพาะ: แอปที่มีกุญแจ (X-POS-App) หรือระบบภายนอกที่ใช้ API key (เซิร์ฟเวอร์ตรวจ key เอง)
+		@blocked {
+			not header X-POS-App "{$POS_APP_KEY}"
+			not header X-API-Key *
+		}
+		respond @blocked "Clothing POS - ใช้งานได้เฉพาะผ่านโปรแกรมที่ติดตั้งในร้าน" 403 {
+			close
+		}
+
+		# ไฟล์อัปเดตแอปเดสก์ท็อป (electron-updater: latest.yml + Setup.exe)
+		handle_path /updates/* {
+			root * /var/www/pos-updates
+			@yml path *.yml *.json
+			header @yml Cache-Control "no-cache"
+			file_server
+		}
+
+		handle {
+			reverse_proxy 127.0.0.1:3000
+		}
+	}
+}

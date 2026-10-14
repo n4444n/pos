@@ -8,6 +8,12 @@ where node >nul 2>nul || (echo [X] Node.js not found - install from https://node
 for /f "delims=" %%v in ('node -p "require('./package.json').version"') do set "VER=%%v"
 echo Building Clothing POS %VER%  (app opens the central server - no local database)
 echo To release a new version: change "version" in desktop\package.json first.
+if not exist app-key.txt (
+  echo [X] desktop\app-key.txt not found.
+  echo     On the VPS run:  bash /opt/pos/deploy/app-lock.sh key
+  echo     then save the key it prints into desktop\app-key.txt  (one line, never commit it^)
+  timeout /t 60 & exit /b 1
+)
 echo.
 
 echo [1/2] Install Electron (first time takes a few minutes) ...
