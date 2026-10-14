@@ -1,32 +1,31 @@
 {
   "name": "clothing-pos-desktop",
   "productName": "Clothing POS",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "Clothing POS — แอปเดสก์ท็อป (Electron) · พัฒนาต้นแบบโดย n4444n",
+  "description": "Clothing POS — แอปเดสก์ท็อป (Electron) เครื่องลูกของเซิร์ฟเวอร์กลาง · พัฒนาต้นแบบโดย n4444n",
   "author": "n4444n",
   "license": "SEE LICENSE IN ../LICENSE",
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win nsis --x64"
+    "dist": "electron-builder --win nsis --x64 --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
   },
   "devDependencies": {
-    "electron": "^33.2.0",
-    "electron-builder": "^25.1.8"
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12"
   },
   "build": {
     "appId": "com.n4444n.clothingpos",
     "productName": "Clothing POS",
     "copyright": "พัฒนาต้นแบบโดย n4444n (MIT + Attribution)",
     "directories": { "output": "release" },
-    "files": ["main.cjs", "splash.html", "package.json"],
-    "extraResources": [
-      { "from": "../dist", "to": "web" },
-      { "from": "../server", "to": "server" },
-      { "from": "../LICENSE", "to": "LICENSE" },
-      { "from": "runtime", "to": "runtime" }
-    ],
+    "files": ["main.cjs", "preload.cjs", "splash.html", "offline.html", "settings.html", "package.json"],
+    "extraResources": [{ "from": "../LICENSE", "to": "LICENSE" }],
+    "publish": [{ "provider": "generic", "url": "https://pos.sh0p.tech/updates/" }],
     "win": { "target": ["nsis"], "signAndEditExecutable": false },
     "nsis": {
       "oneClick": false,
