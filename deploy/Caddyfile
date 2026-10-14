@@ -1,0 +1,16 @@
+# Caddy — ออกใบรับรอง HTTPS ให้อัตโนมัติ ({$POS_DOMAIN} ถูกแทนที่ตอนติดตั้ง)
+{$POS_DOMAIN} {
+	encode gzip
+
+	# ไฟล์อัปเดตแอปเดสก์ท็อป (electron-updater: latest.yml + Setup.exe)
+	handle_path /updates/* {
+		root * /var/www/pos-updates
+		@yml path *.yml
+		header @yml Cache-Control "no-cache"
+		file_server
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
+}

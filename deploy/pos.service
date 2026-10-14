@@ -1,0 +1,27 @@
+[Unit]
+Description=Clothing POS server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pos
+Group=pos
+WorkingDirectory=/opt/pos
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=TZ=Asia/Bangkok
+Environment=DB_PATH=/var/lib/pos/pos.db
+Environment=WEB_DIR=/opt/pos/dist
+ExecStart=/usr/bin/node --experimental-strip-types --disable-warning=ExperimentalWarning server/index.ts
+Restart=always
+RestartSec=3
+# ความปลอดภัย: เขียนได้เฉพาะโฟลเดอร์ข้อมูล
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/pos
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
