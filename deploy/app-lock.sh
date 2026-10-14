@@ -13,11 +13,15 @@ CADDYFILE=/etc/caddy/Caddyfile
 # โดเมน = บรรทัดแรกที่ไม่ใช่คอมเมนต์ของ Caddyfile ปัจจุบัน (เช่น pos.sh0p.tech)
 domain() { grep -v '^\s*#' "$CADDYFILE" | grep -m1 -oE '^[^ {]+'; }
 
+DL_HASH_FILE=/etc/pos/download-hash
+
 apply() { # $1 = template
-  local d k tmp
-  d=$(domain); k=$(cat "$KEY_FILE" 2>/dev/null || true)
+  local d k h tmp
+  d=$(domain); k=$(cat "$KEY_FILE" 2>/dev/null || true); h=$(cat "$DL_HASH_FILE" 2>/dev/null || true)
   tmp=$(mktemp)
-  sed -e "s/{\$POS_DOMAIN}/$d/g" -e "s/{\$POS_APP_KEY}/$k/g" "$1" > "$tmp"
+  sed -e "s/{\$POS_DOMAIN}/$d/g" -e "s/{\$POS_APP_KEY}/$k/g" -e "s|{\$POS_DL_HASH}|$h|g" "$1" > "$tmp"
+  # ยังไม่ตั้งรหัสดาวน์โหลด → ไม่เปิดหน้าดาวน์โหลด
+  [ -n "$h" ] || sed -i '/# DOWNLOAD-BEGIN/,/# DOWNLOAD-END/d' "$tmp"
   caddy validate --config "$tmp" --adapter caddyfile >/dev/null
   cp "$CADDYFILE" "$CADDYFILE.bak"
   install -m 640 -o root -g caddy "$tmp" "$CADDYFILE"
@@ -46,9 +50,14 @@ case "${1:-status}" in
     apply "$APP_DIR/deploy/Caddyfile"
     echo "ปลดล็อกแล้ว — เปิดผ่านเบราว์เซอร์ได้"
     ;;
+  reapply) # ใช้หลังเปลี่ยนรหัสดาวน์โหลด — คงสถานะล็อกเดิม
+    if grep -q 'X-POS-App' "$CADDYFILE"; then apply "$APP_DIR/deploy/Caddyfile.locked"; else apply "$APP_DIR/deploy/Caddyfile"; fi
+    echo "อัปเดต Caddy แล้ว"
+    ;;
   status)
     if grep -q 'X-POS-App' "$CADDYFILE"; then echo "สถานะ: ล็อกอยู่ (เฉพาะแอป)"; else echo "สถานะ: ไม่ล็อก (เบราว์เซอร์เข้าได้)"; fi
     [ -s "$KEY_FILE" ] && echo "กุญแจ: มีแล้ว ($KEY_FILE)" || echo "กุญแจ: ยังไม่มี"
+    [ -s "$DL_HASH_FILE" ] && echo "หน้าดาวน์โหลด: เปิด (https://$(domain)/download/)" || echo "หน้าดาวน์โหลด: ยังไม่ตั้ง (bash /opt/pos/deploy/release-setup.sh)"
     ;;
-  *) echo "ใช้: $0 key|on|off|status"; exit 1 ;;
+  *) echo "ใช้: $0 key|on|off|reapply|status"; exit 1 ;;
 esac
