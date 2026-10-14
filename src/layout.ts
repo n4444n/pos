@@ -14,11 +14,25 @@ const MIN_CARD = 150;
  *  tablet : 768–1199 → ตะกร้าด้านขวา (≥ 900) / แถบล่าง (< 900)
  *  pc     : ≥ 1200  → ตะกร้าด้านขวา
  */
-export function useResponsive(viewMode: ViewMode) {
+export const CART_MIN = 300;
+
+/** ความกว้างตะกร้าเริ่มต้นตามขนาดจอ */
+export const defaultCartW = (width: number) => (width >= 1440 ? 400 : width >= 1200 ? 360 : 320);
+
+/** กว้างสุดที่ยอมให้ลากตะกร้า — เหลือที่ให้กริดสินค้าอย่างน้อย 2 การ์ด */
+export function maxCartW(width: number) {
+  const pad = width < 768 ? 10 : 16;
+  return Math.max(CART_MIN, width - pad * 2 - 14 - 10 - (MIN_CARD * 2 + GRID_GAP));
+}
+
+/**
+ * @param cartWidth ความกว้างตะกร้าที่ผู้ใช้ลากปรับเอง (null = ใช้ค่าเริ่มต้นตามจอ)
+ */
+export function useResponsive(viewMode: ViewMode, cartWidth: number | null = null) {
   const { width, height } = useWindowDimensions();
   const device: Device = width < 768 ? 'mobile' : width < 1200 ? 'tablet' : 'pc';
   const sideCart = width >= 900;
-  const cartW = width >= 1440 ? 400 : width >= 1200 ? 360 : 320;
+  const cartW = cartWidth == null ? defaultCartW(width) : Math.round(Math.min(maxCartW(width), Math.max(CART_MIN, cartWidth)));
   const pad = device === 'mobile' ? 10 : 16;
   const scrollbar = 10;
   const leftW = width - pad * 2 - (sideCart ? cartW + 14 : 0) - scrollbar;
@@ -28,6 +42,29 @@ export function useResponsive(viewMode: ViewMode) {
   const cardW = (leftW - GRID_GAP * (cols - 1)) / cols;
 
   return { width, height, device, sideCart, cartW, pad, cols, cardW, maxCols };
+}
+
+const CART_KEY = 'pos.cartWidth';
+
+/** ความกว้างตะกร้าที่ลากปรับไว้ — จำไว้ในเบราว์เซอร์เครื่องนี้ (null = ค่าเริ่มต้น) */
+export function useCartWidth(): [number | null, (w: number | null) => void] {
+  const [w, setW] = useState<number | null>(() => {
+    try {
+      const v = Number(globalThis.localStorage?.getItem(CART_KEY));
+      return Number.isFinite(v) && v >= CART_MIN ? v : null;
+    } catch {
+      return null;
+    }
+  });
+  useEffect(() => {
+    try {
+      if (w == null) globalThis.localStorage?.removeItem(CART_KEY);
+      else globalThis.localStorage?.setItem(CART_KEY, String(Math.round(w)));
+    } catch {
+      /* ignore */
+    }
+  }, [w]);
+  return [w, setW];
 }
 
 const KEY = 'pos.viewMode';
