@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><title>Clothing POS — คู่มือติดตั้งและเริ่มใช้งาน</title>
+<!-- แหล่งของ desktop/package-extras/Readme.pdf · แก้ไฟล์นี้แล้วสร้าง PDF ใหม่ (เปิดใน Chrome → พิมพ์ → บันทึกเป็น PDF, A4, ไม่มีหัว/ท้ายกระดาษ) -->
+<style>
+  @page { size: A4; margin: 16mm 16mm 18mm }
+  :root { --ink:#1b1f27; --sub:#5b6472; --line:#e3e7ef; --blue:#2f6bff; --soft:#eef3ff; --green:#1f9d63; --amber:#b26a00; --ambersoft:#fff6e6 }
+  * { box-sizing: border-box }
+  body { margin:0; font-family:'IBM Plex Sans Thai','Leelawadee UI',Tahoma,sans-serif; color:var(--ink); font-size:10.5pt; line-height:1.65 }
+  .cover { display:flex; align-items:center; gap:14px; padding-bottom:14px; border-bottom:2px solid var(--ink); margin-bottom:18px }
+  .logo { width:46px; height:46px; border-radius:12px; background:var(--blue); color:#fff; font-weight:700; font-size:24px; display:flex; align-items:center; justify-content:center }
+  .cover h1 { margin:0; font-size:20pt; line-height:1.15 } .cover p { margin:2px 0 0; color:var(--sub) }
+  h2 { font-size:12.5pt; margin:18px 0 6px; display:flex; align-items:center; gap:9px; break-after:avoid }
+  h2 .n { width:22px; height:22px; border-radius:50%; background:var(--ink); color:#fff; font-size:10pt; display:inline-flex; align-items:center; justify-content:center; flex:none }
+  section { break-inside:avoid }
+  ol, ul { margin:4px 0 0; padding-left:22px } li { margin:2px 0 }
+  b { font-weight:600 } .ui { font-weight:600; background:#f1f3f7; border:1px solid var(--line); border-radius:5px; padding:0 5px; white-space:nowrap }
+  .note { margin-top:8px; padding:8px 12px; border-radius:8px; background:var(--soft); font-size:9.5pt }
+  .warn { background:var(--ambersoft); color:#5a3a00 }
+  table { width:100%; border-collapse:collapse; margin-top:6px; font-size:9.8pt }
+  th, td { text-align:left; vertical-align:top; padding:6px 8px; border-bottom:1px solid var(--line) } th { color:var(--sub); font-weight:600; font-size:9pt }
+  td:first-child { width:34%; font-weight:600 }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:6px }
+  .card { border:1px solid var(--line); border-radius:10px; padding:8px 12px } .card h3 { margin:0 0 2px; font-size:10.5pt }
+  .card p { margin:0; color:var(--sub); font-size:9.5pt }
+  footer { margin-top:22px; padding-top:8px; border-top:1px solid var(--line); color:var(--sub); font-size:8.5pt; display:flex; justify-content:space-between }
+</style></head>
+<body>
+  <div class="cover">
+    <div class="logo">P</div>
+    <div><h1>Clothing POS</h1><p>คู่มือติดตั้งและเริ่มใช้งาน · สำหรับคอมพิวเตอร์หน้าร้าน</p></div>
+  </div>
+
+  <section>
+    <h2><span class="n">1</span>สิ่งที่ต้องมี</h2>
+    <ul>
+      <li>คอมพิวเตอร์ <b>Windows 10 หรือ 11 (64-bit)</b> ที่ต่ออินเทอร์เน็ต (แนะนำให้มีเน็ต 4G สำรองที่ร้าน)</li>
+      <li>เครื่องพิมพ์ใบเสร็จที่ <b>ติดตั้งไดรเวอร์ใน Windows แล้ว</b> (USB / LAN / Bluetooth) — กระดาษ 58 หรือ 80 มม.</li>
+      <li>PIN พนักงานของสาขา (ขอจากผู้จัดการร้าน)</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="n">2</span>ติดตั้งโปรแกรม</h2>
+    <ol>
+      <li>แตกไฟล์ zip แล้วดับเบิลคลิก <b>ClothingPOS-Setup-x.x.x.exe</b></li>
+      <li>ถ้า Windows ขึ้น <b>"Windows protected your PC"</b> ให้กด <span class="ui">More info</span> → <span class="ui">Run anyway</span></li>
+      <li>เลือกโฟลเดอร์ติดตั้ง (ใช้ค่าเดิมได้) → <span class="ui">Install</span> → <span class="ui">Finish</span></li>
+      <li>จะมีไอคอน <b>Clothing POS</b> บนเดสก์ท็อป และในเมนู Start</li>
+    </ol>
+    <div class="note">คำเตือนจาก Windows ขึ้นเพราะโปรแกรมนี้ใช้ภายในร้าน ยังไม่ได้ซื้อใบรับรองดิจิทัล — ขึ้นเฉพาะครั้งแรก การอัปเดตครั้งต่อไปไม่ถาม</div>
+  </section>
+
+  <section>
+    <h2><span class="n">3</span>ตั้งค่าเครื่องพิมพ์ (ทำครั้งเดียวต่อเครื่อง)</h2>
+    <ol>
+      <li>เปิดโปรแกรม → เมนู <span class="ui">ระบบ</span> → <span class="ui">ตั้งค่าเครื่องนี้</span> (หรือกด <span class="ui">Ctrl + ,</span>)</li>
+      <li><b>เครื่องพิมพ์</b> — เลือกเครื่องพิมพ์ใบเสร็จของร้าน (ไม่เห็นในรายการ ให้กดปุ่ม ↻ หรือตรวจสายและไดรเวอร์)</li>
+      <li><b>ขนาดกระดาษ</b> — <span class="ui">ตามตั้งค่าร้าน</span> หรือเลือก <span class="ui">58 มม.</span> / <span class="ui">80 มม.</span> ให้ตรงกับม้วนกระดาษจริง</li>
+      <li>เปิด <b>พิมพ์ทันทีโดยไม่ถาม</b> ไว้ (แนะนำ)</li>
+      <li>กด <span class="ui">พิมพ์ทดสอบ</span> — คำว่า <b>|ซ้าย · กลาง · ขวา|</b> ต้องอยู่ในกระดาษครบ → <span class="ui">บันทึก</span></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2><span class="n">4</span>เริ่มขาย</h2>
+    <ol>
+      <li>ใส่ <b>PIN 6 หลัก</b> ของพนักงาน — ระบบเปิดสาขาที่พนักงานคนนั้นดูแล (ดูชื่อสาขาที่มุมซ้ายบน)</li>
+      <li>ครั้งแรกของวันระบบจะให้ <b>เปิดกะ</b> และนับเงินตั้งต้นในลิ้นชัก</li>
+      <li>สแกนหรือเลือกสินค้า → ชำระเงิน → ใบเสร็จพิมพ์ออกเครื่องพิมพ์ทันที</li>
+      <li>เลิกงาน: กด <span class="ui">ปิดกะทำงาน</span> นับเงิน แล้วพิมพ์สรุปยอดประจำวัน</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2><span class="n">5</span>การอัปเดตโปรแกรม</h2>
+    <div class="grid">
+      <div class="card"><h3>ดาวน์โหลดเอง</h3><p>เมื่อมีเวอร์ชันใหม่ มุมขวาบนจะแสดง "ดาวน์โหลด vX.Y.Z · %" — ขายต่อได้ตามปกติ</p></div>
+      <div class="card"><h3>ปุ่มสีเขียว "อัปเดต"</h3><p>กดเมื่อไม่มีลูกค้า → <b>อัปเดตตอนนี้</b> โปรแกรมปิดและเปิดใหม่เอง (10–30 วินาที)</p></div>
+    </div>
+    <div class="note">ถ้ากด <b>ภายหลัง</b> ระบบจะติดตั้งให้ตอนปิดโปรแกรม · รายการในตะกร้าที่ยังไม่ชำระเงินจะหายเมื่ออัปเดต · ดูเวอร์ชันที่ติดตั้งได้ที่ท้ายเมนูซ้าย ("แอป x.x.x")</div>
+  </section>
+
+  <section>
+    <h2><span class="n">6</span>แก้ปัญหาเบื้องต้น</h2>
+    <table>
+      <tr><th>อาการ</th><th>วิธีแก้</th></tr>
+      <tr><td>ขึ้น "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้"</td><td>ตรวจอินเทอร์เน็ตของร้าน หรือสลับไปใช้ 4G สำรอง — โปรแกรมลองเชื่อมต่อใหม่เองทุก 10 วินาที</td></tr>
+      <tr><td>กดพิมพ์แล้วไม่ออก</td><td>ตรวจว่าเครื่องพิมพ์เปิดอยู่และมีกระดาษ → <span class="ui">ตั้งค่าเครื่องนี้</span> เลือกเครื่องพิมพ์ใหม่ → พิมพ์ทดสอบ</td></tr>
+      <tr><td>ตัวหนังสือตกขอบ / กระดาษยาวผิดปกติ</td><td>เลือกขนาดกระดาษให้ตรงม้วนจริง และใน Windows → Printers → Printing preferences ตั้งขนาดกระดาษของไดรเวอร์ให้ตรงด้วย</td></tr>
+      <tr><td>ลืม PIN</td><td>ให้ผู้จัดการร้านตั้ง PIN ใหม่ในเมนู <span class="ui">พนักงาน</span></td></tr>
+      <tr><td>หน้าจอค้าง / แสดงผลแปลก</td><td>กด <span class="ui">F5</span> เพื่อโหลดหน้าใหม่ ถ้ายังไม่หาย ปิดแล้วเปิดโปรแกรมใหม่</td></tr>
+    </table>
+  </section>
+
+  <div class="note warn" style="margin-top:16px"><b>สำหรับพนักงานร้านเท่านั้น</b> — ห้ามส่งต่อไฟล์ติดตั้ง ลิงก์ดาวน์โหลด รหัสผ่าน หรือ PIN ให้บุคคลภายนอก</div>
+
+  <footer><span>Clothing POS · พัฒนาต้นแบบโดย n4444n</span><span>ติดปัญหา ติดต่อผู้จัดการร้าน</span></footer>
+</body></html>
