@@ -1,7 +1,8 @@
 # สร้างตัวติดตั้ง Clothing POS (.exe) อัตโนมัติ แล้วส่งขึ้น VPS
 # - ทำงานเมื่อ push ขึ้น main และมีการแก้ไฟล์ใน desktop/  (หรือกด Run workflow เองในแท็บ Actions)
-# - ข้ามถ้าเวอร์ชันใน desktop/package.json ถูกส่งขึ้นไปแล้ว → ต้องเพิ่มเลข version ทุกครั้งที่ออกตัวใหม่
-# - ผลลัพธ์: ร้านได้ปุ่ม "อัปเดต" ในโปรแกรม + https://<VPS_HOST>/download/ มีตัวติดตั้งล่าสุด
+# - เวอร์ชันใหม่ (เลข version ใน desktop/package.json ยังไม่เคยส่ง): build .exe → ส่งขึ้น /updates/ → ร้านได้ปุ่ม "อัปเดต"
+# - เวอร์ชันเดิม: ไม่ build ใหม่ (ใช้ .exe ตัวเดิมจากเซิร์ฟเวอร์) แค่แพ็ก zip ใหม่ — เช่น แก้คู่มือใน desktop/package-extras/
+# - ทุกครั้ง: แพ็ก ClothingPOS-vX.Y.Z.zip = ตัวติดตั้ง + ทุกไฟล์ใน desktop/package-extras/ → https://<VPS_HOST>/download/
 # ⚠️ repo นี้เป็นสาธารณะ: ห้ามเก็บไฟล์ .exe เป็น artifact หรือ GitHub Release (มีกุญแจแอปฝังอยู่)
 # ต้องตั้ง secrets: VPS_HOST, VPS_SSH_KEY, APP_KEY — ดู deploy/release-setup.sh
 name: Desktop installer
@@ -53,7 +54,7 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Skip if already published
+      - name: Is this version already published?
         id: check
         shell: bash
         env:
@@ -61,12 +62,12 @@ jobs:
           V: ${{ steps.v.outputs.version }}
         run: |
           if ssh "posrelease@$VPS_HOST" "test -f /var/www/pos-updates/ClothingPOS-Setup-$V.exe"; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::เวอร์ชัน $V มีบนเซิร์ฟเวอร์แล้ว — ถ้าต้องการออกตัวใหม่ ให้เพิ่ม version ใน desktop/package.json"
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::เวอร์ชัน $V มีบนเซิร์ฟเวอร์แล้ว → ไม่ build ใหม่ แพ็ก zip จากตัวติดตั้งเดิม (ออกแอปใหม่ต้องเพิ่ม version ใน desktop/package.json)"
           fi
 
       - name: Build installer
-        if: steps.check.outputs.skip != 'true'
+        if: steps.check.outputs.published != 'true'
         shell: bash
         working-directory: desktop
         env:
@@ -77,8 +78,8 @@ jobs:
           npx electron-builder --win nsis --x64 --publish never
           rm -f app-key.txt
 
-      - name: Publish to VPS
-        if: steps.check.outputs.skip != 'true'
+      - name: Publish update (auto-update feed)
+        if: steps.check.outputs.published != 'true'
         shell: bash
         working-directory: desktop/release
         env:
@@ -91,27 +92,66 @@ jobs:
           scp "$EXE" "$EXE.blockmap" "$R:/var/www/pos-updates/"
           scp latest.yml "$R:/var/www/pos-updates/latest.yml.tmp"
           ssh "$R" "mv /var/www/pos-updates/latest.yml.tmp /var/www/pos-updates/latest.yml"
-          # หน้าดาวน์โหลด: เก็บเฉพาะตัวล่าสุด
-          ssh "$R" "rm -f /var/www/pos-download/*.exe && cp /var/www/pos-updates/$EXE /var/www/pos-download/"
+
+      - name: Fetch published installer
+        if: steps.check.outputs.published == 'true'
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          mkdir -p desktop/release
+          scp "posrelease@$VPS_HOST:/var/www/pos-updates/ClothingPOS-Setup-$V.exe" desktop/release/
+
+      - name: Package zip
+        shell: bash
+        env:
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          PKG="ClothingPOS-v$V"
+          rm -rf "pkg/$PKG" && mkdir -p "pkg/$PKG"
+          cp "desktop/release/ClothingPOS-Setup-$V.exe" "pkg/$PKG/"
+          [ -d desktop/package-extras ] && cp -R desktop/package-extras/. "pkg/$PKG/"
+          rm -f "pkg/$PKG/.gitkeep"
+          # 7-Zip (มีในเครื่อง Windows ของ GitHub) · ชื่อไฟล์ภาษาไทยเก็บเป็น UTF-8
+          # ไฟล์อยู่ชั้นบนสุดของ zip (Windows "Extract All" สร้างโฟลเดอร์ชื่อเดียวกับ zip ให้เอง)
+          (cd "pkg/$PKG" && 7z a -tzip -mcu=on -mx=5 "../$PKG.zip" * > /dev/null)
+          ls -la "pkg/$PKG" && ls -la "pkg/$PKG.zip"
+
+      - name: Publish download page
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          PKG="ClothingPOS-v$V"
+          EXE="ClothingPOS-Setup-$V.exe"
+          R="posrelease@$VPS_HOST"
+          FILES=$(cd "pkg/$PKG" && ls | sed 's/^/<li>/; s/$/<\/li>/' | tr -d '\n')
+          SIZE=$(( $(stat -c %s "pkg/$PKG.zip") / 1024 / 1024 ))
           DATE=$(date -u -d '+7 hours' '+%d/%m/%Y %H:%M')
-          SIZE=$(( $(stat -c %s "$EXE") / 1024 / 1024 ))
+          scp "pkg/$PKG.zip" "$R:/var/www/pos-download/$PKG.zip.tmp"
+          # เก็บเฉพาะชุดล่าสุด
+          ssh "$R" "cd /var/www/pos-download && rm -f *.exe ClothingPOS-v*.zip && mv $PKG.zip.tmp $PKG.zip"
           cat > index.html <<HTML
           <!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
           <title>ดาวน์โหลด Clothing POS</title>
           <style>body{margin:0;font-family:'Segoe UI',Tahoma,sans-serif;background:#f4f6fb;color:#1b1f27;display:flex;min-height:100vh;align-items:center;justify-content:center}
-          .c{background:#fff;border-radius:20px;padding:32px 36px;max-width:440px;box-shadow:0 6px 24px rgba(0,0,0,.08);text-align:center}
+          .c{background:#fff;border-radius:20px;padding:32px 36px;max-width:460px;box-shadow:0 6px 24px rgba(0,0,0,.08);text-align:center}
           .logo{width:64px;height:64px;border-radius:16px;background:#2f6bff;color:#fff;font-size:30px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
           h1{font-size:22px;margin:14px 0 4px}.s{color:#6b7280;font-size:14px;margin:0 0 22px}
           a.b{display:inline-block;background:#2f6bff;color:#fff;text-decoration:none;padding:13px 26px;border-radius:12px;font-weight:600}
-          ol{text-align:left;color:#4b5563;font-size:13px;line-height:1.8;margin:24px 0 0;padding-left:20px}</style></head>
+          .box{text-align:left;background:#f6f7f9;border-radius:12px;padding:10px 16px;margin:22px 0 0;font-size:13px;color:#4b5563}
+          .box ul{margin:4px 0 0;padding-left:18px}
+          ol{text-align:left;color:#4b5563;font-size:13px;line-height:1.8;margin:18px 0 0;padding-left:20px}</style></head>
           <body><div class="c"><div class="logo">P</div><h1>Clothing POS</h1>
           <p class="s">เวอร์ชัน $V · Windows 64-bit · $SIZE MB · อัปเดต $DATE</p>
-          <a class="b" href="$EXE">ดาวน์โหลดตัวติดตั้ง</a>
-          <ol><li>เปิดไฟล์ที่ดาวน์โหลด ถ้า Windows เตือน กด <b>More info → Run anyway</b></li>
-          <li>เปิดโปรแกรม → เมนู <b>ระบบ → ตั้งค่าเครื่องนี้</b> เลือกเครื่องพิมพ์และขนาดกระดาษ แล้วกดพิมพ์ทดสอบ</li>
-          <li>เข้าสู่ระบบด้วย PIN ของพนักงานสาขานั้น</li>
+          <a class="b" href="$PKG.zip">ดาวน์โหลด (.zip)</a>
+          <div class="box">ในไฟล์ zip:<ul>$FILES</ul></div>
+          <ol><li>แตกไฟล์ zip แล้วเปิด <b>$EXE</b> ถ้า Windows เตือน กด <b>More info → Run anyway</b></li>
+          <li>อ่านขั้นตอนตั้งค่าเครื่องพิมพ์และการใช้งานใน <b>Readme.pdf</b></li>
           <li>ครั้งต่อไปโปรแกรมอัปเดตเอง (ปุ่มสีเขียว "อัปเดต")</li></ol>
           <p class="s" style="margin-top:20px;font-size:12px">สำหรับพนักงานร้านเท่านั้น · ห้ามส่งต่อไฟล์หรือรหัสผ่านให้บุคคลภายนอก</p></div></body></html>
           HTML
           scp index.html "$R:/var/www/pos-download/index.html"
-          echo "::notice::ส่ง Clothing POS $V ขึ้นเซิร์ฟเวอร์แล้ว → https://$VPS_HOST/download/"
+          echo "::notice::อัปเดตหน้าดาวน์โหลดแล้ว: $PKG.zip → https://$VPS_HOST/download/"
