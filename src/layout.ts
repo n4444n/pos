@@ -7,6 +7,8 @@ export type Device = 'mobile' | 'tablet' | 'pc';
 export const GRID_GAP = 12;
 /** การ์ดแคบสุดที่ยังอ่าน/กดง่าย — ถ้าเลือก 5×5 แต่จอแคบเกิน จะลดคอลัมน์ให้อัตโนมัติ */
 const MIN_CARD = 150;
+/** คอลัมน์มากสุดเมื่อหดตะกร้าให้แคบ */
+const MAX_COLS = 8;
 
 /**
  * Breakpoints
@@ -38,7 +40,16 @@ export function useResponsive(viewMode: ViewMode, cartWidth: number | null = nul
   const leftW = width - pad * 2 - (sideCart ? cartW + 14 : 0) - scrollbar;
 
   const maxCols = Math.max(2, Math.min(5, Math.floor((leftW + GRID_GAP) / (MIN_CARD + GRID_GAP)))) as 2 | ViewMode;
-  const cols = device === 'mobile' ? 2 : Math.min(viewMode, maxCols);
+  let cols: number = device === 'mobile' ? 2 : Math.min(viewMode, maxCols);
+  if (sideCart && device !== 'mobile' && cartWidth != null && cartW !== defaultCartW(width)) {
+    // ลากปรับความกว้างตะกร้า: การ์ดคงขนาดเดิม (ขนาดของโหมด 3×3/4×4/5×5 ตอนตะกร้ากว้างปกติ)
+    // แล้วเพิ่ม/ลดจำนวนคอลัมน์ตามพื้นที่ที่เหลือ (แบบ POSPOS) แทนการบีบการ์ดให้แคบลง
+    const baseLeft = width - pad * 2 - (defaultCartW(width) + 14) - scrollbar;
+    const baseMax = Math.max(2, Math.min(5, Math.floor((baseLeft + GRID_GAP) / (MIN_CARD + GRID_GAP))));
+    const baseCols = Math.min(viewMode, baseMax);
+    const baseCard = (baseLeft - GRID_GAP * (baseCols - 1)) / baseCols;
+    cols = Math.max(2, Math.min(MAX_COLS, Math.floor((leftW + GRID_GAP) / (baseCard + GRID_GAP))));
+  }
   const cardW = (leftW - GRID_GAP * (cols - 1)) / cols;
 
   return { width, height, device, sideCart, cartW, pad, cols, cardW, maxCols };
