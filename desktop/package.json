@@ -1,7 +1,7 @@
 {
   "name": "clothing-pos-desktop",
   "productName": "Clothing POS",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Clothing POS — แอปเดสก์ท็อป (Electron) เครื่องลูกของเซิร์ฟเวอร์กลาง · พัฒนาต้นแบบโดย n4444n",
   "author": "n4444n",
@@ -23,7 +23,7 @@
     "productName": "Clothing POS",
     "copyright": "พัฒนาต้นแบบโดย n4444n (MIT + Attribution)",
     "directories": { "output": "release" },
-    "files": ["main.cjs", "preload.cjs", "splash.html", "offline.html", "settings.html", "package.json"],
+    "files": ["main.cjs", "preload.cjs", "splash.html", "offline.html", "settings.html", "app-key.txt", "package.json"],
     "extraResources": [{ "from": "../LICENSE", "to": "LICENSE" }],
     "publish": [{ "provider": "generic", "url": "https://pos.sh0p.tech/updates/" }],
     "win": { "target": ["nsis"], "signAndEditExecutable": false },

@@ -4,6 +4,7 @@ import { thaiDate, thaiTime } from '../format';
 import { colors, font, radius } from '../theme';
 import { BranchChip } from './BranchPicker';
 import { Icon } from './Icon';
+import { UpdateButton } from './UpdateButton';
 
 interface Props {
   onMenu: () => void;
@@ -61,6 +62,7 @@ function TopBarImpl({ onMenu, onCloseOrder, onRefresh, canClose, compact, shiftO
         <Clock compact={compact} />
       </View>
       <View style={[s.row, { flexWrap: 'wrap', justifyContent: 'flex-end', marginLeft: 'auto' }]}>
+        <UpdateButton compact={compact} />
         {onHeld ? (
           <Pressable
             style={({ hovered }: { hovered?: boolean }) => [s.closeBtn, hovered && { backgroundColor: '#FFF7E8' }, !canHold && !heldCount && { opacity: 0.45 }]}

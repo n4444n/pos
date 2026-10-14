@@ -4,7 +4,7 @@
 // - อัปเดตตัวเองผ่าน electron-updater (ไฟล์อยู่ที่ <เซิร์ฟเวอร์>/updates/)
 // ตั้งค่าของเครื่องนี้เก็บที่ %APPDATA%\Clothing POS\config.json
 // พัฒนาต้นแบบโดย n4444n (MIT + Attribution — ดูไฟล์ LICENSE)
-const { app, BrowserWindow, Menu, dialog, shell, ipcMain, net } = require('electron');
+const { app, BrowserWindow, Menu, dialog, shell, ipcMain, net, session } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -49,6 +49,30 @@ function saveConfig(next) {
   return config;
 }
 const serverOrigin = () => new URL(config.serverUrl).origin;
+
+// ---------------------------------------------------------------- กุญแจแอป (ใช้ได้เฉพาะโปรแกรมนี้)
+// เซิร์ฟเวอร์ (Caddy) รับเฉพาะคำขอที่มี header X-POS-App ตรงกับกุญแจ → เปิด URL ในเบราว์เซอร์ไม่ได้
+// กุญแจอยู่ในไฟล์ desktop/app-key.txt (ไม่อยู่ใน git) ใส่ตอน build — ดู deploy/README.md หัวข้อ "ล็อกให้ใช้ได้เฉพาะแอป"
+const APP_KEY = (() => {
+  try {
+    return fs.readFileSync(path.join(__dirname, 'app-key.txt'), 'utf8').trim();
+  } catch {
+    return '';
+  }
+})();
+const appHeaders = () => (APP_KEY ? { 'X-POS-App': APP_KEY } : {});
+function installAppKey() {
+  if (!APP_KEY) return;
+  // ทุกคำขอไปยังเซิร์ฟเวอร์ (หน้าเว็บ API รูป หน้าพิมพ์) แนบกุญแจ — เฉพาะเซิร์ฟเวอร์ที่ตั้งไว้เท่านั้น
+  session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['https://*/*', 'http://*/*'] }, (d, cb) => {
+    let same = false;
+    try {
+      same = new URL(d.url).origin === serverOrigin();
+    } catch {}
+    if (same) d.requestHeaders['X-POS-App'] = APP_KEY;
+    cb({ requestHeaders: d.requestHeaders });
+  });
+}
 const updatesUrl = () => `${config.serverUrl}/updates/`;
 
 // ---------------------------------------------------------------- หน้าต่างหลัก
@@ -229,12 +253,18 @@ ipcMain.on('shell:open-settings', (e) => fromShell(e) && openSettings());
 ipcMain.on('shell:close-settings', (e) => fromShell(e) && settingsWin?.close());
 
 // ---------------------------------------------------------------- อัปเดตอัตโนมัติ
-// ปกติ: ดาวน์โหลดเบื้องหลัง → ถาม "รีสตาร์ตตอนนี้ / ภายหลัง" (ภายหลัง = ติดตั้งตอนปิดโปรแกรม)
+// ดาวน์โหลดเบื้องหลัง → ในหน้า POS ขึ้นปุ่ม "อัปเดต vX.Y.Z" (TopBar + เมนูข้าง) ให้พนักงานกดเมื่อสะดวก
+// ไม่กด = ติดตั้งให้ตอนปิดโปรแกรม
 // บังคับ: วาง <เซิร์ฟเวอร์>/updates/min-version.json  {"minVersion":"1.2.0","message":"..."}
-//         เครื่องที่เก่ากว่า minVersion จะติดตั้งทันทีเมื่อดาวน์โหลดเสร็จ
+//         เครื่องที่เก่ากว่า minVersion → ขึ้นกล่องให้ติดตั้งทันที (ไม่มีปุ่มภายหลัง)
 const CHECK_EVERY_MS = 4 * 60 * 60 * 1000;
 let manualCheck = false;
-let promptOpen = false;
+let update = { status: 'idle', current: app.getVersion(), version: null, percent: 0, forced: false };
+
+function setUpdate(patch) {
+  update = { ...update, ...patch };
+  if (win && !win.isDestroyed()) win.webContents.send('pos:update', update);
+}
 
 const cmpVer = (a, b) => {
   const pa = String(a).split(/[.-]/).map((x) => parseInt(x, 10) || 0);
@@ -244,7 +274,7 @@ const cmpVer = (a, b) => {
 };
 async function minVersionPolicy() {
   try {
-    const res = await net.fetch(`${updatesUrl()}min-version.json`, { cache: 'no-store' });
+    const res = await net.fetch(`${updatesUrl()}min-version.json`, { cache: 'no-store', headers: appHeaders() });
     if (!res.ok) return null;
     const j = await res.json();
     return j && j.minVersion ? { minVersion: String(j.minVersion), message: String(j.message || '') } : null;
@@ -252,10 +282,16 @@ async function minVersionPolicy() {
     return null;
   }
 }
+function installNow() {
+  if (update.status !== 'ready') return false;
+  setImmediate(() => autoUpdater.quitAndInstall(true, true)); // ติดตั้งเงียบ แล้วเปิดโปรแกรมใหม่
+  return true;
+}
 
 function setupUpdater() {
   if (!app.isPackaged) return; // โหมดพัฒนาไม่อัปเดต
   autoUpdater.setFeedURL({ provider: 'generic', url: updatesUrl() });
+  autoUpdater.requestHeaders = appHeaders(); // electron-updater ใช้ session แยก → แนบกุญแจเอง
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
@@ -264,49 +300,54 @@ function setupUpdater() {
     manualCheck = false;
   });
   autoUpdater.on('update-available', (info) => {
-    if (manualCheck) dialog.showMessageBox(win, { type: 'info', title: 'อัปเดต', message: `พบเวอร์ชัน ${info.version} กำลังดาวน์โหลด…`, detail: 'ดาวน์โหลดเสร็จแล้วจะแจ้งให้ติดตั้ง ใช้งานต่อได้ตามปกติ' });
+    if (update.status !== 'ready') setUpdate({ status: 'downloading', version: info.version, percent: 0 });
+    if (manualCheck) dialog.showMessageBox(win, { type: 'info', title: 'อัปเดต', message: `พบเวอร์ชัน ${info.version} กำลังดาวน์โหลด…`, detail: 'ดาวน์โหลดเสร็จแล้วจะมีปุ่ม "อัปเดต" ขึ้นในหน้าโปรแกรม ใช้งานต่อได้ตามปกติ' });
     manualCheck = false;
   });
-  autoUpdater.on('download-progress', (p) => win?.setProgressBar(p.percent / 100));
+  autoUpdater.on('download-progress', (p) => {
+    win?.setProgressBar(p.percent / 100);
+    if (Math.floor(p.percent) !== Math.floor(update.percent)) setUpdate({ percent: p.percent });
+  });
   autoUpdater.on('error', (err) => {
     win?.setProgressBar(-1);
+    if (update.status === 'downloading') setUpdate({ status: 'idle', percent: 0 }); // ลองใหม่รอบถัดไป
     if (manualCheck) dialog.showMessageBox(win, { type: 'warning', title: 'อัปเดต', message: 'ตรวจสอบอัปเดตไม่สำเร็จ', detail: String(err?.message ?? err) });
     manualCheck = false;
   });
   autoUpdater.on('update-downloaded', async (info) => {
     win?.setProgressBar(-1);
-    if (promptOpen) return;
-    promptOpen = true;
     const policy = await minVersionPolicy();
     const forced = !!policy && cmpVer(app.getVersion(), policy.minVersion) < 0;
-    const notes = typeof info.releaseNotes === 'string' ? info.releaseNotes.replace(/<[^>]+>/g, '').trim() : '';
-    const { response } = await dialog.showMessageBox(win, {
+    setUpdate({ status: 'ready', version: info.version, percent: 100, forced });
+    if (!forced) return; // ปกติ: แสดงเป็นปุ่มในหน้าโปรแกรม
+    await dialog.showMessageBox(win, {
       type: 'info',
-      title: 'มีอัปเดตใหม่',
+      title: 'ต้องอัปเดตโปรแกรม',
       message: `Clothing POS เวอร์ชัน ${info.version} พร้อมติดตั้ง`,
-      detail: [
-        `เวอร์ชันปัจจุบัน ${app.getVersion()}`,
-        forced ? policy.message || 'อัปเดตนี้จำเป็น ต้องติดตั้งก่อนใช้งานต่อ' : 'ถ้าเลือก "ภายหลัง" จะติดตั้งให้อัตโนมัติตอนปิดโปรแกรม',
-        notes,
-      ].filter(Boolean).join('\n\n'),
-      buttons: forced ? ['ติดตั้งตอนนี้'] : ['รีสตาร์ตและติดตั้งตอนนี้', 'ภายหลัง'],
-      defaultId: forced ? 0 : 1,
-      cancelId: forced ? 0 : 1,
+      detail: `${policy.message || 'อัปเดตนี้จำเป็น ต้องติดตั้งก่อนใช้งานต่อ'}\n\nเวอร์ชันปัจจุบัน ${app.getVersion()} · โปรแกรมจะปิดแล้วเปิดใหม่เอง`,
+      buttons: ['ติดตั้งตอนนี้'],
       noLink: true,
     });
-    promptOpen = false;
-    if (response === 0) setImmediate(() => autoUpdater.quitAndInstall(true, true));
+    installNow();
   });
 
-  const check = () => autoUpdater.checkForUpdates().catch(() => {});
+  const check = () => {
+    if (update.status === 'idle') autoUpdater.checkForUpdates().catch(() => {});
+  };
   setTimeout(check, 15_000);
   setInterval(check, CHECK_EVERY_MS);
 }
 function checkNow() {
   if (!app.isPackaged) return dialog.showMessageBox(win, { type: 'info', message: 'โหมดพัฒนา — ไม่ตรวจอัปเดต' });
+  if (update.status === 'ready') return dialog.showMessageBox(win, { type: 'info', title: 'อัปเดต', message: `เวอร์ชัน ${update.version} ดาวน์โหลดแล้ว`, detail: 'กดปุ่ม "อัปเดต" สีเขียวในหน้าโปรแกรมเพื่อติดตั้ง' });
   manualCheck = true;
   autoUpdater.checkForUpdates().catch(() => {});
 }
+ipcMain.handle('pos:update-state', () => update);
+ipcMain.handle('pos:update-install', (e) => (fromServer(e) || fromShell(e) ? installNow() : false));
+ipcMain.handle('pos:update-check', (e) => {
+  if (fromServer(e) && app.isPackaged && update.status === 'idle') autoUpdater.checkForUpdates().catch(() => {});
+});
 
 // ---------------------------------------------------------------- เมนู
 Menu.setApplicationMenu(
@@ -335,6 +376,7 @@ app.on('second-instance', () => {
   }
 });
 app.whenReady().then(() => {
+  installAppKey();
   createWindow();
   setupUpdater();
 });

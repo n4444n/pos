@@ -6,6 +6,7 @@ import { useSession } from '../session';
 import { colors, font, radius } from '../theme';
 import { BranchChip } from './BranchPicker';
 import { Icon, type IconName } from './Icon';
+import { AppVersionChip, UpdateButton } from './UpdateButton';
 
 export type Route = 'sales' | 'dashboard' | 'history' | 'shifts' | 'expenses' | 'staff' | 'stock' | 'skus' | 'shipments' | 'branches' | 'settings';
 
@@ -107,6 +108,7 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
           <Text style={s.logoutText}>ออก</Text>
         </Pressable>
       </View>
+      <UpdateButton block />
       <View style={s.footer}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
           <Text style={s.brand}>Clothing POS</Text>
@@ -116,6 +118,7 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
         <View style={s.footRow}>
           <Text style={s.footChip}>© 2026</Text>
           <Text style={s.footChip}>v0.4</Text>
+          <AppVersionChip style={s.footChip} />
         </View>
         <Credit />
       </View>
