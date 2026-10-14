@@ -81,7 +81,7 @@ chown pos:pos pos.db && systemctl start pos
 
 1. VPS: `bash /opt/pos/deploy/app-lock.sh key` → คัดลอกกุญแจที่แสดง
 2. เครื่อง build: สร้างไฟล์ `desktop\app-key.txt` ใส่กุญแจบรรทัดเดียว (ไฟล์นี้ไม่ขึ้น GitHub)
-3. `build-desktop.bat` → `publish-update.bat`
+3. push ขึ้น main → GitHub Actions build และส่งขึ้น VPS ให้ (หัวข้อ "สร้างตัวติดตั้งอัตโนมัติ" ด้านล่าง)
 4. รอจน **ทุกเครื่องทุกสาขา** อัปเดตแล้ว (ดู "แอป x.x.x" ท้ายเมนูซ้าย)
 5. VPS: `bash /opt/pos/deploy/app-lock.sh on`
 6. ทดสอบ: Chrome → 403 · แอปที่ร้าน → ใช้ได้ปกติ
@@ -98,7 +98,7 @@ chown pos:pos pos.db && systemctl start pos
 - รัน `setup-vps.sh` ซ้ำจะเขียน Caddyfile แบบไม่ล็อกทับ → รัน `app-lock.sh on` อีกครั้ง
 
 ## สร้างตัวติดตั้งอัตโนมัติ (GitHub Actions) + หน้าดาวน์โหลด
-ไม่ต้องรัน .bat เอง — push ขึ้น main แล้ว GitHub build `.exe` บน Windows ของ GitHub และส่งขึ้น VPS ให้
+push ขึ้น main แล้ว GitHub build `.exe` บน Windows ของ GitHub และส่งขึ้น VPS ให้
 
 ตั้งค่าครั้งเดียว:
 1. VPS: `bash /opt/pos/deploy/release-setup.sh` → ตั้งรหัสผ่านหน้าดาวน์โหลด → สคริปต์แสดงค่า 3 ค่า
@@ -111,4 +111,3 @@ chown pos:pos pos.db && systemctl start pos
 - เปลี่ยนรหัสหน้าดาวน์โหลด: `bash /opt/pos/deploy/release-setup.sh --password`
 
 ห้ามเก็บไฟล์ .exe ไว้ใน GitHub (repo เป็นสาธารณะ และไฟล์มีกุญแจแอป) — workflow ส่งขึ้น VPS เท่านั้น
-`build-desktop.bat` / `publish-update.bat` ยังใช้ได้เป็นทางสำรอง
