@@ -17,3 +17,5 @@ typecheck.log
 desktop/release/
 desktop/runtime/
 build-desktop.log
+# กุญแจแอป — ห้ามขึ้น GitHub (repo เป็นสาธารณะ)
+desktop/app-key.txt
