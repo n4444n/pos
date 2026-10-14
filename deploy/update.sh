@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# อัปเดตโค้ดบนเซิร์ฟเวอร์ — สำรองข้อมูลก่อน แล้ว pull + build + restart
+# ใช้: pos-update            (ดึง branch ปัจจุบัน)
+# ควรทำนอกเวลาขาย: ระหว่าง restart (ไม่กี่วินาที) ทุกสาขาจะใช้งานไม่ได้
+set -euo pipefail
+APP_DIR=/opt/pos
+
+echo "==> สำรองข้อมูลก่อนอัปเดต"
+/usr/local/bin/pos-backup
+
+cd "$APP_DIR"
+echo "==> ดึงโค้ดใหม่"
+OLD=$(git rev-parse --short HEAD)
+git pull --ff-only
+NEW=$(git rev-parse --short HEAD)
+[ "$OLD" = "$NEW" ] && { echo "ไม่มีอะไรใหม่ ($NEW)"; exit 0; }
+
+echo "==> ติดตั้งแพ็กเกจ + build หน้าเว็บ"
+npm install --no-audit --no-fund
+npm run build:web
+
+# สคริปต์ติดตั้งอาจเปลี่ยน — อัปเดตตัวที่ติดตั้งไว้ด้วย
+install -m 644 deploy/pos.service /etc/systemd/system/pos.service
+install -m 755 deploy/backup.sh /usr/local/bin/pos-backup
+install -m 755 deploy/update.sh /usr/local/bin/pos-update
+systemctl daemon-reload
+
+echo "==> รีสตาร์ตเซิร์ฟเวอร์"
+systemctl restart pos
+sleep 3
+curl -fsS http://127.0.0.1:3000/api/health >/dev/null && echo "อัปเดต $OLD → $NEW สำเร็จ ✓" || { echo "เซิร์ฟเวอร์ไม่ตอบ — journalctl -u pos -n 50"; exit 1; }
