@@ -21,5 +21,16 @@ if (location.protocol === 'file:') {
     version: cfg.version,
     paperWidth: () => cfg.paperWidth,
     print: (html, opts) => ipcRenderer.invoke('pos:print', String(html), { paperWidth: opts && opts.paperWidth === 58 ? 58 : 80 }),
+    // อัปเดตแอป → ปุ่ม "อัปเดต vX.Y.Z" ในหน้า POS
+    update: {
+      get: () => ipcRenderer.invoke('pos:update-state'),
+      install: () => ipcRenderer.invoke('pos:update-install'),
+      check: () => ipcRenderer.invoke('pos:update-check'),
+      onChange: (cb) => {
+        const h = (_e, state) => cb(state);
+        ipcRenderer.on('pos:update', h);
+        return () => ipcRenderer.removeListener('pos:update', h);
+      },
+    },
   });
 }

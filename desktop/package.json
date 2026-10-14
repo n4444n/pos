@@ -1,7 +1,7 @@
 {
   "name": "clothing-pos-desktop",
   "productName": "Clothing POS",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Clothing POS — แอปเดสก์ท็อป (Electron) เครื่องลูกของเซิร์ฟเวอร์กลาง · พัฒนาต้นแบบโดย n4444n",
   "author": "n4444n",
