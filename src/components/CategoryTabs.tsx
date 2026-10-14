@@ -1,5 +1,6 @@
 import { memo, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useDragScroll } from '../dragScroll';
 import { colors, font, radius } from '../theme';
 import type { Category } from '../types';
 import { GarmentArt } from './GarmentArt';
@@ -31,10 +32,15 @@ function Tab({ label, count, active, onPress, icon, compact }: { label: string; 
   );
 }
 
-function CategoryTabsImpl({ categories, counts, total, active, onChange, compact }: Props) {
+function CategoryTabsImpl({ categories, counts, total, active, onChange: change, compact }: Props) {
+  // กดเมาส์ซ้ายค้างแล้วลากซ้าย-ขวาเพื่อเลื่อนแถบหมวดหมู่ · ถ้าเพิ่งลากจะไม่นับเป็นการเลือกหมวด
+  const { ref, wasDragged } = useDragScroll();
+  const onChange = (id: string) => {
+    if (!wasDragged()) change(id);
+  };
   return (
     // flexGrow: 0 สำคัญ — ScrollView บนเว็บมี flexGrow: 1 เป็นค่าเริ่มต้น ทำให้ยืดกินพื้นที่แนวตั้ง (เกิดช่องว่าง)
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.scroller} contentContainerStyle={s.row}>
+    <ScrollView ref={ref} horizontal showsHorizontalScrollIndicator={false} style={s.scroller} contentContainerStyle={s.row}>
       <Tab
         label="ทั้งหมด"
         count={total}
