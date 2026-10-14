@@ -1,0 +1,41 @@
+{
+  "name": "clothing-pos-desktop",
+  "productName": "Clothing POS",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Clothing POS — แอปเดสก์ท็อป (Electron) · พัฒนาต้นแบบโดย n4444n",
+  "author": "n4444n",
+  "license": "SEE LICENSE IN ../LICENSE",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis --x64"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.n4444n.clothingpos",
+    "productName": "Clothing POS",
+    "copyright": "พัฒนาต้นแบบโดย n4444n (MIT + Attribution)",
+    "directories": { "output": "release" },
+    "files": ["main.cjs", "splash.html", "package.json"],
+    "extraResources": [
+      { "from": "../dist", "to": "web" },
+      { "from": "../server", "to": "server" },
+      { "from": "../LICENSE", "to": "LICENSE" },
+      { "from": "runtime", "to": "runtime" }
+    ],
+    "win": { "target": ["nsis"], "signAndEditExecutable": false },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Clothing POS",
+      "artifactName": "ClothingPOS-Setup-${version}.exe"
+    }
+  }
+}

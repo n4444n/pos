@@ -1,0 +1,252 @@
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { api } from '../../api';
+import { baht, PAYMENT_LABEL, thaiDateTime, variantLabel, vatLabel } from '../../format';
+import { printReceipt } from '../../print';
+import type { Toast } from '../../store/usePos';
+import { colors, font, radius } from '../../theme';
+import type { Bootstrap, Order, OrderDetail } from '../../types';
+import { GarmentArt } from '../GarmentArt';
+import { Icon } from '../Icon';
+import { Sheet } from '../Sheet';
+import { Badge } from './Badge';
+import { BillEditor } from './BillEditor';
+import { VoidDialog } from './VoidDialog';
+
+interface Props {
+  orderId: number | null;
+  catalog: Bootstrap | null;
+  onClose: () => void;
+  onChanged: () => void;
+  notify: (kind: Toast['kind'], text: string) => void;
+}
+
+export function OrderDetailModal({ orderId, catalog, onClose, onChanged, notify }: Props) {
+  const { width } = useWindowDimensions();
+  const [order, setOrder] = useState<OrderDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [voiding, setVoiding] = useState(false);
+
+  const load = useCallback(async (id: number) => {
+    setError(null);
+    try {
+      setOrder(await api.orderDetail(id));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, []);
+
+  useEffect(() => {
+    setOrder(null);
+    if (orderId != null) load(orderId);
+  }, [orderId, load]);
+
+  const isVoid = order?.status === 'void';
+  const narrow = width < 600;
+
+  return (
+    <>
+      <Sheet
+        visible={orderId != null}
+        onClose={onClose}
+        title={order ? `บิล ${order.orderNo}` : 'รายละเอียดบิล'}
+        width={620}
+        footer={
+          order ? (
+            <View style={[s.actions, narrow && { flexWrap: 'wrap' }]}>
+              <Pressable style={[s.btn, s.ghost]} onPress={() => printReceipt(order as unknown as Order)}>
+                <Icon name="print-outline" size={17} color={colors.text} />
+                <Text style={s.ghostText}>พิมพ์</Text>
+              </Pressable>
+              <Pressable style={[s.btn, s.danger, isVoid && s.disabled]} disabled={isVoid} onPress={() => setVoiding(true)}>
+                <Icon name="close-circle-outline" size={17} color={colors.danger} />
+                <Text style={s.dangerText}>ยกเลิกบิล</Text>
+              </Pressable>
+              <Pressable
+                style={[s.btn, s.primary, { flexGrow: 2 }, (isVoid || !catalog) && s.disabled]}
+                disabled={isVoid || !catalog}
+                onPress={() => setEditing(true)}
+              >
+                <Icon name="swap-horizontal" size={17} color="#fff" />
+                <Text style={s.primaryText}>แก้ไขบิล / เปลี่ยนสินค้า</Text>
+              </Pressable>
+            </View>
+          ) : null
+        }
+      >
+        {error ? <Text style={s.error}>{error}</Text> : null}
+        {!order && !error ? <ActivityIndicator style={{ marginVertical: 40 }} color={colors.primary} /> : null}
+        {order ? (
+          <ScrollView style={{ maxHeight: 560 }}>
+            {isVoid ? (
+              <View style={s.voidBanner}>
+                <Icon name="alert-circle" size={18} color={colors.danger} />
+                <Text style={s.voidText}>บิลนี้ถูกยกเลิก · {order.voidReason}</Text>
+              </View>
+            ) : null}
+
+            <View style={s.meta}>
+              <Meta label="วันที่ขาย" value={thaiDateTime(order.createdAt ?? '')} />
+              <Meta label="ลูกค้า" value={order.customerName || 'ลูกค้าทั่วไป'} />
+              <Meta label="พนักงานขาย" value={order.salesperson?.replace('พนักงาน: ', '') || '—'} />
+              <Meta label="ประเภท" value={order.orderType} />
+              <Meta label="ชำระโดย" value={PAYMENT_LABEL[order.paymentMethod]} />
+              <View style={s.metaCell}>
+                <Text style={s.metaLabel}>สถานะ</Text>
+                <View style={{ alignItems: 'flex-start', marginTop: 3 }}>
+                  <Badge status={order.status} edits={order.editCount} />
+                </View>
+              </View>
+            </View>
+
+            <Text style={s.section}>รายการสินค้า</Text>
+            {order.items.map((it, i) => (
+              <View key={i} style={s.item}>
+                <View style={s.thumb}>
+                  <GarmentArt art={it.art ?? 'tshirt'} color={it.colorHex ?? '#ccc'} size={38} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={[s.itemName, isVoid && s.strike]} numberOfLines={1}>{it.name}</Text>
+                  <Text style={s.itemSub}>
+                    {variantLabel(it)} · {it.qty} × {baht(it.unitPrice)}
+                  </Text>
+                </View>
+                <Text style={[s.itemTotal, isVoid && s.strike]}>{baht(it.lineTotal)}</Text>
+              </View>
+            ))}
+
+            <View style={s.totals}>
+              <Row l="รวม" r={baht(order.subtotal)} />
+              {order.discount > 0 ? <Row l={`ส่วนลด (${order.promoCode})`} r={`−${baht(order.discount)}`} green /> : null}
+              {order.fee ? (
+                order.feePayer === 'customer' ? (
+                  <Row l={`ค่าธรรมเนียม${PAYMENT_LABEL[order.paymentMethod] ?? ''}`} r={`+${baht(order.fee)}`} />
+                ) : (
+                  <Row l={`ค่าธรรมเนียม${PAYMENT_LABEL[order.paymentMethod] ?? ''} (ร้านจ่าย)`} r={baht(order.fee)} small />
+                )
+              ) : null}
+              {order.vat > 0 ? <Row l={vatLabel(order)} r={baht(order.vat)} small /> : null}
+              <View style={s.grand}>
+                <Text style={s.grandL}>ยอดสุทธิ</Text>
+                <Text style={[s.grandR, isVoid && s.strike]}>{baht(order.total)}</Text>
+              </View>
+            </View>
+
+            {order.edits.length > 0 ? (
+              <>
+                <Text style={s.section}>ประวัติการแก้ไข ({order.edits.length})</Text>
+                {order.edits.map((e) => (
+                  <View key={e.id} style={s.edit}>
+                    <View style={[s.editDot, { backgroundColor: e.kind === 'void' ? colors.danger : '#E0A23B' }]} />
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={s.editHead}>
+                        {e.kind === 'void' ? 'ยกเลิกบิล' : 'แก้ไขบิล'} · {thaiDateTime(e.editedAt)} · {e.staff.replace('พนักงาน: ', '')}
+                      </Text>
+                      <Text style={s.editText}>เหตุผล: {e.reason}</Text>
+                      <Text style={s.editText}>{e.summary}</Text>
+                      <Text style={s.editText}>
+                        {baht(e.oldTotal)} → {baht(e.newTotal)}
+                        {e.diff !== 0 ? (
+                          <Text style={{ color: e.diff > 0 ? colors.primary : colors.danger, fontWeight: '600' }}>
+                            {'  '}
+                            {e.diff > 0 ? `เก็บเพิ่ม ${baht(e.diff)}` : `คืนเงิน ${baht(-e.diff)}`}
+                            {e.settleMethod ? ` (${PAYMENT_LABEL[e.settleMethod]})` : ''}
+                          </Text>
+                        ) : null}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </>
+            ) : null}
+          </ScrollView>
+        ) : null}
+      </Sheet>
+
+      {order && catalog ? (
+        <BillEditor
+          visible={editing}
+          order={order}
+          catalog={catalog}
+          notify={notify}
+          onClose={() => setEditing(false)}
+          onSaved={(o) => {
+            setEditing(false);
+            setOrder(o);
+            onChanged();
+          }}
+        />
+      ) : null}
+      {order ? (
+        <VoidDialog
+          visible={voiding}
+          order={order}
+          notify={notify}
+          onClose={() => setVoiding(false)}
+          onDone={(o) => {
+            setVoiding(false);
+            setOrder(o);
+            onChanged();
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function Meta({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={s.metaCell}>
+      <Text style={s.metaLabel}>{label}</Text>
+      <Text style={s.metaValue} numberOfLines={1}>{value}</Text>
+    </View>
+  );
+}
+
+function Row({ l, r, small, green }: { l: string; r: string; small?: boolean; green?: boolean }) {
+  const st = [small ? s.small : s.rowText, green && { color: colors.success }];
+  return (
+    <View style={s.row}>
+      <Text style={st}>{l}</Text>
+      <Text style={st}>{r}</Text>
+    </View>
+  );
+}
+
+const s = StyleSheet.create({
+  error: { fontFamily: font, color: colors.danger, textAlign: 'center', marginVertical: 20 },
+  voidBanner: { flexDirection: 'row', gap: 8, alignItems: 'center', backgroundColor: colors.dangerSoft, padding: 12, borderRadius: radius.md, marginBottom: 10 },
+  voidText: { fontFamily: font, color: colors.danger, fontSize: 13, flex: 1 },
+  meta: { flexDirection: 'row', flexWrap: 'wrap', backgroundColor: colors.surface, borderRadius: radius.md, padding: 6 },
+  metaCell: { width: '33.33%', minWidth: 140, flexGrow: 1, padding: 8 },
+  metaLabel: { fontFamily: font, fontSize: 11, color: colors.sub },
+  metaValue: { fontFamily: font, fontSize: 13, color: colors.text, fontWeight: '500', marginTop: 2 },
+  section: { fontFamily: font, fontSize: 13, fontWeight: '600', color: colors.text, marginTop: 16, marginBottom: 6 },
+  item: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F1F3F6' },
+  thumb: { width: 46, height: 46, borderRadius: radius.sm, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  itemName: { fontFamily: font, fontSize: 13, fontWeight: '500', color: colors.text },
+  itemSub: { fontFamily: font, fontSize: 11, color: colors.sub, marginTop: 2 },
+  itemTotal: { fontFamily: font, fontSize: 13, fontWeight: '600', color: colors.text },
+  strike: { textDecorationLine: 'line-through', color: colors.faint },
+  totals: { paddingTop: 10, gap: 4 },
+  row: { flexDirection: 'row', justifyContent: 'space-between' },
+  rowText: { fontFamily: font, fontSize: 13, color: colors.text },
+  small: { fontFamily: font, fontSize: 11, color: colors.faint },
+  grand: { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 6 },
+  grandL: { fontFamily: font, fontSize: 15, fontWeight: '700', color: colors.text },
+  grandR: { fontFamily: font, fontSize: 18, fontWeight: '700', color: colors.text },
+  edit: { flexDirection: 'row', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F1F3F6' },
+  editDot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
+  editHead: { fontFamily: font, fontSize: 12, fontWeight: '600', color: colors.text },
+  editText: { fontFamily: font, fontSize: 12, color: colors.sub, lineHeight: 18 },
+  actions: { flexDirection: 'row', gap: 8 },
+  btn: { flexGrow: 1, height: 48, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 12 },
+  ghost: { borderWidth: 1.5, borderColor: colors.line },
+  ghostText: { fontFamily: font, fontSize: 13, color: colors.text, fontWeight: '500' },
+  danger: { borderWidth: 1.5, borderColor: '#F3C4C6' },
+  dangerText: { fontFamily: font, fontSize: 13, color: colors.danger, fontWeight: '500' },
+  primary: { backgroundColor: colors.primary },
+  primaryText: { fontFamily: font, fontSize: 14, color: '#fff', fontWeight: '600' },
+  disabled: { opacity: 0.4 },
+});

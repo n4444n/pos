@@ -1,0 +1,42 @@
+{
+  "name": "pos-clothing",
+  "version": "0.1.0",
+  "private": true,
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "n4444n (https://github.com/n4444n/Point-of-Sale)",
+  "description": "Point of Sale for a clothing shop — Expo (React Native Web) + TypeScript + SQLite",
+  "main": "index.ts",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "expo start --web",
+    "dev:api": "node --experimental-strip-types --disable-warning=ExperimentalWarning --watch server/index.ts",
+    "build:web": "expo export --platform web",
+    "server": "node --experimental-strip-types --disable-warning=ExperimentalWarning server/index.ts",
+    "start": "npm run build:web && cross-env NODE_ENV=production npm run server",
+    "serve": "cross-env NODE_ENV=production npm run server",
+    "tunnel": "ngrok http 3000",
+    "typecheck": "tsc --noEmit",
+    "db:reset": "node -e \"require('fs').rmSync('data',{recursive:true,force:true})\"",
+    "db:demo": "node --experimental-strip-types --disable-warning=ExperimentalWarning server/demo-sales.ts"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~6.1.2",
+    "@expo/vector-icons": "^15.0.2",
+    "expo": "~54.0.0",
+    "expo-status-bar": "~3.0.8",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.4",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-svg": "15.12.1",
+    "react-native-web": "^0.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "~19.1.10",
+    "cross-env": "^7.0.3",
+    "typescript": "~5.9.2"
+  }
+}

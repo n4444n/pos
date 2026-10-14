@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "Clothing POS",
+    "slug": "pos-clothing",
+    "version": "0.1.0",
+    "orientation": "landscape",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "name": "Clothing POS",
+      "shortName": "POS",
+      "themeColor": "#2F6BFF",
+      "backgroundColor": "#EEF1F6"
+    }
+  }
+}
