@@ -102,8 +102,9 @@ const hit = {
 } as unknown as ViewStyle;
 
 const s = StyleSheet.create({
-  line: { position: 'absolute', top: 8, bottom: 8, width: 2, borderRadius: 1, backgroundColor: 'transparent' },
-  lineOn: { backgroundColor: colors.primary, opacity: 0.55 },
-  grip: { width: 4, height: 36, borderRadius: 2, backgroundColor: colors.line },
+  // เส้นแบ่งบาง ๆ ตลอดความสูง (แบบ POSPOS) — ชี้/ลากแล้วเป็นสีน้ำเงินหนาขึ้น
+  line: { position: 'absolute', top: 0, bottom: 0, right: 6, width: 1, backgroundColor: colors.line },
+  lineOn: { width: 3, right: 5, backgroundColor: colors.primary, opacity: 0.7 },
+  grip: { width: 4, height: 36, borderRadius: 2, backgroundColor: 'transparent', marginLeft: -1 },
   gripOn: { backgroundColor: colors.primary },
 });
