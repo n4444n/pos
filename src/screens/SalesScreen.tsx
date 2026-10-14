@@ -9,6 +9,7 @@ import { OrdersModal } from '../components/OrdersModal';
 import { HeldBillsSheet } from '../components/HeldBills';
 import { PaymentModal } from '../components/PaymentModal';
 import { ProductCard } from '../components/ProductCard';
+import { ResizeHandle } from '../components/ResizeHandle';
 import { ReceiptView } from '../components/ReceiptView';
 import { Sheet } from '../components/Sheet';
 import { ToastView } from '../components/ToastView';
@@ -19,7 +20,7 @@ import { CloseShiftDialog } from '../components/shift/CloseShiftDialog';
 import { OpenShiftDialog } from '../components/shift/OpenShiftDialog';
 import { api } from '../api';
 import { auth, useSession } from '../session';
-import { GRID_GAP, useDefaultViewMode, useResponsive, useViewMode } from '../layout';
+import { CART_MIN, GRID_GAP, maxCartW, useCartWidth, useDefaultViewMode, useResponsive, useViewMode } from '../layout';
 import { beep, useAppSettings } from '../appSettings';
 import { baht } from '../format';
 import { printReceipt } from '../print';
@@ -56,7 +57,9 @@ export function SalesScreen({ onMenu, active, stockVersion }: Props) {
   const [viewMode, setViewMode] = useViewMode();
   const settings = useAppSettings();
   useDefaultViewMode(settings.display.defaultView, setViewMode);
-  const L = useResponsive(viewMode);
+  // ลากขอบซ้ายของตะกร้าเพื่อปรับความกว้าง (จำไว้ในเครื่องนี้)
+  const [cartWidth, setCartWidth] = useCartWidth();
+  const L = useResponsive(viewMode, cartWidth);
   const wide = L.sideCart;
   const mobile = L.device === 'mobile';
 
@@ -417,7 +420,16 @@ export function SalesScreen({ onMenu, active, stockVersion }: Props) {
         </View>
 
         {/* ---------- right: current order ---------- */}
-        {wide ? <View style={{ width: L.cartW }}>{cartPanel}</View> : null}
+        {wide ? (
+          <View style={{ width: L.cartW }}>
+            <ResizeHandle
+              width={L.cartW}
+              onResize={(w) => setCartWidth(Math.round(Math.min(maxCartW(L.width), Math.max(CART_MIN, w))))}
+              onReset={() => setCartWidth(null)}
+            />
+            {cartPanel}
+          </View>
+        ) : null}
       </View>
 
       {/* จอแคบ (แท็บเล็ตแนวตั้ง/มือถือ): แถบตะกร้าด้านล่าง */}
