@@ -7,6 +7,7 @@
 const { app, BrowserWindow, Menu, dialog, shell, ipcMain, net, session } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 if (!app.requestSingleInstanceLock()) {
@@ -87,7 +88,7 @@ function createWindow() {
     height: 860,
     minWidth: 1024,
     minHeight: 640,
-    title: `Clothing POS ${app.getVersion()}`,
+    title: windowTitle(),
     backgroundColor: '#f4f6fb',
     autoHideMenuBar: true,
     show: false,
@@ -97,7 +98,7 @@ function createWindow() {
     win.maximize();
     win.show();
   });
-  win.on('page-title-updated', (e) => e.preventDefault());
+  win.on('page-title-updated', (e) => e.preventDefault()); // หัวหน้าต่างกำหนดเองด้านล่าง (windowTitle)
   win.on('closed', () => (win = null));
 
   const wc = win.webContents;
@@ -217,6 +218,46 @@ const TEST_PAGE = (pw) => `<!doctype html><html lang="th"><head><meta charset="u
 // ---------------------------------------------------------------- IPC
 const fromServer = (e) => isServerUrl(e.senderFrame?.url ?? '');
 const fromShell = (e) => (e.senderFrame?.url ?? '').startsWith('file:');
+
+// ---------------------------------------------------------------- หัวหน้าต่าง
+// Clothing POS - Version: 1.0.3 | ร้าน <ชื่อร้าน>, <สาขา> | <IP เครื่องนี้>
+let titleInfo = { shop: '', branch: '' };
+
+/** IPv4 ของเครื่องนี้ในวง LAN (ไม่เอา loopback / 169.254 / การ์ดเสมือนของ VirtualBox, VMware, Hyper-V) */
+function localIp() {
+  const skip = /virtual|vmware|vbox|hyper-v|vethernet|loopback|bluetooth|tailscale|zerotier|wsl/i;
+  const cands = [];
+  for (const [name, list] of Object.entries(os.networkInterfaces())) {
+    for (const a of list || []) {
+      if (a.family !== 'IPv4' || a.internal || a.address.startsWith('169.254.')) continue;
+      cands.push({ name, address: a.address, virtual: skip.test(name) });
+    }
+  }
+  const real = cands.find((c) => !c.virtual) || cands[0];
+  return real ? real.address : '';
+}
+
+function windowTitle() {
+  const parts = [`Clothing POS - Version: ${app.getVersion()}`];
+  // ชื่อร้านที่ขึ้นต้นด้วย "ร้าน" อยู่แล้ว ไม่ต้องซ้ำ (ร้าน ร้านเสื้อผ้า → ร้าน เสื้อผ้า)
+  const shop = [titleInfo.shop.replace(/^ร้าน\s*/, ''), titleInfo.branch].filter(Boolean).join(', ');
+  if (shop) parts.push(`ร้าน ${shop}`);
+  const ip = localIp();
+  if (ip) parts.push(ip);
+  return parts.join(' | ');
+}
+
+function refreshTitle() {
+  if (win && !win.isDestroyed()) win.setTitle(windowTitle());
+}
+setInterval(refreshTitle, 60_000); // IP เปลี่ยนได้ (ย้าย Wi-Fi / DHCP)
+
+const clip = (v) => String(v ?? '').replace(/[\r\n|]/g, ' ').trim().slice(0, 60);
+ipcMain.on('pos:title-info', (e, info) => {
+  if (!fromServer(e)) return;
+  titleInfo = { shop: clip(info?.shop), branch: clip(info?.branch) };
+  refreshTitle();
+});
 
 ipcMain.on('pos:sync-config', (e) => {
   e.returnValue = { serverOrigin: serverOrigin(), paperWidth: config.paperWidth, version: app.getVersion() };
