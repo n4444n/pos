@@ -79,10 +79,26 @@ jobs:
         working-directory: desktop
         env:
           APP_KEY: ${{ secrets.APP_KEY }}
+          COMMITS: ${{ toJson(github.event.commits) }}
         run: |
           printf '%s' "$APP_KEY" > app-key.txt
+          # รายละเอียดอัปเดต (แสดงเป็นข้อ ๆ ในหน้าต่าง "มีเวอร์ชันใหม่") = บรรทัดแรกของข้อความ commit ใน push นี้
+          # merge PR ใช้ชื่อ PR · ข้าม commit งานระบบ (CI:, deploy:) · ไม่มี → ข้อความกลาง ๆ ในแอป
+          node -e "
+            const c = JSON.parse(process.env.COMMITS || '[]') || [];
+            const lines = [];
+            for (const x of c) {
+              const parts = String(x.message || '').split('\\n').map((l) => l.trim()).filter(Boolean);
+              let t = parts[0] || '';
+              if (/^Merge (pull request|branch)/.test(t)) t = parts[1] || '';
+              if (!t || /^(CI|deploy|ci|chore)\\b/i.test(t) || /^(Co-Authored-By|Claude-Session):/i.test(t)) continue;
+              if (!lines.includes(t)) lines.push(t);
+            }
+            require('fs').writeFileSync('release-notes.md', lines.slice(-8).map((l) => '- ' + l).join('\\n') + '\\n');
+            console.log(lines.join('\\n') || '(no notes)');
+          "
           npm install --no-audit --no-fund
-          npx electron-builder --win nsis --x64 --publish never
+          npx electron-builder --win nsis --x64 --publish never -c.releaseInfo.releaseNotesFile=release-notes.md
           rm -f app-key.txt
 
       - name: Publish update (auto-update feed)

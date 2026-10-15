@@ -57,11 +57,17 @@ export function UpdateButton({ compact, block }: { compact?: boolean; block?: bo
               <Icon name="arrow-forward" size={16} color={colors.sub} />
               <Text style={s.verNew}>v{u.version}</Text>
             </View>
-            <Text style={s.body}>
-              โปรแกรมจะปิดแล้วเปิดใหม่เอง ใช้เวลาประมาณ 10–30 วินาที{'\n'}
-              รายการในตะกร้าที่ยังไม่ได้ชำระเงินจะหายไป — ควรอัปเดตตอนไม่มีลูกค้า
-            </Text>
-            {!u.forced ? <Text style={s.hint}>ถ้ายังไม่อัปเดต ระบบจะติดตั้งให้เองตอนปิดโปรแกรม</Text> : null}
+            {/* รายละเอียดอัปเดตแบบสั้น ๆ เป็นข้อ ๆ (มาจากข้อความ commit ของเวอร์ชันนั้น) */}
+            <View style={s.notes}>
+              <Text style={s.notesTitle}>มีอะไรใหม่</Text>
+              {(u.notes?.length ? u.notes : ['ปรับปรุงการทำงานและแก้ไขข้อผิดพลาด']).map((n, i) => (
+                <View key={i} style={s.noteRow}>
+                  <Text style={s.noteDot}>•</Text>
+                  <Text style={s.noteText}>{n}</Text>
+                </View>
+              ))}
+            </View>
+            <Text style={s.hint}>โปรแกรมจะปิดแล้วเปิดใหม่เอง ควรอัปเดตตอนไม่มีลูกค้า</Text>
             <View style={s.actions}>
               {!u.forced ? (
                 <Pressable style={[s.action, s.later]} onPress={() => setOpen(false)} disabled={installing}>
@@ -100,8 +106,12 @@ const s = StyleSheet.create({
   verRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   verOld: { fontFamily: font, fontSize: 15, color: colors.sub },
   verNew: { fontFamily: font, fontSize: 15, fontWeight: '700', color: colors.success },
-  body: { fontFamily: font, fontSize: 13, color: colors.text, textAlign: 'center', lineHeight: 21, marginTop: 4 },
   hint: { fontFamily: font, fontSize: 12, color: colors.sub, textAlign: 'center' },
+  notes: { alignSelf: 'stretch', backgroundColor: colors.surface, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 14, gap: 4, marginTop: 4 },
+  notesTitle: { fontFamily: font, fontSize: 12, fontWeight: '600', color: colors.sub, marginBottom: 2 },
+  noteRow: { flexDirection: 'row', gap: 8 },
+  noteDot: { fontFamily: font, fontSize: 13, color: colors.success, lineHeight: 20 },
+  noteText: { flex: 1, fontFamily: font, fontSize: 13, color: colors.text, lineHeight: 20 },
   actions: { flexDirection: 'row', gap: 10, marginTop: 8, alignSelf: 'stretch' },
   action: { flex: 1, height: 44, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   later: { backgroundColor: colors.surface },
