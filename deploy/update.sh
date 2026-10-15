@@ -14,7 +14,9 @@ echo "==> ดึงโค้ดใหม่ (main)"
 OLD=$(git rev-parse --short HEAD)
 # ใช้ main เสมอ — เครื่องที่ติดตั้งจาก branch อื่น (เช่น vps-deploy ที่ถูกลบไปแล้ว) ย้ายมา main ให้เอง
 git fetch origin main
-git checkout -q -B main origin/main
+# -f: ทิ้งไฟล์ที่ npm สร้าง/แก้บนเซิร์ฟเวอร์ (เช่น package-lock.json) ที่ขวางการอัปเดต
+#     ข้อมูลร้านไม่หาย: ฐานข้อมูลอยู่ /var/lib/pos · รูป/กุญแจ (uploads/, .pin-secret) เป็นไฟล์ที่ git ไม่ยุ่ง
+git checkout -q -f -B main origin/main
 git branch -q --set-upstream-to=origin/main main
 NEW=$(git rev-parse --short HEAD)
 if [ "$OLD" = "$NEW" ] && [ "${1:-}" != "--force" ]; then
@@ -23,7 +25,8 @@ if [ "$OLD" = "$NEW" ] && [ "${1:-}" != "--force" ]; then
 fi
 
 echo "==> ติดตั้งแพ็กเกจ + build หน้าเว็บ"
-npm install --no-audit --no-fund
+# npm ci: ติดตั้งตาม package-lock.json เป๊ะ ๆ และไม่แก้ไฟล์ lock (อัปเดตครั้งหน้าไม่ติด)
+npm ci --no-audit --no-fund
 npm run build:web
 
 # สคริปต์ติดตั้งอาจเปลี่ยน — อัปเดตตัวที่ติดตั้งไว้ด้วย
