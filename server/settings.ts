@@ -55,7 +55,11 @@ export interface Settings {
     sync: { role: 'off' | 'master' | 'branch'; masterUrl: string; apiKey: string; intervalMin: number; syncPrice: boolean; syncCost: boolean; syncImages: boolean };
   };
   payments: { methods: PayMethod[]; promptpayId: string; vat: { enabled: boolean; rate: number }; feePayer: 'customer' | 'shop' };
-  barcode: { symbology: 'code128' | 'ean13'; autoAssign: 'none' | 'sku' | 'ean13'; ean13Prefix: string; labelWidth: number; labelHeight: number; labelShowPrice: boolean; labelShowName: boolean };
+  barcode: {
+    symbology: 'code128' | 'ean13'; autoAssign: 'none' | 'sku' | 'ean13'; ean13Prefix: string; labelWidth: number; labelHeight: number; labelShowPrice: boolean; labelShowName: boolean;
+    /** โปรไฟล์กระดาษ/หน้าตาป้ายบาร์โค้ด (ตั้งค่า → กระดาษบาร์โค้ด) · labelProfile = โปรไฟล์เริ่มต้น */
+    labelProfiles: LabelProfile[]; labelProfile: string;
+  };
   receipt: {
     paperWidth: 58 | 80; fontSize: 'small' | 'medium' | 'large'; title: string; header: string; footer: string;
     showSku: boolean; showSalesperson: boolean; showCustomer: boolean; showVat: boolean; showOrderBarcode: boolean; autoPrint: boolean; copies: number;
@@ -91,6 +95,71 @@ export interface Settings {
   api: { enabled: boolean };
 }
 
+
+// ---------- ป้ายบาร์โค้ด (ตั้งค่า → กระดาษบาร์โค้ด) ----------
+export interface LabelProfile {
+  id: string;
+  name: string;
+  /** roll = สติ๊กเกอร์ม้วน (เครื่องพิมพ์ป้าย) · a4 = กระดาษสติ๊กเกอร์ A4 */
+  paper: 'roll' | 'a4';
+  /** ขนาดดวง (มม.) */
+  width: number; height: number;
+  /** ดวงต่อแถว · a4: จำนวนแถวต่อแผ่น */
+  cols: number; rows: number;
+  /** ระยะห่างระหว่างดวง / ขอบกระดาษ (มม.) */
+  gapX: number; gapY: number; marginTop: number; marginLeft: number;
+  /** ระยะขอบในดวง (มม.) */
+  padding: number;
+  symbology: 'auto' | 'code128' | 'ean13';
+  /** ความสูงบาร์โค้ด (มม.) · ความกว้าง % ของดวง */
+  barHeight: number; barWidth: number;
+  showCode: boolean; showName: boolean; showVariant: boolean; showPrice: boolean; showShop: boolean;
+  bold: boolean; italic: boolean;
+  align: 'left' | 'center' | 'right';
+  /** ขนาดตัวอักษร (pt) */
+  codeSize: number; nameSize: number; priceSize: number;
+  /** ระยะห่างบาร์โค้ด/ตัวหนังสือ (มม.) */
+  textGap: number;
+}
+export const DEFAULT_LABEL_PROFILE: LabelProfile = {
+  id: 'p1', name: 'โปรไฟล์ 1', paper: 'roll', width: 50, height: 30, cols: 1, rows: 1, gapX: 2, gapY: 0, marginTop: 0, marginLeft: 0, padding: 1.2,
+  symbology: 'auto', barHeight: 10, barWidth: 90, showCode: true, showName: true, showVariant: true, showPrice: true, showShop: false,
+  bold: true, italic: false, align: 'center', codeSize: 8, nameSize: 8, priceSize: 8, textGap: 0.5,
+};
+const round1 = (n: number) => Math.round(n * 10) / 10;
+export function cleanLabelProfile(v: Record<string, any>, i = 0): LabelProfile {
+  const d = DEFAULT_LABEL_PROFILE;
+  const n = (x: unknown, min: number, max: number, dflt: number) => round1(Math.min(max, Math.max(min, Number.isFinite(Number(x)) ? Number(x) : dflt)));
+  const b = (x: unknown, dflt: boolean) => (typeof x === 'boolean' ? x : dflt);
+  const paper = v?.paper === 'a4' ? 'a4' : 'roll';
+  return {
+    id: String(v?.id ?? '').replace(/[^\w-]/g, '').slice(0, 24) || `p${i + 1}`,
+    name: String(v?.name ?? '').trim().slice(0, 40) || `โปรไฟล์ ${i + 1}`,
+    paper,
+    width: n(v?.width, 10, 210, d.width), height: n(v?.height, 8, 297, d.height),
+    cols: Math.round(n(v?.cols, 1, paper === 'a4' ? 8 : 4, 1)), rows: Math.round(n(v?.rows, 1, 30, 1)),
+    gapX: n(v?.gapX, 0, 20, d.gapX), gapY: n(v?.gapY, 0, 20, d.gapY), marginTop: n(v?.marginTop, 0, 30, 0), marginLeft: n(v?.marginLeft, 0, 30, 0),
+    padding: n(v?.padding, 0, 6, d.padding),
+    symbology: ['auto', 'code128', 'ean13'].includes(v?.symbology) ? v.symbology : 'auto',
+    barHeight: n(v?.barHeight, 3, 60, d.barHeight), barWidth: Math.round(n(v?.barWidth, 30, 100, d.barWidth)),
+    showCode: b(v?.showCode, true), showName: b(v?.showName, true), showVariant: b(v?.showVariant, true), showPrice: b(v?.showPrice, true), showShop: b(v?.showShop, false),
+    bold: b(v?.bold, true), italic: b(v?.italic, false),
+    align: ['left', 'center', 'right'].includes(v?.align) ? v.align : 'center',
+    codeSize: n(v?.codeSize, 4, 20, d.codeSize), nameSize: n(v?.nameSize, 4, 20, d.nameSize), priceSize: n(v?.priceSize, 4, 24, d.priceSize),
+    textGap: n(v?.textGap, 0, 10, d.textGap),
+  };
+}
+/** รายการโปรไฟล์: อย่างน้อย 1 · ไม่เกิน 12 · id ไม่ซ้ำ */
+export function cleanLabelProfiles(list: unknown): LabelProfile[] {
+  const arr = (Array.isArray(list) ? list : []).slice(0, 12).map((x, i) => cleanLabelProfile((x ?? {}) as Record<string, any>, i));
+  const seen = new Set<string>();
+  for (const p of arr) {
+    while (seen.has(p.id)) p.id = `${p.id}x`;
+    seen.add(p.id);
+  }
+  return arr.length ? arr : [{ ...DEFAULT_LABEL_PROFILE }];
+}
+
 export const DEFAULTS: Settings = {
   shop: { name: 'ร้านเสื้อผ้า', branchName: 'สาขาหลัก', branchCode: 'B01', address: '', phone: '', taxId: '', photoUrl: '', publicUrl: '' },
   display: {
@@ -116,7 +185,10 @@ export const DEFAULTS: Settings = {
     vat: { enabled: true, rate: 7 },
     feePayer: 'customer',
   },
-  barcode: { symbology: 'code128', autoAssign: 'none', ean13Prefix: '2', labelWidth: 40, labelHeight: 30, labelShowPrice: true, labelShowName: true },
+  barcode: {
+    symbology: 'code128', autoAssign: 'none', ean13Prefix: '2', labelWidth: 40, labelHeight: 30, labelShowPrice: true, labelShowName: true,
+    labelProfiles: [{ ...DEFAULT_LABEL_PROFILE }], labelProfile: DEFAULT_LABEL_PROFILE.id,
+  },
   receipt: {
     paperWidth: 80, fontSize: 'medium', title: 'ใบเสร็จรับเงิน / ใบกำกับภาษีอย่างย่อ', header: '', footer: 'ขอบคุณที่ใช้บริการ',
     showSku: false, showSalesperson: true, showCustomer: true, showVat: true, showOrderBarcode: true, autoPrint: false, copies: 1,
@@ -195,6 +267,9 @@ export function getSettings(): Settings {
   const ms = cache.payments.methods.filter((m) => ids.includes(m.id)).map((m) => merge(DEFAULTS.payments.methods.find((d) => d.id === m.id)!, m));
   for (const d of DEFAULTS.payments.methods) if (!ms.some((m) => m.id === d.id)) ms.push(d);
   cache.payments.methods = ms;
+  // โปรไฟล์ป้ายบาร์โค้ด (อาร์เรย์ — merge ไม่เติมค่าที่ขาดในแต่ละโปรไฟล์)
+  cache.barcode.labelProfiles = cleanLabelProfiles((stored.barcode as { labelProfiles?: unknown } | undefined)?.labelProfiles ?? DEFAULTS.barcode.labelProfiles);
+  if (!cache.barcode.labelProfiles.some((p) => p.id === cache!.barcode.labelProfile)) cache.barcode.labelProfile = cache.barcode.labelProfiles[0].id;
   setVatRate(cache.payments.vat.rate / 100); // เปิด/ปิด VAT ตั้งรายสาขา (เมนูสาขา)
   return cache;
 }
@@ -265,6 +340,11 @@ function clean(section: keyof Settings, v: Record<string, any>, old: Settings): 
         symbology: pick(v.symbology, ['code128', 'ean13'] as const, 'code128'), autoAssign: pick(v.autoAssign, ['none', 'sku', 'ean13'] as const, 'none'),
         ean13Prefix: prefix, labelWidth: Math.floor(num(v.labelWidth, 20, 120, 40)), labelHeight: Math.floor(num(v.labelHeight, 10, 100, 30)),
         labelShowPrice: bool(v.labelShowPrice, true), labelShowName: bool(v.labelShowName, true),
+        ...(() => {
+          const labelProfiles = cleanLabelProfiles(v.labelProfiles ?? old.barcode.labelProfiles);
+          const labelProfile = labelProfiles.some((p) => p.id === v.labelProfile) ? String(v.labelProfile) : labelProfiles[0].id;
+          return { labelProfiles, labelProfile };
+        })(),
       };
     }
     case 'receipt':
@@ -360,7 +440,7 @@ export function publicSettings() {
   };
   const payments = { ...s.payments, vat: { ...s.payments.vat, enabled: b.vatRegistered } };
   return {
-    shop, display: s.display, payments, receipt: s.receipt, barcode: { symbology: s.barcode.symbology }, stock: { lowStockDefault: s.stock.lowStockDefault, allowNegative: s.stock.allowNegative },
+    shop, display: s.display, payments, receipt: s.receipt, barcode: { symbology: s.barcode.symbology, labelProfiles: s.barcode.labelProfiles, labelProfile: s.barcode.labelProfile }, stock: { lowStockDefault: s.stock.lowStockDefault, allowNegative: s.stock.allowNegative },
     branch: { id: b.id, name: b.name, code: b.code, isMain: b.isMain },
   };
 }
