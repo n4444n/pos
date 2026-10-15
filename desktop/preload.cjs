@@ -11,18 +11,39 @@ if (location.protocol === 'file:') {
     getConfig: () => ipcRenderer.invoke('shell:get-config'),
     saveConfig: (c) => ipcRenderer.invoke('shell:save-config', c),
     listPrinters: () => ipcRenderer.invoke('shell:list-printers'),
+    listPorts: () => ipcRenderer.invoke('shell:list-ports'),
     testPrint: (c) => ipcRenderer.invoke('shell:test-print', c),
+    preview: (c) => ipcRenderer.invoke('shell:preview', c),
+    testDrawer: (c) => ipcRenderer.invoke('shell:test-drawer', c),
     retry: () => ipcRenderer.send('shell:retry'),
     openSettings: () => ipcRenderer.send('shell:open-settings'),
     closeSettings: () => ipcRenderer.send('shell:close-settings'),
   });
 } else if (location.origin === cfg.serverOrigin) {
+  let paper = cfg.paperWidth; // ขนาดกระดาษของเครื่องนี้ (อัปเดตเมื่อบันทึกจากหน้า ตั้งค่า → ใบเสร็จ)
   contextBridge.exposeInMainWorld('posDesktop', {
     version: cfg.version,
-    paperWidth: () => cfg.paperWidth,
+    paperWidth: () => paper,
+    // ตั้งค่าเครื่องพิมพ์ของเครื่องนี้จากหน้า ตั้งค่า → ใบเสร็จ (มีตั้งแต่ 1.0.4)
+    printer: {
+      get: () => ipcRenderer.invoke('pos:printer-get'),
+      list: () => ipcRenderer.invoke('pos:printer-list'),
+      ports: () => ipcRenderer.invoke('pos:printer-ports'),
+      test: (c) => ipcRenderer.invoke('pos:printer-test', c),
+      preview: (c) => ipcRenderer.invoke('pos:printer-preview', c),
+      testDrawer: (c) => ipcRenderer.invoke('pos:printer-drawer', c),
+      save: async (c) => {
+        const saved = await ipcRenderer.invoke('pos:printer-save', c);
+        if (saved) paper = saved.paperWidth;
+        return saved;
+      },
+    },
     // ชื่อร้าน/สาขาบนหัวหน้าต่างโปรแกรม (มีตั้งแต่ 1.0.3)
     setTitleInfo: (info) => ipcRenderer.send('pos:title-info', { shop: String(info?.shop ?? ''), branch: String(info?.branch ?? '') }),
-    print: (html, opts) => ipcRenderer.invoke('pos:print', String(html), { paperWidth: opts && opts.paperWidth === 58 ? 58 : 80 }),
+    print: (html, opts) =>
+      ipcRenderer.invoke('pos:print', String(html), { paperWidth: opts && opts.paperWidth === 58 ? 58 : 80, kind: String((opts && opts.kind) || '') }),
+    // ขายเสร็จ → เปิดลิ้นชักเงินตามตั้งค่าเครื่องนี้ (มีตั้งแต่ 1.0.4)
+    openDrawer: (info) => ipcRenderer.send('pos:open-drawer', { cash: !!(info && info.cash) }),
     // อัปเดตแอป → ปุ่ม "อัปเดต vX.Y.Z" ในหน้า POS
     update: {
       get: () => ipcRenderer.invoke('pos:update-state'),

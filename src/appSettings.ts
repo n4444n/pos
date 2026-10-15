@@ -30,6 +30,35 @@ export interface FooterBlock {
   width: number;
 }
 export interface PayMethod { id: PaymentMethod; label: string; enabled: boolean; feePercent: number; feeFixed: number }
+/** โปรไฟล์ป้ายบาร์โค้ด (ตั้งค่า → กระดาษบาร์โค้ด) — ตรงกับ server/settings.ts */
+export interface LabelProfile {
+  id: string;
+  name: string;
+  /** roll = สติ๊กเกอร์ม้วน · a4 = กระดาษสติ๊กเกอร์ A4 */
+  paper: 'roll' | 'a4';
+  /** ขนาดดวง (มม.) */
+  width: number; height: number;
+  /** ดวงต่อแถว · จำนวนแถวต่อแผ่น (A4) */
+  cols: number; rows: number;
+  /** ระยะห่างระหว่างดวง / ขอบกระดาษ / ขอบในดวง (มม.) */
+  gapX: number; gapY: number; marginTop: number; marginLeft: number; padding: number;
+  symbology: 'auto' | 'code128' | 'ean13';
+  /** ความสูงบาร์โค้ด (มม.) · ความกว้าง (% ของดวง) */
+  barHeight: number; barWidth: number;
+  showCode: boolean; showName: boolean; showVariant: boolean; showPrice: boolean; showShop: boolean;
+  bold: boolean; italic: boolean;
+  align: 'left' | 'center' | 'right';
+  /** ขนาดตัวอักษร (pt) */
+  codeSize: number; nameSize: number; priceSize: number;
+  /** ระยะห่างบาร์โค้ด/ตัวหนังสือ (มม.) */
+  textGap: number;
+}
+export const DEFAULT_LABEL_PROFILE: LabelProfile = {
+  id: 'p1', name: 'โปรไฟล์ 1', paper: 'roll', width: 50, height: 30, cols: 1, rows: 1, gapX: 2, gapY: 0, marginTop: 0, marginLeft: 0, padding: 1.2,
+  symbology: 'auto', barHeight: 10, barWidth: 90, showCode: true, showName: true, showVariant: true, showPrice: true, showShop: false,
+  bold: true, italic: false, align: 'center', codeSize: 8, nameSize: 8, priceSize: 8, textGap: 0.5,
+};
+
 export interface PublicSettings {
   shop: { name: string; branchName: string; branchCode: string; address: string; phone: string; taxId: string; photoUrl: string; publicUrl: string };
   display: {
@@ -48,7 +77,7 @@ export interface PublicSettings {
     language: 'th' | 'en' | 'both'; labels: Record<string, string>; shopName: string;
     logoUrl: string; logoWidth: number; showShopName: boolean; footerBlocks: FooterBlock[];
   };
-  barcode: { symbology: 'code128' | 'ean13' };
+  barcode: { symbology: 'code128' | 'ean13'; labelProfiles: LabelProfile[]; labelProfile: string };
   stock: { lowStockDefault: number; allowNegative: boolean };
   /** สาขาที่กำลังใช้งาน */
   branch: { id: number; name: string; code: string; isMain: boolean };
@@ -77,7 +106,7 @@ export const DEFAULT_SETTINGS: PublicSettings = {
     showSku: false, showSalesperson: true, showCustomer: true, showVat: true, showOrderBarcode: true, autoPrint: false, copies: 1,
     language: 'th', labels: {}, shopName: '', logoUrl: '', logoWidth: 60, showShopName: true, footerBlocks: [],
   },
-  barcode: { symbology: 'code128' },
+  barcode: { symbology: 'code128', labelProfiles: [], labelProfile: '' },
   stock: { lowStockDefault: 3, allowNegative: false },
   branch: { id: 0, name: '', code: '', isMain: true },
 };

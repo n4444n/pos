@@ -18,16 +18,24 @@ import { ToastView } from '../components/ToastView';
 import { baht, thaiDateTime } from '../format';
 import type { Toast } from '../store/usePos';
 import { colors, font, radius } from '../theme';
+import { desktop, type PrinterConfig } from '../desktop';
+import { DEFAULT_LABEL_PROFILE, type LabelProfile } from '../appSettings';
+import { LABEL_PRESETS, profileSummary } from '../labels';
+import { LabelPreview } from '../components/stock/LabelPreview';
 
-type SectionId = 'shop' | 'display' | 'stock' | 'payments' | 'barcode' | 'receipt' | 'notify';
-const dataKey = (id: SectionId) => id as keyof AdminSettings;
-const SECTIONS: { id: SectionId; label: string; icon: IconName; desc: string }[] = [
+type SectionId = 'shop' | 'display' | 'stock' | 'payments' | 'barcode' | 'labels' | 'receipt' | 'printer' | 'notify';
+/** หมวดที่บันทึกลงตั้งค่าร้านชุดเดียวกัน (กระดาษบาร์โค้ด → barcode) */
+const dataKey = (id: SectionId) => (id === 'labels' ? 'barcode' : id) as keyof AdminSettings;
+/** sub = เมนูย่อย (แสดงเยื้องใต้เมนูก่อนหน้า) · local = เก็บในเครื่องนี้ ไม่ใช่ตั้งค่าร้าน (มีปุ่มบันทึกของตัวเอง) */
+const SECTIONS: { id: SectionId; label: string; icon: IconName; desc: string; sub?: boolean; local?: boolean }[] = [
   { id: 'shop', label: 'ข้อมูลร้าน', icon: 'storefront-outline', desc: 'ชื่อร้าน เลขผู้เสียภาษี ที่อยู่/เบอร์ค่าเริ่มต้น' },
   { id: 'display', label: 'การแสดงผลหน้าขาย', icon: 'grid-outline', desc: 'มุมมองสินค้า รูปทรง/คุณภาพรูป ตัวอักษร การแสดงสต็อก' },
   { id: 'stock', label: 'สต็อก', icon: 'cube-outline', desc: 'จุดแจ้งเตือนสินค้าเหลือน้อย · รูปแบบรหัส SKU' },
   { id: 'payments', label: 'วิธีชำระเงิน & ค่าธรรมเนียม', icon: 'wallet-outline', desc: 'เปิด/ปิดวิธีชำระ ตั้งชื่อ ค่าธรรมเนียม % / บาท' },
-  { id: 'barcode', label: 'บาร์โค้ด', icon: 'barcode-outline', desc: 'ประเภทบาร์โค้ด สร้างอัตโนมัติ ขนาดป้าย' },
+  { id: 'barcode', label: 'บาร์โค้ด', icon: 'barcode-outline', desc: 'ประเภทบาร์โค้ด · สร้างบาร์โค้ดอัตโนมัติ' },
+  { id: 'labels', label: 'กระดาษบาร์โค้ด', icon: 'pricetags-outline', desc: 'โปรไฟล์ป้าย · ขนาดสติ๊กเกอร์/ดวงต่อแถว · ขนาดบาร์โค้ด · ข้อมูลและตัวอักษรบนป้าย' },
   { id: 'receipt', label: 'ใบเสร็จ', icon: 'receipt-outline', desc: 'ภาษา (ไทย / English) · แก้คำในบิล · ขนาดกระดาษ · ข้อความหัว/ท้าย' },
+  { id: 'printer', label: 'ตั้งค่าเครื่องพิมพ์ใบเสร็จ', icon: 'print-outline', desc: 'เครื่องพิมพ์ของคอมพิวเตอร์เครื่องนี้ · USB / LAN / Bluetooth · ขนาดกระดาษ · ตัดกระดาษ · ลิ้นชักเงิน', local: true },
   { id: 'notify', label: 'การแจ้งเตือน & API', icon: 'notifications-outline', desc: 'LINE (การ์ดปรับแต่งได้) · WhatsApp · Webhook · เหตุการณ์ที่ต้องการแจ้ง · API key' },
 ];
 
@@ -87,7 +95,7 @@ export function SettingsScreen({ onNavigate, onSettingsChanged }: Props) {
   }, [section]);
 
   const dk = dataKey(section);
-  const dirty = useMemo(() => !!draft && !!saved && JSON.stringify(draft[dk]) !== JSON.stringify(saved[dk]), [draft, saved, dk]);
+  const dirty = useMemo(() => !!draft && !!saved && dk in draft && JSON.stringify(draft[dk]) !== JSON.stringify(saved[dk]), [draft, saved, dk]);
 
   const patch = <K extends keyof AdminSettings>(k: K, v: Partial<AdminSettings[K]>) => setDraft((d) => (d ? { ...d, [k]: { ...d[k], ...v } } : d));
 
@@ -100,7 +108,7 @@ export function SettingsScreen({ onNavigate, onSettingsChanged }: Props) {
       setDraft((d) => (d ? { ...d, [dk]: structuredClone(r.settings[dk]) } : d));
       // ให้หน้าขาย/ใบเสร็จเปลี่ยนตามทันที
       const s = r.settings;
-      setAppSettings({ shop: s.shop, display: s.display, payments: s.payments, receipt: s.receipt, barcode: { symbology: s.barcode.symbology }, stock: { lowStockDefault: s.stock.lowStockDefault, allowNegative: s.stock.allowNegative } });
+      setAppSettings({ shop: s.shop, display: s.display, payments: s.payments, receipt: s.receipt, barcode: { symbology: s.barcode.symbology, labelProfiles: s.barcode.labelProfiles, labelProfile: s.barcode.labelProfile }, stock: { lowStockDefault: s.stock.lowStockDefault, allowNegative: s.stock.allowNegative } });
       onSettingsChanged();
       notify('success', `บันทึก "${SECTIONS.find((x) => x.id === section)!.label}" แล้ว`);
     } catch (e) {
@@ -135,11 +143,12 @@ export function SettingsScreen({ onNavigate, onSettingsChanged }: Props) {
               if (dirty) notify('info', 'มีการแก้ไขที่ยังไม่บันทึกในหมวดเดิม — เปลี่ยนหมวดแล้ว ค่าที่แก้ยังอยู่จนกว่าจะออกจากหน้านี้');
               setSection(it.id);
             }}
-            style={({ hovered }: { hovered?: boolean }) => [twoPane ? s.navItem : s.navChip, on && s.navOn, hovered && !on && { backgroundColor: '#EEF1F6' }]}
+            style={({ hovered }: { hovered?: boolean }) => [twoPane ? s.navItem : s.navChip, twoPane && it.sub && s.navSub, on && s.navOn, hovered && !on && { backgroundColor: '#EEF1F6' }]}
             accessibilityRole="tab"
             accessibilityState={{ selected: on }}
           >
-            <Icon name={it.icon} size={18} color={on ? '#fff' : colors.text} />
+            {twoPane && it.sub ? <Icon name="return-down-forward-outline" size={14} color={on ? '#fff' : colors.faint} /> : null}
+            <Icon name={it.icon} size={it.sub ? 16 : 18} color={on ? '#fff' : colors.text} />
             <Text style={[s.navText, on && { color: '#fff', fontWeight: '600' }]} numberOfLines={1}>{it.label}</Text>
           </Pressable>
         );
@@ -184,8 +193,10 @@ export function SettingsScreen({ onNavigate, onSettingsChanged }: Props) {
                   <StockSection v={draft.stock} set={(v) => patch('stock', v)} openBranches={() => onNavigate('branches')} />
                 ) : null}
                 {section === 'payments' ? <PaymentsSection v={draft.payments} set={(v) => patch('payments', v)} /> : null}
-                {section === 'barcode' ? <BarcodeSection v={draft.barcode} set={(v) => patch('barcode', v)} stock={draft.stock} goStock={() => setSection('stock')} /> : null}
-                {section === 'receipt' ? <ReceiptSection v={draft.receipt} shop={draft.shop} vat={draft.payments.vat} set={(v) => patch('receipt', v)} /> : null}
+                {section === 'barcode' ? <BarcodeSection v={draft.barcode} set={(v) => patch('barcode', v)} stock={draft.stock} goStock={() => setSection('stock')} goLabels={() => setSection('labels')} /> : null}
+                {section === 'labels' ? <LabelsSection v={draft.barcode} set={(v) => patch('barcode', v)} /> : null}
+                {section === 'receipt' ? <ReceiptSection v={draft.receipt} shop={draft.shop} vat={draft.payments.vat} set={(v) => patch('receipt', v)} goPrinter={() => setSection('printer')} /> : null}
+                {section === 'printer' ? <PrinterSection shopPaper={draft.receipt.paperWidth} notify={notify} goReceipt={() => setSection('receipt')} /> : null}
                 {section === 'notify' ? (
                   <NotifySection
                     v={draft.notify} set={(v) => patch('notify', v)} dirty={dirty} notify={notify}
@@ -193,6 +204,7 @@ export function SettingsScreen({ onNavigate, onSettingsChanged }: Props) {
                   />
                 ) : null}
               </ScrollView>
+              {cur.local ? null : (
               <View style={s.saveBar}>
                 <Text style={[s.sub, { flex: 1 }]} numberOfLines={2}>{dirty ? 'มีการแก้ไขที่ยังไม่บันทึก' : 'บันทึกแล้ว'}</Text>
                 <Pressable style={[s.ghostBtn, !dirty && { opacity: 0.4 }]} disabled={!dirty || saving} onPress={() => saved && setDraft((d) => (d ? { ...d, [dk]: structuredClone(saved[dk]) } : d))}>
@@ -207,6 +219,7 @@ export function SettingsScreen({ onNavigate, onSettingsChanged }: Props) {
                   )}
                 </Pressable>
               </View>
+              )}
             </View>
           </View>
         )}
@@ -471,7 +484,7 @@ function PaymentsSection({ v, set }: { v: AdminSettings['payments']; set: Upd<Ad
   );
 }
 
-function BarcodeSection({ v, set, stock, goStock }: { v: AdminSettings['barcode']; set: Upd<AdminSettings['barcode']>; stock: AdminSettings['stock']; goStock: () => void }) {
+function BarcodeSection({ v, set, stock, goStock, goLabels }: { v: AdminSettings['barcode']; set: Upd<AdminSettings['barcode']>; stock: AdminSettings['stock']; goStock: () => void; goLabels: () => void }) {
   const sample = v.symbology === 'ean13' ? '8850001234560' : `TS-001${stock.skuSeparator}${'1'.padStart(stock.skuDigits, '0')}`;
   return (
     <>
@@ -495,20 +508,19 @@ function BarcodeSection({ v, set, stock, goStock }: { v: AdminSettings['barcode'
           รูปแบบรหัส SKU (ตัวคั่น/จำนวนหลัก) ตั้งได้ที่ <Text style={s.link} onPress={goStock}>สต็อก & เชื่อมสาขา</Text>
         </Text>
       </Card>
-      <Card title="ป้ายสินค้า (สำหรับพิมพ์ติดสินค้า)">
-        <Grid>
-          <Field label="กว้าง (มม.)"><Input value={String(v.labelWidth)} onChange={(t) => set({ labelWidth: Number(t.replace(/[^0-9]/g, '')) || 0 })} keyboard="number-pad" max={3} /></Field>
-          <Field label="สูง (มม.)"><Input value={String(v.labelHeight)} onChange={(t) => set({ labelHeight: Number(t.replace(/[^0-9]/g, '')) || 0 })} keyboard="number-pad" max={3} /></Field>
-        </Grid>
-        <Toggle label="แสดงชื่อสินค้าบนป้าย" value={v.labelShowName} onChange={(x) => set({ labelShowName: x })} />
-        <Toggle label="แสดงราคาบนป้าย" value={v.labelShowPrice} onChange={(x) => set({ labelShowPrice: x })} />
-        <Text style={s.sub}>ค่าขนาดป้ายเตรียมไว้สำหรับระบบพิมพ์ป้ายบาร์โค้ด (เฟสถัดไป)</Text>
-      </Card>
+      <Pressable style={({ hovered }: { hovered?: boolean }) => [s.linkCard, hovered && { backgroundColor: '#E3EBFF' }]} onPress={goLabels} accessibilityRole="link">
+        <Icon name="pricetags-outline" size={20} color={colors.primary} />
+        <View style={{ flex: 1 }}>
+          <Text style={s.linkTitle}>กระดาษบาร์โค้ด (ป้ายติดสินค้า)</Text>
+          <Text style={s.hint}>ขนาดสติ๊กเกอร์ · ดวงต่อแถว · ขนาดบาร์โค้ด · ชื่อ/ราคา/รหัสบนป้าย · หลายโปรไฟล์</Text>
+        </View>
+        <Icon name="chevron-forward" size={18} color={colors.primary} />
+      </Pressable>
     </>
   );
 }
 
-function ReceiptSection({ v, shop, vat, set }: { v: AdminSettings['receipt']; shop: AdminSettings['shop']; vat: AdminSettings['payments']['vat']; set: Upd<AdminSettings['receipt']> }) {
+function ReceiptSection({ v, shop, vat, set, goPrinter }: { v: AdminSettings['receipt']; shop: AdminSettings['shop']; vat: AdminSettings['payments']['vat']; set: Upd<AdminSettings['receipt']>; goPrinter: () => void }) {
   const fs = v.fontSize === 'small' ? 11 : v.fontSize === 'large' ? 14 : 12;
   const { t, pay, date } = receiptText(v);
   const [showLabels, setShowLabels] = useState(false);
@@ -612,6 +624,14 @@ function ReceiptSection({ v, shop, vat, set }: { v: AdminSettings['receipt']; sh
   return (
     <View style={[{ gap: 12 }, Platform.OS === 'web' && { flexDirection: 'row', flexWrap: 'wrap' }]}>
       <View style={{ flex: 1, minWidth: 300, gap: 12 }}>
+        <Pressable style={({ hovered }: { hovered?: boolean }) => [s.linkCard, hovered && { backgroundColor: '#E3EBFF' }]} onPress={goPrinter} accessibilityRole="link">
+          <Icon name="print-outline" size={20} color={colors.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={s.linkTitle}>ตั้งค่าเครื่องพิมพ์ใบเสร็จ</Text>
+            <Text style={s.hint}>เลือกเครื่องพิมพ์ของคอมพิวเตอร์เครื่องนี้ · USB / LAN · ตัดกระดาษ · ลิ้นชักเงิน · พิมพ์ทดสอบ</Text>
+          </View>
+          <Icon name="chevron-forward" size={18} color={colors.primary} />
+        </Pressable>
         <Card title="ภาษาของใบเสร็จ">
           <Seg value={v.language} options={[['th', 'ไทย'], ['en', 'English'], ['both', 'ไทย + English']]} onChange={(x) => setLang(x as ReceiptLang)} />
           <Text style={s.hint}>
@@ -1346,6 +1366,440 @@ function AutoImage({ uri, width, maxHeight }: { uri: string; width: number; maxH
   return <Image source={{ uri }} style={{ width: w, height: h }} resizeMode="contain" />;
 }
 
+/**
+ * กระดาษบาร์โค้ด — โปรไฟล์ป้ายติดสินค้า (ขนาดกระดาษ ดวงต่อแถว บาร์โค้ด ข้อความ) ใช้ตอนพิมพ์ป้ายในหน้าสต็อก
+ * บันทึกในตั้งค่าร้าน (ทุกเครื่อง/ทุกสาขาใช้ร่วมกัน)
+ */
+function LabelsSection({ v, set }: { v: AdminSettings['barcode']; set: Upd<AdminSettings['barcode']> }) {
+  const profiles = v.labelProfiles?.length ? v.labelProfiles : [DEFAULT_LABEL_PROFILE];
+  const [selId, setSelId] = useState(v.labelProfile || profiles[0].id);
+  const p = profiles.find((x) => x.id === selId) ?? profiles[0];
+  const { width } = useWindowDimensions();
+  const wide = width >= 1250;
+  const upd = (x: Partial<LabelProfile>) => set({ labelProfiles: profiles.map((q) => (q.id === p.id ? { ...q, ...x } : q)) });
+  const add = (base?: LabelProfile) => {
+    if (profiles.length >= 12) return;
+    const id = `p${Date.now().toString(36)}`;
+    const np: LabelProfile = { ...(base ?? DEFAULT_LABEL_PROFILE), id, name: base ? `${base.name} (สำเนา)`.slice(0, 40) : `โปรไฟล์ ${profiles.length + 1}` };
+    set({ labelProfiles: [...profiles, np] });
+    setSelId(id);
+  };
+  const remove = () => {
+    if (profiles.length <= 1) return;
+    const rest = profiles.filter((q) => q.id !== p.id);
+    set({ labelProfiles: rest, labelProfile: v.labelProfile === p.id ? rest[0].id : v.labelProfile });
+    setSelId(rest[0].id);
+  };
+  const isDefault = (v.labelProfile || profiles[0].id) === p.id;
+  const rollWidth = p.marginLeft + p.cols * p.width + (p.cols - 1) * p.gapX;
+  const a4 = p.paper === 'a4';
+
+  const settings = (
+    <View style={{ flex: 1, minWidth: 0, gap: 12 }}>
+      <Card title="โปรไฟล์">
+        <View style={[s.row, { flexWrap: 'wrap' }]}>
+          {profiles.map((q) => {
+            const on = q.id === p.id;
+            const def = (v.labelProfile || profiles[0].id) === q.id;
+            return (
+              <Pressable key={q.id} onPress={() => setSelId(q.id)} style={[s.profileChip, on && s.profileOn]} accessibilityRole="radio" accessibilityState={{ checked: on }}>
+                <Text style={[s.profileName, on && { color: colors.primary }]} numberOfLines={1}>{def ? '★ ' : ''}{q.name}</Text>
+                <Text style={s.hint} numberOfLines={1}>{profileSummary(q)}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <View style={[s.row, { flexWrap: 'wrap' }]}>
+          <SmallBtn label="เพิ่มโปรไฟล์" icon="add" onPress={() => add()} disabled={profiles.length >= 12} />
+          <SmallBtn label="ทำสำเนา" icon="copy-outline" onPress={() => add(p)} disabled={profiles.length >= 12} />
+          <SmallBtn label={isDefault ? 'ค่าเริ่มต้นอยู่แล้ว' : 'ตั้งเป็นค่าเริ่มต้น'} icon="star-outline" onPress={() => set({ labelProfile: p.id })} disabled={isDefault} />
+          <SmallBtn label="ลบโปรไฟล์นี้" icon="trash-outline" onPress={remove} disabled={profiles.length <= 1} />
+        </View>
+        <Field label="ชื่อโปรไฟล์" hint="★ = โปรไฟล์ที่เลือกไว้ก่อนเมื่อพิมพ์ป้าย (แต่ละเครื่องจำโปรไฟล์ที่ใช้ล่าสุด)">
+          <Input value={p.name} onChange={(t) => upd({ name: t })} max={40} placeholder="เช่น สติ๊กเกอร์ม้วน 50×30" />
+        </Field>
+      </Card>
+
+      <Card title="ขนาดกระดาษ">
+        <Field label="แบบสำเร็จรูป" hint="กดเพื่อกรอกขนาด จำนวนดวง และขนาดตัวอักษรที่เหมาะสมให้ แล้วปรับต่อได้">
+          <View style={[s.row, { flexWrap: 'wrap' }]}>
+            {LABEL_PRESETS.map((x) => (
+              <Pressable key={x.id} onPress={() => upd(x.apply)} style={({ hovered }: { hovered?: boolean }) => [s.presetChip, hovered && { borderColor: colors.primary }]}>
+                <Text style={s.presetT}>{x.label}</Text>
+                <Text style={s.hint}>{x.hint}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Field>
+        <Field label="ชนิดกระดาษ">
+          <Seg value={p.paper} options={[['roll', 'สติ๊กเกอร์ม้วน (เครื่องพิมพ์ป้าย)'], ['a4', 'กระดาษสติ๊กเกอร์ A4']]} onChange={(x) => upd({ paper: x as LabelProfile['paper'], cols: x === 'a4' ? Math.max(p.cols, 2) : Math.min(p.cols, 4), rows: x === 'a4' ? Math.max(p.rows, 5) : 1 })} />
+        </Field>
+        <Grid max={4}>
+          <Field label="กว้างต่อดวง (มม.)"><NumStep value={p.width} min={10} max={210} step={1} onChange={(n) => upd({ width: n })} /></Field>
+          <Field label="สูงต่อดวง (มม.)"><NumStep value={p.height} min={8} max={297} step={1} onChange={(n) => upd({ height: n })} /></Field>
+          <Field label="ดวงต่อแถว"><NumStep value={p.cols} min={1} max={a4 ? 8 : 4} step={1} onChange={(n) => upd({ cols: n })} /></Field>
+          {a4 ? <Field label="แถวต่อแผ่น"><NumStep value={p.rows} min={1} max={30} step={1} onChange={(n) => upd({ rows: n })} /></Field> : null}
+        </Grid>
+        <Grid max={4}>
+          {p.cols > 1 ? <Field label="ห่างระหว่างดวง (มม.)"><NumStep value={p.gapX} min={0} max={20} step={0.5} onChange={(n) => upd({ gapX: n })} /></Field> : null}
+          {a4 ? <Field label="ห่างระหว่างแถว (มม.)"><NumStep value={p.gapY} min={0} max={20} step={0.5} onChange={(n) => upd({ gapY: n })} /></Field> : null}
+          <Field label="ขอบซ้าย (มม.)"><NumStep value={p.marginLeft} min={0} max={30} step={0.5} onChange={(n) => upd({ marginLeft: n })} /></Field>
+          <Field label="ขอบบน (มม.)"><NumStep value={p.marginTop} min={0} max={30} step={0.5} onChange={(n) => upd({ marginTop: n })} /></Field>
+          <Field label="ขอบในดวง (มม.)"><NumStep value={p.padding} min={0} max={6} step={0.2} onChange={(n) => upd({ padding: n })} /></Field>
+        </Grid>
+        <Text style={s.hint}>
+          {a4
+            ? `แผ่น A4 · ${p.cols} × ${p.rows} = ${p.cols * p.rows} ดวง/แผ่น`
+            : `ความกว้างม้วนรวม ${Math.round(rollWidth * 10) / 10} มม. · ตั้งขนาดกระดาษในเครื่องพิมพ์ป้ายเป็น ${Math.round(rollWidth * 10) / 10} × ${p.height} มม.`}
+        </Text>
+      </Card>
+
+      <Card title="บาร์โค้ด">
+        <Field label="ประเภท" hint="ตามตั้งค่าร้าน = ตามเมนู บาร์โค้ด · EAN-13 ใช้เมื่อรหัสเป็นตัวเลข 13 หลักที่ถูกต้อง (ไม่งั้นพิมพ์เป็น Code 128)">
+          <Seg value={p.symbology} options={[['auto', 'ตามตั้งค่าร้าน'], ['code128', 'Code 128'], ['ean13', 'EAN-13']]} onChange={(x) => upd({ symbology: x as LabelProfile['symbology'] })} />
+        </Field>
+        <Grid max={3}>
+          <Field label="ความสูงบาร์โค้ด (มม.)"><NumStep value={p.barHeight} min={3} max={60} step={0.5} onChange={(n) => upd({ barHeight: n })} /></Field>
+          <Field label="ความกว้างบาร์โค้ด (% ของดวง)"><NumStep value={p.barWidth} min={30} max={100} step={5} onChange={(n) => upd({ barWidth: n })} /></Field>
+          <Field label="ระยะห่างบาร์โค้ด/ตัวหนังสือ (มม.)"><NumStep value={p.textGap} min={0} max={10} step={0.5} onChange={(n) => upd({ textGap: n })} /></Field>
+        </Grid>
+      </Card>
+
+      <Card title="ข้อความบนป้าย">
+        <Grid max={4}>
+          <Toggle label="แสดงรหัส" value={p.showCode} onChange={(x) => upd({ showCode: x })} />
+          <Toggle label="ชื่อสินค้า" value={p.showName} onChange={(x) => upd({ showName: x })} />
+          <Toggle label="สี / ไซซ์" value={p.showVariant} onChange={(x) => upd({ showVariant: x })} />
+          <Toggle label="ราคา" value={p.showPrice} onChange={(x) => upd({ showPrice: x })} />
+          <Toggle label="ชื่อร้าน" value={p.showShop} onChange={(x) => upd({ showShop: x })} />
+          <Toggle label="ตัวหนา" value={p.bold} onChange={(x) => upd({ bold: x })} />
+          <Toggle label="ตัวเอียง" value={p.italic} onChange={(x) => upd({ italic: x })} />
+        </Grid>
+        <Field label="ตำแหน่งของตัวอักษร">
+          <Seg value={p.align} options={[['left', 'ชิดซ้าย'], ['center', 'กึ่งกลาง'], ['right', 'ชิดขวา']]} onChange={(x) => upd({ align: x as LabelProfile['align'] })} />
+        </Field>
+        <Grid max={3}>
+          <Field label="ขนาดรหัส (pt)"><NumStep value={p.codeSize} min={4} max={20} step={0.5} onChange={(n) => upd({ codeSize: n })} /></Field>
+          <Field label="ขนาดชื่อ (pt)"><NumStep value={p.nameSize} min={4} max={20} step={0.5} onChange={(n) => upd({ nameSize: n })} /></Field>
+          <Field label="ขนาดราคา (pt)"><NumStep value={p.priceSize} min={4} max={24} step={0.5} onChange={(n) => upd({ priceSize: n })} /></Field>
+        </Grid>
+      </Card>
+    </View>
+  );
+
+  const side = (
+    <View style={[{ gap: 12 }, wide ? { width: 380 } : { width: '100%' }]}>
+      <Card title="ตัวอย่างป้าย">
+        <View style={s.previewBox}>
+          <LabelPreview profile={p} maxWidth={wide ? 340 : 520} />
+        </View>
+        <Text style={s.hint}>{p.name} · {profileSummary(p)}</Text>
+        <Text style={s.hint}>
+          ตัวอย่างใช้รูปแบบเดียวกับตอนพิมพ์จริง · พิมพ์ป้ายได้ที่หน้า สต็อกสินค้า → ปุ่มพิมพ์บาร์โค้ด · ในหน้าต่างพิมพ์ เลือกเครื่องพิมพ์ป้าย ขนาดกระดาษให้ตรง และระยะขอบ: ไม่มี
+        </Text>
+      </Card>
+    </View>
+  );
+
+  return (
+    <View style={[{ gap: 12 }, wide ? { flexDirection: 'row', alignItems: 'flex-start' } : null]}>
+      {settings}
+      {side}
+    </View>
+  );
+}
+
+/** ช่องตัวเลข + ปุ่ม − / + (รองรับทศนิยมตาม step) */
+function NumStep({ value, min, max, step, onChange }: { value: number; min: number; max: number; step: number; onChange: (n: number) => void }) {
+  const dec = step < 1 ? 1 : 0;
+  const fmt = (n: number) => (dec ? String(Math.round(n * 10) / 10) : String(Math.round(n)));
+  const [text, setText] = useState(fmt(value));
+  useEffect(() => setText(fmt(value)), [value]); // eslint-disable-line react-hooks/exhaustive-deps
+  const commit = (n: number) => onChange(Math.max(min, Math.min(max, dec ? Math.round(n * 10) / 10 : Math.round(n))));
+  return (
+    <View style={s.row}>
+      <Pressable style={s.arrow} onPress={() => commit(value - step)} accessibilityLabel="ลด"><Icon name="remove" size={16} color={colors.text} /></Pressable>
+      <TextInput
+        value={text}
+        onChangeText={(t) => setText(t.replace(dec ? /[^0-9.]/g : /[^0-9]/g, '').slice(0, 6))}
+        onBlur={() => (text.trim() === '' || !Number.isFinite(Number(text)) ? setText(fmt(value)) : commit(Number(text)))}
+        onSubmitEditing={() => Number.isFinite(Number(text)) && commit(Number(text))}
+        keyboardType={dec ? 'decimal-pad' : 'number-pad'}
+        selectTextOnFocus
+        style={[s.input, { width: 72, textAlign: 'center', paddingHorizontal: 4 }]}
+      />
+      <Pressable style={s.arrow} onPress={() => commit(value + step)} accessibilityLabel="เพิ่ม"><Icon name="add" size={16} color={colors.text} /></Pressable>
+    </View>
+  );
+}
+
+/**
+ * ตั้งค่าเครื่องพิมพ์ใบเสร็จของ "เครื่องนี้" — เก็บในแอปเดสก์ท็อป (แต่ละเครื่อง/สาขาตั้งไม่เหมือนกันได้)
+ * บันทึกแยกจากตั้งค่าร้าน (ปุ่มบันทึกในการ์ดด้านขวา) · เปิดผ่านเบราว์เซอร์จะไม่มีส่วนนี้
+ */
+function PrinterSection({ shopPaper, notify, goReceipt }: { shopPaper: 58 | 80; notify: (k: Toast['kind'], t: string) => void; goReceipt: () => void }) {
+  const bridge = desktop()?.printer;
+  const { width } = useWindowDimensions();
+  const [c, setC] = useState<PrinterConfig | null>(null);
+  const [saved, setSaved] = useState<string>('');
+  const [printers, setPrinters] = useState<{ name: string; displayName: string; isDefault: boolean }[]>([]);
+  const [ports, setPorts] = useState<{ port: string; name: string; bluetooth: boolean }[] | null>(null);
+  const [busy, setBusy] = useState<'' | 'test' | 'preview' | 'drawer' | 'save' | 'ports'>('');
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [preview, setPreview] = useState<{ image: string; dots: number } | null>(null);
+
+  const loadPrinters = useCallback(() => {
+    bridge?.list().then(setPrinters).catch(() => {});
+  }, [bridge]);
+  const loadPorts = useCallback(() => {
+    if (!bridge?.ports) return;
+    setBusy('ports');
+    bridge.ports().then(setPorts).catch(() => setPorts([])).finally(() => setBusy(''));
+  }, [bridge]);
+  const needPorts = c?.printMode === 'raster' && c.connection === 'bluetooth' && ports === null;
+  useEffect(() => {
+    if (needPorts) loadPorts();
+  }, [needPorts, loadPorts]);
+  useEffect(() => {
+    if (!bridge) return;
+    bridge.get().then((x) => {
+      if (!x) return;
+      const { version: _v, ...cfg } = x;
+      setC(cfg);
+      setSaved(JSON.stringify(cfg));
+    });
+    loadPrinters();
+  }, [bridge, loadPrinters]);
+
+  if (!bridge) {
+    return (
+      <Card title="ใช้ได้ในแอป Clothing POS เท่านั้น">
+        <Text style={s.hint}>
+          การตั้งค่าเครื่องพิมพ์ (USB / LAN · ตัดกระดาษ · ลิ้นชักเงิน) เก็บในคอมพิวเตอร์แต่ละเครื่อง — เปิดหน้านี้จากแอป Clothing POS บนเครื่องที่ต่อเครื่องพิมพ์ ·
+          เมื่อเปิดผ่านเบราว์เซอร์ ใบเสร็จจะพิมพ์ผ่านหน้าต่างพิมพ์ของเบราว์เซอร์
+        </Text>
+      </Card>
+    );
+  }
+  if (!c) return <ActivityIndicator style={{ marginTop: 30 }} color={colors.primary} />;
+
+  const set = (x: Partial<PrinterConfig>) => {
+    setC({ ...c, ...x });
+    setPreview(null);
+    setMsg(null);
+  };
+  const dirty = JSON.stringify(c) !== saved;
+  const raster = c.printMode === 'raster';
+  const paper = c.paperWidth ?? shopPaper;
+  const wide = width >= 1250;
+  const run = async (kind: 'test' | 'preview' | 'drawer') => {
+    setBusy(kind);
+    setMsg(null);
+    try {
+      const r = await (kind === 'test' ? bridge.test(c) : kind === 'preview' ? bridge.preview(c) : bridge.testDrawer(c));
+      if (kind === 'preview' && r.ok && r.image) setPreview({ image: r.image, dots: r.dots ?? 0 });
+      else setMsg(r.ok ? { ok: true, text: kind === 'test' ? 'ส่งงานพิมพ์แล้ว' : 'ส่งคำสั่งเปิดลิ้นชักแล้ว (ไม่เปิด → ลองเปลี่ยนขาสัญญาณ)' } : { ok: false, text: r.error ?? 'ไม่สำเร็จ' });
+    } finally {
+      setBusy('');
+    }
+  };
+  const save = async () => {
+    if (raster && c.connection === 'network' && !c.host.trim()) return setMsg({ ok: false, text: 'ใส่ IP เครื่องพิมพ์' });
+    if (raster && c.connection === 'usb' && !c.printer) return setMsg({ ok: false, text: 'เลือกเครื่องพิมพ์ใบเสร็จ' });
+    if (raster && c.connection === 'bluetooth' && !c.comPort) return setMsg({ ok: false, text: 'เลือกพอร์ต Bluetooth ของเครื่องพิมพ์' });
+    setBusy('save');
+    try {
+      const x = await bridge.save(c);
+      if (x) {
+        const { version: _v, ...cfg } = x;
+        setC(cfg);
+        setSaved(JSON.stringify(cfg));
+        notify('success', 'บันทึกการตั้งค่าเครื่องพิมพ์แล้ว');
+      }
+    } finally {
+      setBusy('');
+    }
+  };
+  const reset = () => {
+    setC(JSON.parse(saved) as PrinterConfig);
+    setPreview(null);
+    setMsg(null);
+  };
+  const numIn = (key: 'port' | 'dots' | 'feedTop' | 'feedBottom', max: number) => (
+    <Input value={String(c[key])} onChange={(t) => set({ [key]: Math.min(max, Number(t.replace(/\D/g, '')) || 0) } as Partial<PrinterConfig>)} keyboard="number-pad" max={5} />
+  );
+  const printerOptions = printers.filter((p) => !raster || !/microsoft|onenote|fax|pdf|xps/i.test(p.name));
+  const chip = (on: boolean) => [s.segItem, on && s.segOn];
+
+  // ---------- คอลัมน์ซ้าย: ตั้งค่า ----------
+  const settings = (
+    <View style={{ flex: 1, minWidth: 0, gap: 12 }}>
+      <Card title="วิธีพิมพ์ & การเชื่อมต่อ">
+        <Grid max={2}>
+          <Field label="วิธีพิมพ์" hint={raster ? 'ส่งเป็นรูปภาพตรงเข้าเครื่องพิมพ์ใบเสร็จ — ภาษาไทยถูกทุกตัว ตัดกระดาษ/เปิดลิ้นชักได้' : 'ผ่านไดรเวอร์ Windows — สำหรับเครื่องพิมพ์ที่ไม่รองรับ ESC/POS'}>
+            <Seg value={c.printMode} options={[['raster', 'ESC/POS (แนะนำ)'], ['driver', 'ไดรเวอร์ Windows']]} onChange={(x) => set({ printMode: x as PrinterConfig['printMode'] })} />
+          </Field>
+          {raster ? (
+            <Field
+              label="การเชื่อมต่อ"
+              hint={
+                c.connection === 'usb'
+                  ? 'สาย USB — ต้องติดตั้งไดรเวอร์ของเครื่องใน Windows แล้ว'
+                  : c.connection === 'network'
+                    ? 'ต่อผ่านเครือข่าย — ดู IP จากใบที่พิมพ์ตอนกด FEED ค้างขณะเปิดเครื่อง'
+                    : 'จับคู่เครื่องพิมพ์ใน Windows ก่อน แล้วเลือกพอร์ต COM ของเครื่องพิมพ์ด้านล่าง'
+              }
+            >
+              <Seg value={c.connection} options={[['usb', 'USB'], ['network', 'LAN / WiFi'], ['bluetooth', 'Bluetooth']]} onChange={(x) => set({ connection: x as PrinterConfig['connection'] })} />
+            </Field>
+          ) : (
+            <Toggle label="พิมพ์ทันทีโดยไม่ถาม" hint="ปิด = แสดงกล่องเลือกเครื่องพิมพ์ทุกครั้ง" value={c.silent} onChange={(x) => set({ silent: x })} />
+          )}
+        </Grid>
+        {raster && c.connection === 'bluetooth' ? (
+          <>
+            <Field label="พอร์ต Bluetooth (COM)">
+              <View style={[s.row, { flexWrap: 'wrap' }]}>
+                {(ports ?? []).map((p) => (
+                  <Pressable key={p.port} onPress={() => set({ comPort: p.port })} style={chip(c.comPort === p.port)}>
+                    <Text style={[s.segText, c.comPort === p.port && { color: '#fff' }]}>
+                      {p.bluetooth ? '🔵 ' : ''}{p.port}{p.name && p.name !== p.port ? ` · ${p.name.replace(/\s*\(COM\d+\)$/, '')}` : ''}
+                    </Text>
+                  </Pressable>
+                ))}
+                {c.comPort && ports && !ports.some((p) => p.port === c.comPort) ? (
+                  <View style={chip(true)}><Text style={[s.segText, { color: '#fff' }]}>{c.comPort} (ไม่พบตอนนี้)</Text></View>
+                ) : null}
+                <SmallBtn label="ค้นหาพอร์ตใหม่" icon="bluetooth-outline" onPress={loadPorts} busy={busy === 'ports'} />
+              </View>
+              <Text style={s.hint}>
+                ยังไม่มีพอร์ต: Windows → ตั้งค่า → Bluetooth และอุปกรณ์ → เพิ่มอุปกรณ์ → เลือกเครื่องพิมพ์ (รหัสจับคู่มักเป็น 0000 หรือ 1234) → กด "ค้นหาพอร์ตใหม่" ·
+                เครื่องเดียวอาจมี 2 พอร์ต — ถ้าพิมพ์ไม่ออก ให้ลองอีกพอร์ต · ใช้กับสาย Serial (RS-232) ได้ด้วย
+              </Text>
+            </Field>
+            <Field label="ความเร็วพอร์ต (baud)" hint="Bluetooth ใช้ค่าใดก็ได้ · สาย Serial ต้องตรงกับเครื่องพิมพ์ (ส่วนใหญ่ 9600 หรือ 115200)">
+              <Seg value={c.baud} options={[[9600, '9600'], [19200, '19200'], [38400, '38400'], [115200, '115200']]} onChange={(x) => set({ baud: Number(x) })} />
+            </Field>
+          </>
+        ) : raster && c.connection === 'network' ? (
+          <Grid max={3}>
+            <Field label="IP เครื่องพิมพ์" hint="ทดสอบด้วยเครื่องพิมพ์จำลอง: 127.0.0.1"><Input value={c.host} onChange={(t) => set({ host: t.trim() })} placeholder="เช่น 192.168.1.50" max={100} /></Field>
+            <Field label="พอร์ต" hint="ปกติ 9100">{numIn('port', 65535)}</Field>
+          </Grid>
+        ) : (
+          <Field label="เครื่องพิมพ์ใน Windows">
+            <View style={[s.row, { flexWrap: 'wrap' }]}>
+              {!raster ? (
+                <Pressable onPress={() => set({ printer: '' })} style={chip(c.printer === '')}>
+                  <Text style={[s.segText, c.printer === '' && { color: '#fff' }]}>เครื่องหลักของ Windows</Text>
+                </Pressable>
+              ) : null}
+              {printerOptions.map((p) => (
+                <Pressable key={p.name} onPress={() => set({ printer: p.name })} style={chip(c.printer === p.name)}>
+                  <Text style={[s.segText, c.printer === p.name && { color: '#fff' }]}>{p.displayName}</Text>
+                </Pressable>
+              ))}
+              <SmallBtn label="โหลดรายชื่อใหม่" icon="refresh" onPress={loadPrinters} />
+            </View>
+            {raster && !printerOptions.length ? <Text style={s.hint}>ยังไม่พบเครื่องพิมพ์ใบเสร็จใน Windows — ต่อสาย USB ติดตั้งไดรเวอร์ แล้วกด "โหลดรายชื่อใหม่" · หรือใช้ LAN / WiFi</Text> : null}
+            {c.printer && !printers.some((p) => p.name === c.printer) ? <Text style={[s.hint, { color: colors.danger }]}>ไม่พบ "{c.printer}" — ตรวจสาย/การเปิดเครื่อง</Text> : null}
+          </Field>
+        )}
+      </Card>
+
+      <Card title="กระดาษ & คุณภาพการพิมพ์">
+        <Grid max={raster ? 3 : 1}>
+          <Field label="ขนาดกระดาษของเครื่องนี้" hint={`"ตามร้าน" = ${shopPaper} มม. (ตั้งที่เมนู ใบเสร็จ)`}>
+            <Seg value={c.paperWidth ?? 0} options={[[0, 'ตามร้าน'], [58, '58 มม.'], [80, '80 มม.']]} onChange={(x) => set({ paperWidth: x ? (x as 58 | 80) : null })} />
+          </Field>
+          {raster ? <Field label="ความกว้างพิมพ์ (จุด)" hint={`0 = อัตโนมัติ (${paper === 58 ? 384 : 576}) · ขอบขวาหาย → ลดทีละ 8`}>{numIn('dots', 1024)}</Field> : null}
+          {raster ? (
+            <Field label="ความเข้ม" hint="พิมพ์จาง → เลือกเข้มขึ้น">
+              <Seg value={c.threshold} options={[[130, 'จาง'], [160, 'ปกติ'], [190, 'เข้ม'], [215, 'เข้มมาก']]} onChange={(x) => set({ threshold: Number(x) })} />
+            </Field>
+          ) : null}
+        </Grid>
+        {raster ? (
+          <Grid max={3}>
+            <Field label="เว้นหัวกระดาษ (มม.)">{numIn('feedTop', 30)}</Field>
+            <Field label="เว้นท้ายก่อนตัด (มม.)">{numIn('feedBottom', 50)}</Field>
+          </Grid>
+        ) : null}
+      </Card>
+
+      {raster ? (
+        <Card title="ตัดกระดาษ & ลิ้นชักเงิน">
+          <Toggle label="ตัดกระดาษหลังพิมพ์" hint="เฉพาะเครื่องที่มีใบมีดตัด · พิมพ์หลายสำเนาจะตัดคั่นแต่ละใบ" value={c.cut} onChange={(x) => set({ cut: x })} />
+          <Grid max={2}>
+            <Field label="เปิดลิ้นชักเงิน (เสียบสายเข้าเครื่องพิมพ์)" hint="เปิดตอนขายเสร็จ · พิมพ์ใบเสร็จซ้ำจากประวัติจะไม่เปิด">
+              <Seg value={c.drawer} options={[['off', 'ไม่เปิด'], ['cash', 'ขายด้วยเงินสด'], ['sale', 'ทุกการขาย']]} onChange={(x) => set({ drawer: x as PrinterConfig['drawer'] })} />
+            </Field>
+            <Field label="ขาสัญญาณลิ้นชัก" hint="ลิ้นชักไม่เปิด → ลองอีกขา">
+              <View style={[s.row, { flexWrap: 'wrap' }]}>
+                <Seg value={c.drawerPin} options={[[0, 'ขา 2 (ทั่วไป)'], [1, 'ขา 5']]} onChange={(x) => set({ drawerPin: Number(x) as 0 | 1 })} />
+                <SmallBtn label="ทดสอบเปิดลิ้นชัก" icon="cash-outline" onPress={() => run('drawer')} busy={busy === 'drawer'} />
+              </View>
+            </Field>
+          </Grid>
+        </Card>
+      ) : null}
+    </View>
+  );
+
+  // ---------- คอลัมน์ขวา: บันทึก ทดสอบ ตัวอย่าง ----------
+  const side = (
+    <View style={[{ gap: 12 }, wide ? { width: 380 } : { width: '100%' }]}>
+      <Card title="บันทึก & ทดสอบ">
+        <Text style={s.hint}>ค่าในหน้านี้ใช้เฉพาะคอมพิวเตอร์เครื่องนี้ บันทึกแยกจากตั้งค่าร้าน · พิมพ์ทดสอบ/ดูตัวอย่างใช้ค่าที่เลือกอยู่ได้ก่อนบันทึก</Text>
+        <View style={[s.row, { flexWrap: 'wrap' }]}>
+          <SmallBtn label="พิมพ์ทดสอบ" icon="print-outline" onPress={() => run('test')} busy={busy === 'test'} />
+          {raster ? <SmallBtn label="ดูตัวอย่าง" icon="eye-outline" onPress={() => run('preview')} busy={busy === 'preview'} /> : null}
+        </View>
+        {msg ? <Text style={[s.hint, { color: msg.ok ? colors.success : colors.danger }]}>{msg.ok ? '✓ ' : ''}{msg.text}</Text> : null}
+        <View style={[s.row, { borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 12 }]}>
+          <Text style={[s.sub, { flex: 1 }]}>{dirty ? 'มีการแก้ไขที่ยังไม่บันทึก' : 'บันทึกแล้ว'}</Text>
+          <Pressable style={[s.ghostBtn, !dirty && { opacity: 0.4 }]} disabled={!dirty || busy === 'save'} onPress={reset}>
+            <Text style={s.ghostText}>ยกเลิก</Text>
+          </Pressable>
+          <Pressable style={[s.primaryBtn, (!dirty || busy === 'save') && { opacity: 0.45 }]} disabled={!dirty || busy === 'save'} onPress={save}>
+            {busy === 'save' ? <ActivityIndicator color="#fff" /> : (
+              <>
+                <Icon name="save-outline" size={16} color="#fff" />
+                <Text style={s.primaryText}>บันทึก</Text>
+              </>
+            )}
+          </Pressable>
+        </View>
+      </Card>
+      {raster ? (
+        <Card title="ตัวอย่างที่จะพิมพ์">
+          {preview ? (
+            <View style={s.previewBox}>
+              <View style={s.previewPaper}><AutoImage uri={preview.image} width={Math.min(preview.dots, 300)} /></View>
+              <Text style={s.hint}>กว้าง {preview.dots} จุด · เส้นประแดง = ตัดกระดาษ</Text>
+            </View>
+          ) : (
+            <Pressable style={s.previewEmpty} onPress={() => run('preview')}>
+              {busy === 'preview' ? <ActivityIndicator color={colors.primary} /> : <Icon name="eye-outline" size={26} color={colors.faint} />}
+              <Text style={[s.hint, { textAlign: 'center' }]}>กด "ดูตัวอย่าง" เพื่อดูภาพที่ส่งเข้าเครื่องพิมพ์{'\n'}(หน้าทดสอบ ขนาดตามที่ตั้งไว้)</Text>
+            </Pressable>
+          )}
+        </Card>
+      ) : null}
+      <Pressable onPress={goReceipt}>
+        <Text style={[s.hint, { color: colors.primary }]}>หน้าตาใบเสร็จ (ภาษา ข้อความ โลโก้ ขนาดกระดาษของร้าน) ตั้งที่เมนู ใบเสร็จ →</Text>
+      </Pressable>
+    </View>
+  );
+
+  return (
+    <View style={[{ gap: 12 }, wide ? { flexDirection: 'row', alignItems: 'flex-start' } : null]}>
+      {settings}
+      {side}
+    </View>
+  );
+}
+
 /** ปุ่มอัปโหลดรูป (ย่ออัตโนมัติ) */
 function UploadBtn({ label, onDone }: { label: string; onDone: (url: string) => void }) {
   const [busy, setBusy] = useState(false);
@@ -1501,6 +1955,7 @@ const s = StyleSheet.create({
   navCol: { gap: 6 },
   navRow: { flexDirection: 'row', gap: 6 },
   navItem: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 46, paddingHorizontal: 14, borderRadius: radius.md, backgroundColor: colors.surface },
+  navSub: { height: 40, marginLeft: 18, paddingHorizontal: 10, gap: 8 },
   navChip: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 38, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: colors.surface },
   navOn: { backgroundColor: colors.primary },
   navText: { fontFamily: font, fontSize: 13, color: colors.text, flexShrink: 1 },
@@ -1570,6 +2025,16 @@ const s = StyleSheet.create({
   swatchAuto: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 28, paddingHorizontal: 8, borderRadius: radius.pill, borderWidth: 2, borderColor: colors.line },
   swatchDot: { width: 16, height: 16, borderRadius: 8 },
   lineEdit: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  previewBox: { gap: 8, padding: 12, borderRadius: radius.md, backgroundColor: '#ECECE8', alignItems: 'center' },
+  previewPaper: { backgroundColor: '#fff', padding: 6 },
+  previewEmpty: { alignItems: 'center', justifyContent: 'center', gap: 8, height: 160, borderRadius: radius.md, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.line, backgroundColor: colors.surface },
+  profileChip: { minWidth: 150, maxWidth: 240, paddingVertical: 8, paddingHorizontal: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: '#fff', gap: 2 },
+  profileOn: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  profileName: { fontFamily: font, fontSize: 13, fontWeight: '600', color: colors.text },
+  presetChip: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: '#fff' },
+  presetT: { fontFamily: font, fontSize: 12, fontWeight: '600', color: colors.text },
+  linkCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: radius.lg, borderWidth: 1, borderColor: '#D5E1FF', backgroundColor: colors.primarySoft },
+  linkTitle: { fontFamily: font, fontSize: 14, fontWeight: '600', color: colors.primary },
   smallBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: colors.primarySoft },
   smallBtnText: { fontFamily: font, fontSize: 12, color: colors.primary, fontWeight: '600' },
   saveBar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 10, backgroundColor: colors.panel, borderTopWidth: 1, borderTopColor: colors.line },
