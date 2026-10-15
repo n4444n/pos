@@ -4,10 +4,11 @@
 // - อัปเดตตัวเองผ่าน electron-updater (ไฟล์อยู่ที่ <เซิร์ฟเวอร์>/updates/)
 // ตั้งค่าของเครื่องนี้เก็บที่ %APPDATA%\Clothing POS\config.json
 // พัฒนาต้นแบบโดย n4444n (MIT + Attribution — ดูไฟล์ LICENSE)
-const { app, BrowserWindow, Menu, dialog, shell, ipcMain, net, session } = require('electron');
+const { app, BrowserWindow, Menu, dialog, shell, ipcMain, net, session, nativeImage } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const fs = require('node:fs');
 const os = require('node:os');
+const escpos = require('./escpos.cjs');
 const path = require('node:path');
 
 if (!app.requestSingleInstanceLock()) {
@@ -20,26 +21,57 @@ const DEFAULT_SERVER = 'https://pos.sh0p.tech';
 const CONFIG_FILE = path.join(app.getPath('userData'), 'config.json');
 const DEFAULTS = {
   serverUrl: DEFAULT_SERVER,
-  printer: '', //          '' = เครื่องพิมพ์หลักของ Windows
+  // วิธีพิมพ์: 'raster' = ESC/POS แบบรูปภาพ ส่งตรงเข้าเครื่องพิมพ์ใบเสร็จ (แนะนำ) · 'driver' = ผ่านไดรเวอร์ Windows (แบบเดิม)
+  printMode: 'raster',
+  connection: 'usb', //   ESC/POS: 'usb' = เครื่องพิมพ์ใน Windows (ส่งแบบ RAW) · 'network' = LAN/WiFi
+  printer: '', //          ชื่อเครื่องพิมพ์ใน Windows ('' = เครื่องหลัก — ใช้ได้เฉพาะโหมดไดรเวอร์)
+  host: '', //             ESC/POS LAN: IP เครื่องพิมพ์
+  port: 9100,
   paperWidth: null, //     null = ตามตั้งค่าร้าน · 58 / 80 = บังคับเฉพาะเครื่องนี้
-  silent: true, //         true = พิมพ์ทันที · false = แสดงกล่องเลือกเครื่องพิมพ์
+  dots: 0, //              ความกว้างพิมพ์ (จุด) · 0 = อัตโนมัติ (58 → 384, 80 → 576)
+  threshold: 160, //       ความเข้ม 80–230 (มาก = เข้ม)
+  cut: true, //            ตัดกระดาษหลังพิมพ์
+  feedTop: 0, //           เว้นหัว (มม.)
+  feedBottom: 4, //        เว้นท้ายก่อนตัด (มม.)
+  drawer: 'off', //        เปิดลิ้นชัก: 'off' · 'cash' = ขายด้วยเงินสด · 'sale' = ทุกการขาย
+  drawerPin: 0, //         0 = ขา 2 (ทั่วไป) · 1 = ขา 5
+  silent: true, //         โหมดไดรเวอร์: true = พิมพ์ทันที · false = แสดงกล่องเลือกเครื่องพิมพ์
 };
 let config = loadConfig();
 
 function loadConfig() {
   try {
-    return sanitize({ ...DEFAULTS, ...JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) });
+    const saved = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    // เครื่องที่ตั้งค่าไว้ก่อนมีโหมด ESC/POS → ใช้แบบเดิม (ไดรเวอร์) ต่อจนกว่าจะเปลี่ยนเอง
+    if (!saved.printMode) saved.printMode = 'driver';
+    return sanitize({ ...DEFAULTS, ...saved });
   } catch {
     return { ...DEFAULTS };
   }
 }
+const num = (v, min, max, def) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : def;
+};
 function sanitize(c) {
   let serverUrl = String(c.serverUrl || DEFAULT_SERVER).trim().replace(/\/+$/, '');
   if (!/^https?:\/\/[^/\s]+$/i.test(serverUrl)) serverUrl = DEFAULT_SERVER;
+  const dots = num(c.dots, 0, 1024, 0);
   return {
     serverUrl,
+    printMode: c.printMode === 'driver' ? 'driver' : 'raster',
+    connection: c.connection === 'network' ? 'network' : 'usb',
     printer: String(c.printer || ''),
+    host: String(c.host || '').trim().slice(0, 100),
+    port: num(c.port, 1, 65535, 9100),
     paperWidth: c.paperWidth === 58 || c.paperWidth === 80 ? c.paperWidth : null,
+    dots: dots && dots < 200 ? 200 : dots - (dots % 8), // ทวีคูณของ 8
+    threshold: num(c.threshold, 80, 230, 160),
+    cut: c.cut !== false,
+    feedTop: num(c.feedTop, 0, 30, 0),
+    feedBottom: num(c.feedBottom, 0, 50, 4),
+    drawer: c.drawer === 'cash' || c.drawer === 'sale' ? c.drawer : 'off',
+    drawerPin: c.drawerPin === 1 ? 1 : 0,
     silent: c.silent !== false,
   };
 }
@@ -140,8 +172,8 @@ function openSettings() {
   settingsWin = new BrowserWindow({
     parent: win ?? undefined,
     modal: !!win,
-    width: 560,
-    height: 680,
+    width: 580,
+    height: 760,
     resizable: false,
     minimizable: false,
     title: 'ตั้งค่าเครื่องนี้',
@@ -156,7 +188,7 @@ function openSettings() {
 
 // ---------------------------------------------------------------- พิมพ์กระดาษม้วน
 /** พิมพ์ HTML ด้วยหน้าต่างซ่อน → ส่งเข้าเครื่องพิมพ์ที่ตั้งไว้ · ความยาวกระดาษ = ความยาวเนื้อหา */
-async function printHtml(html, paperWidthFromShop, opts = config) {
+async function printHtml(html, paperWidthFromShop, opts = config, { notify = true } = {}) {
   const pw = opts.paperWidth || (paperWidthFromShop === 58 ? 58 : 80);
   const pwin = new BrowserWindow({
     show: false,
@@ -195,7 +227,7 @@ async function printHtml(html, paperWidthFromShop, opts = config) {
     return { ok: true };
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
-    if (win && !win.isDestroyed()) {
+    if (notify && win && !win.isDestroyed()) {
       dialog.showMessageBox(win, { type: 'warning', title: 'พิมพ์ไม่สำเร็จ', message: 'พิมพ์ไม่สำเร็จ', detail: `${error}\n\nตั้งค่าเครื่องพิมพ์ได้ที่เมนู ระบบ → ตั้งค่าเครื่องนี้` });
     }
     return { ok: false, error };
@@ -204,15 +236,142 @@ async function printHtml(html, paperWidthFromShop, opts = config) {
   }
 }
 
-const TEST_PAGE = (pw) => `<!doctype html><html lang="th"><head><meta charset="utf-8"><style>
+// ---------------------------------------------------------------- ESC/POS แบบรูปภาพ
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const paperOf = (pwShop, opts) => opts.paperWidth || (pwShop === 58 ? 58 : 80);
+const dotsOf = (pw, opts) => opts.dots || escpos.defaultDots(pw);
+
+/**
+ * HTML → ภาพขาวดำกว้าง `dots` จุด (ซูมให้เนื้อหาเต็มความกว้างพิมพ์)
+ * คืน pages: 1 ภาพต่อสำเนา (<section> แต่ละอัน) — ตัดกระดาษคั่นระหว่างสำเนา
+ */
+async function renderMono(html, pw, opts) {
+  const dots = dotsOf(pw, opts);
+  const VIEW_H = 1200; // ถ่ายทีละช่วง (หน้ายาวกว่าจอได้)
+  const rwin = new BrowserWindow({
+    show: false,
+    width: dots,
+    height: VIEW_H,
+    useContentSize: true,
+    webPreferences: { offscreen: true, sandbox: true, contextIsolation: true, javascript: true },
+  });
+  const run = (js) => rwin.webContents.executeJavaScript(js);
+  try {
+    await rwin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    const bodyW = await run(`(async () => {
+      try { await document.fonts.ready } catch {}
+      await Promise.all([...document.images].map((i) => i.complete ? 0 : new Promise((r) => { i.onload = i.onerror = r })));
+      const st = document.createElement('style');
+      st.textContent = 'html,body{background:#fff!important}::-webkit-scrollbar{display:none}';
+      document.head.appendChild(st);
+      return document.body.getBoundingClientRect().width;
+    })()`);
+    const Z = dots / Math.max(50, bodyW);
+    rwin.webContents.setZoomFactor(Z);
+    await sleep(60);
+    const m = await run(`(async () => {
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const secs = [...document.querySelectorAll('body > section')].map((s) => {
+        const r = s.getBoundingClientRect();
+        return [r.top + scrollY, r.bottom + scrollY];
+      });
+      return { H: Math.max(document.documentElement.scrollHeight, document.body.getBoundingClientRect().bottom + scrollY), secs };
+    })()`);
+    const H = Math.ceil(m.H * Z);
+    const parts = [];
+    for (let y = 0; y < H; y += VIEW_H) {
+      const want = Math.min(VIEW_H, H - y);
+      const sy = await run(`(async () => {
+        window.scrollTo(0, ${y / Z});
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        return window.scrollY;
+      })()`);
+      const off = Math.max(0, Math.min(VIEW_H - want, Math.round(y - sy * Z)));
+      rwin.webContents.invalidate(); // offscreen: วาดเฟรมใหม่หลังเลื่อน
+      await sleep(40);
+      let img = await rwin.webContents.capturePage({ x: 0, y: off, width: dots, height: want });
+      const size = img.getSize();
+      if (size.width !== dots || size.height !== want) img = img.resize({ width: dots, height: want, quality: 'best' });
+      parts.push(escpos.toMono(img.toBitmap(), dots, want, opts.threshold, 'bgra'));
+    }
+    const all = escpos.concatMono(parts);
+    const pages = (m.secs.length ? m.secs : [[0, m.H]]).map(([a, b]) => escpos.trimBottom(escpos.sliceMono(all, Math.round(a * Z), Math.round(b * Z))));
+    return { pages: pages.filter((p) => p.height > 0), dots };
+  } finally {
+    rwin.destroy();
+  }
+}
+
+/** ภาพขาวดำ → PNG data URL (ดูตัวอย่างในหน้าตั้งค่า) — สำเนาคั่นด้วยเส้นประแดง */
+function monoPreview(pages) {
+  const width = pages[0]?.width || 384;
+  const gap = 10;
+  const height = pages.reduce((s, p) => s + p.height + gap, 0) || 1;
+  const buf = Buffer.alloc(width * height * 4, 255);
+  let y0 = 0;
+  for (const p of pages) {
+    for (let y = 0; y < p.height; y++)
+      for (let x = 0; x < width; x++)
+        if (p.bits[y * p.widthBytes + (x >> 3)] & (0x80 >> (x & 7))) buf.fill(0, ((y0 + y) * width + x) * 4, ((y0 + y) * width + x) * 4 + 3);
+    const cy = y0 + p.height + (gap >> 1);
+    for (let x = 0; x < width; x += 1) if ((x >> 3) % 2 === 0) buf.set([30, 30, 220, 255], (cy * width + x) * 4); // BGRA สีแดง
+    y0 += p.height + gap;
+  }
+  return nativeImage.createFromBitmap(buf, { width, height }).toDataURL();
+}
+
+/** ส่งข้อมูล ESC/POS ไปยังเครื่องพิมพ์ตามตั้งค่า */
+function sendRaw(data, opts) {
+  if (opts.connection === 'network') {
+    if (!opts.host) throw new Error('ยังไม่ได้ใส่ IP เครื่องพิมพ์ (ตั้งค่าเครื่องนี้ → LAN/WiFi)');
+    return escpos.sendNetwork(opts.host, opts.port, data);
+  }
+  return escpos.sendWindowsRaw(opts.printer, data);
+}
+
+async function printRaster(html, pwShop, opts) {
+  const pw = paperOf(pwShop, opts);
+  const { pages } = await renderMono(html, pw, opts);
+  if (!pages.length) throw new Error('ไม่มีเนื้อหาให้พิมพ์');
+  await sendRaw(escpos.buildJob({ pages, feedTopMm: opts.feedTop, feedBottomMm: opts.feedBottom, cut: opts.cut }), opts);
+}
+
+/** พิมพ์ตามวิธีที่ตั้งไว้ · ผิดพลาด → แจ้งบนหน้าจอ */
+async function printDoc(html, pwShop, opts = config, { notify = true } = {}) {
+  try {
+    if (opts.printMode === 'raster') await printRaster(html, pwShop, opts);
+    else {
+      const r = await printHtml(html, pwShop, opts, { notify: false });
+      if (!r.ok) throw new Error(r.error);
+    }
+    return { ok: true };
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    if (notify && win && !win.isDestroyed()) {
+      dialog.showMessageBox(win, { type: 'warning', title: 'พิมพ์ไม่สำเร็จ', message: 'พิมพ์ไม่สำเร็จ', detail: `${error}\n\nตั้งค่าเครื่องพิมพ์ได้ที่เมนู ระบบ → ตั้งค่าเครื่องนี้` });
+    }
+    return { ok: false, error };
+  }
+}
+
+/** เปิดลิ้นชักเงิน (ต่อสายเข้าเครื่องพิมพ์ใบเสร็จ) — ใช้ได้เมื่อพิมพ์แบบ ESC/POS */
+async function openDrawer(opts = config) {
+  if (opts.printMode !== 'raster') throw new Error('เปิดลิ้นชักได้เฉพาะโหมด ESC/POS');
+  await sendRaw(escpos.drawerOnly(opts.drawerPin), opts);
+}
+
+const TEST_PAGE = (pw, opts = config) => `<!doctype html><html lang="th"><head><meta charset="utf-8"><style>
   body{font-family:system-ui,sans-serif;font-size:12px;width:${pw === 58 ? 50 : 72}mm;margin:0 auto;color:#000}
   .c{text-align:center} hr{border:0;border-top:1px dashed #000;margin:6px 0} .ruler{display:flex;justify-content:space-between}
+  .bar{height:6px;background:#000;margin:6px 0} .grey{height:14px;background:linear-gradient(90deg,#fff,#000);margin:4px 0}
 </style></head><body>
   <h3 class="c" style="margin:6px 0">ทดสอบเครื่องพิมพ์</h3>
   <div class="c">Clothing POS ${app.getVersion()}</div><hr>
-  <div>กระดาษ: ${pw} มม.</div><div>เวลา: ${new Date().toLocaleString('th-TH')}</div>
-  <hr><div class="ruler"><span>|ซ้าย</span><span>กลาง</span><span>ขวา|</span></div>
-  <div>ภาษาไทย ก ข ค ง · English ABC 123</div><hr><div class="c">— จบการทดสอบ —</div>
+  <div>กระดาษ: ${pw} มม.${opts.printMode === 'raster' ? ` · ESC/POS ${dotsOf(pw, opts)} จุด · ${opts.connection === 'network' ? `LAN ${opts.host}:${opts.port}` : 'USB'}` : ' · ไดรเวอร์ Windows'}</div>
+  <div>เวลา: ${new Date().toLocaleString('th-TH')}</div>
+  <div class="bar"></div><div class="ruler"><span>|ซ้าย</span><span>กลาง</span><span>ขวา|</span></div><div class="bar"></div>
+  <div>ความเข้ม (ไล่สีขาว → ดำ)</div><div class="grey"></div>
+  <div>ภาษาไทย ก่ ก้ กุ้ง ฟ้า ญี่ปุ่น · English ABC 123</div><hr><div class="c">— จบการทดสอบ —</div>
 </body></html>`;
 
 // ---------------------------------------------------------------- IPC
@@ -264,7 +423,14 @@ ipcMain.on('pos:sync-config', (e) => {
 });
 ipcMain.handle('pos:print', (e, html, opts) => {
   if (!fromServer(e)) return { ok: false, error: 'not allowed' };
-  return printHtml(String(html), opts?.paperWidth);
+  return printDoc(String(html), opts?.paperWidth);
+});
+// ขายเสร็จ → เปิดลิ้นชักตามตั้งค่า ('cash' เฉพาะเงินสด · 'sale' ทุกการขาย)
+ipcMain.on('pos:open-drawer', (e, info) => {
+  if (!fromServer(e) || config.printMode !== 'raster') return;
+  if (config.drawer === 'sale' || (config.drawer === 'cash' && info?.cash)) {
+    openDrawer().catch((err) => win && !win.isDestroyed() && dialog.showMessageBox(win, { type: 'warning', title: 'ลิ้นชักเงิน', message: 'เปิดลิ้นชักไม่สำเร็จ', detail: err.message }));
+  }
 });
 
 ipcMain.handle('shell:get-config', (e) => (fromShell(e) ? { ...config, version: app.getVersion(), defaultServer: DEFAULT_SERVER } : null));
@@ -276,7 +442,28 @@ ipcMain.handle('shell:list-printers', async (e) => {
 ipcMain.handle('shell:test-print', (e, c) => {
   if (!fromShell(e)) return { ok: false, error: 'not allowed' };
   const opts = sanitize({ ...config, ...c });
-  return printHtml(TEST_PAGE(opts.paperWidth || 80), 80, opts);
+  const pw = opts.paperWidth || 80;
+  return printDoc(TEST_PAGE(pw, opts), pw, opts, { notify: false });
+});
+ipcMain.handle('shell:preview', async (e, c) => {
+  if (!fromShell(e)) return { ok: false, error: 'not allowed' };
+  const opts = sanitize({ ...config, ...c, printMode: 'raster' });
+  const pw = opts.paperWidth || 80;
+  try {
+    const { pages, dots } = await renderMono(TEST_PAGE(pw, opts), pw, opts);
+    return { ok: true, image: monoPreview(pages), dots };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+ipcMain.handle('shell:test-drawer', async (e, c) => {
+  if (!fromShell(e)) return { ok: false, error: 'not allowed' };
+  try {
+    await openDrawer(sanitize({ ...config, ...c }));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 });
 ipcMain.handle('shell:save-config', (e, c) => {
   if (!fromShell(e)) return null;

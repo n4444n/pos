@@ -24,6 +24,7 @@ import { CART_MIN, GRID_GAP, maxCartW, useCartWidth, useDefaultViewMode, useResp
 import { beep, useAppSettings } from '../appSettings';
 import { baht } from '../format';
 import { printReceipt } from '../print';
+import { desktop } from '../desktop';
 import { hasThai, inModal, isEditable, thaiToEn } from '../scanInput';
 import { usePos } from '../store/usePos';
 import { colors, font, radius } from '../theme';
@@ -294,6 +295,8 @@ export function SalesScreen({ onMenu, active, stockVersion }: Props) {
       setPayOpen(null);
       setCartOpen(false);
       setReceipt(order);
+      // แอปเดสก์ท็อป: เปิดลิ้นชักเงินตามตั้งค่าเครื่องนี้ (เปิดเฉพาะตอนขาย ไม่เปิดตอนพิมพ์ซ้ำ)
+      desktop()?.openDrawer?.({ cash: order.paymentMethod === 'cash' });
       if (settings.receipt.autoPrint) printReceipt(order); // ตั้งค่า → ใบเสร็จ → พิมพ์อัตโนมัติ
     }
   };

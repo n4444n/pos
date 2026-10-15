@@ -12,6 +12,8 @@ if (location.protocol === 'file:') {
     saveConfig: (c) => ipcRenderer.invoke('shell:save-config', c),
     listPrinters: () => ipcRenderer.invoke('shell:list-printers'),
     testPrint: (c) => ipcRenderer.invoke('shell:test-print', c),
+    preview: (c) => ipcRenderer.invoke('shell:preview', c),
+    testDrawer: (c) => ipcRenderer.invoke('shell:test-drawer', c),
     retry: () => ipcRenderer.send('shell:retry'),
     openSettings: () => ipcRenderer.send('shell:open-settings'),
     closeSettings: () => ipcRenderer.send('shell:close-settings'),
@@ -22,7 +24,10 @@ if (location.protocol === 'file:') {
     paperWidth: () => cfg.paperWidth,
     // ชื่อร้าน/สาขาบนหัวหน้าต่างโปรแกรม (มีตั้งแต่ 1.0.3)
     setTitleInfo: (info) => ipcRenderer.send('pos:title-info', { shop: String(info?.shop ?? ''), branch: String(info?.branch ?? '') }),
-    print: (html, opts) => ipcRenderer.invoke('pos:print', String(html), { paperWidth: opts && opts.paperWidth === 58 ? 58 : 80 }),
+    print: (html, opts) =>
+      ipcRenderer.invoke('pos:print', String(html), { paperWidth: opts && opts.paperWidth === 58 ? 58 : 80, kind: String((opts && opts.kind) || '') }),
+    // ขายเสร็จ → เปิดลิ้นชักเงินตามตั้งค่าเครื่องนี้ (มีตั้งแต่ 1.0.4)
+    openDrawer: (info) => ipcRenderer.send('pos:open-drawer', { cash: !!(info && info.cash) }),
     // อัปเดตแอป → ปุ่ม "อัปเดต vX.Y.Z" ในหน้า POS
     update: {
       get: () => ipcRenderer.invoke('pos:update-state'),
