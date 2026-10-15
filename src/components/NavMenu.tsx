@@ -1,6 +1,6 @@
 import { Credit } from './Credit';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../api';
 import { useSession } from '../session';
 import { colors, font, radius } from '../theme';
@@ -98,7 +98,8 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
     <View style={s.menu}>
       <BranchChip block />
       {header}
-      <View style={{ gap: 8 }}>
+      {/* รายการเมนูเลื่อนขึ้น-ลงได้เมื่อยาวเกินจอ (เช่น เปิดเมนูย่อยหลายกลุ่ม) — ส่วนผู้ใช้/ท้ายเมนูอยู่กับที่ด้านล่าง */}
+      <ScrollView style={s.items} contentContainerStyle={{ gap: 8 }} showsVerticalScrollIndicator>
         {ITEMS.filter((it) => !it.manager || me.role === 'manager').map((it) => {
           if (it.children) {
             const expanded = isOpen(it);
@@ -156,8 +157,7 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
             </Pressable>
           );
         })}
-      </View>
-      <View style={{ flex: 1 }} />
+      </ScrollView>
       <View style={s.user}>
         <View style={s.avatar}>
           <Text style={s.avatarText}>{me.name.slice(0, 1)}</Text>
@@ -227,8 +227,10 @@ export function NavDrawer({ visible, onClose, ...props }: MenuProps & { visible:
 }
 
 const s = StyleSheet.create({
-  sidebar: { backgroundColor: colors.panel, borderRadius: radius.xl, padding: 12 },
-  menu: { flex: 1, gap: 12 },
+  sidebar: { backgroundColor: colors.panel, borderRadius: radius.xl, padding: 12, minHeight: 0, overflow: 'hidden' },
+  menu: { flex: 1, gap: 12, minHeight: 0 },
+  // flexGrow 1 = ดันส่วนผู้ใช้ลงล่างสุด · flexShrink + minHeight 0 = หดแล้วเลื่อนได้แทนการล้นทะลุจอ
+  items: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minHeight: 0, marginHorizontal: -4, paddingHorizontal: 4 },
   item: { flexDirection: 'row', alignItems: 'center', gap: 12, height: 52, paddingHorizontal: 16, borderRadius: radius.md, backgroundColor: colors.surface },
   itemOn: { backgroundColor: colors.primary },
   itemHover: { backgroundColor: '#EDF0F5' },
@@ -253,7 +255,7 @@ const s = StyleSheet.create({
   footRow: { flexDirection: 'row', gap: 6, marginTop: 6 },
   footChip: { fontFamily: font, fontSize: 10, color: colors.sub, borderWidth: 1, borderColor: colors.line, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 3 },
   backdrop: { flex: 1, flexDirection: 'row', backgroundColor: 'rgba(17,24,39,0.42)' },
-  drawer: { width: 290, maxWidth: '86%', backgroundColor: colors.panel, padding: 14, gap: 10 },
+  drawer: { width: 290, maxWidth: '86%', backgroundColor: colors.panel, padding: 14, gap: 10, minHeight: 0 },
   drawerHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 },
   drawerTitle: { fontFamily: font, fontSize: 18, fontWeight: '600', color: colors.text },
   close: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
