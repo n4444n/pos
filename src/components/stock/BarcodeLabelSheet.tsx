@@ -1,14 +1,12 @@
 // หน้าต่างพิมพ์ป้ายบาร์โค้ด: เลือก SKU (ทุกรุ่นของสินค้า) · จำนวนดวง · ขนาดสติ๊กเกอร์ → พิมพ์
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import {
-  expandLabels, LABEL_PAPERS, loadLabelOptions, printLabels, saveLabelOptions,
-  type LabelItem, type LabelOptions,
-} from '../../labels';
+import { expandLabels, labelProfiles, lastLabelProfile, printLabels, profileSummary, rememberLabelProfile, type LabelItem } from '../../labels';
+import type { LabelProfile } from '../../appSettings';
 import { colors, font, radius } from '../../theme';
 import { Icon } from '../Icon';
 import { Sheet } from '../Sheet';
-import { Barcode } from './Barcode';
+import { LabelPreview } from './LabelPreview';
 
 interface Props {
   visible: boolean;
@@ -24,7 +22,7 @@ interface Props {
 type CopyMode = 'one' | 'stock' | 'custom';
 
 export function BarcodeLabelSheet({ visible, onClose, title = 'พิมพ์บาร์โค้ด', items, preselect, note }: Props) {
-  const [opts, setOpts] = useState<LabelOptions>(loadLabelOptions);
+  const [profile, setProfile] = useState<LabelProfile>(lastLabelProfile);
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<CopyMode>('one');
   const [custom, setCustom] = useState<Record<string, string>>({});
@@ -37,14 +35,13 @@ export function BarcodeLabelSheet({ visible, onClose, title = 'พิมพ์�
     setMode('one');
     setCustom({});
     setBlocked(false);
+    setProfile(lastLabelProfile()); // โปรไฟล์อาจถูกแก้ในหน้าตั้งค่า
   }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const setOpt = (patch: Partial<LabelOptions>) =>
-    setOpts((o) => {
-      const n = { ...o, ...patch };
-      saveLabelOptions(n);
-      return n;
-    });
+  const pickProfile = (p: LabelProfile) => {
+    setProfile(p);
+    rememberLabelProfile(p.id);
+  };
 
   const copiesOf = (it: LabelItem) => {
     if (!sel.has(it.key)) return 0;
@@ -66,7 +63,7 @@ export function BarcodeLabelSheet({ visible, onClose, title = 'พิมพ์�
     });
 
   const doPrint = () => {
-    const ok = printLabels(expandLabels(items, copies), opts);
+    const ok = printLabels(expandLabels(items, copies), profile);
     setBlocked(!ok);
     if (ok) onClose();
   };
@@ -88,50 +85,26 @@ export function BarcodeLabelSheet({ visible, onClose, title = 'พิมพ์�
       }
     >
       <ScrollView style={{ maxHeight: 560 }} contentContainerStyle={{ gap: 14 }}>
-        {/* ขนาดป้าย */}
-        <View style={{ gap: 6 }}>
-          <Text style={s.h}>ขนาดสติ๊กเกอร์</Text>
-          <View style={s.wrap}>
-            {LABEL_PAPERS.map((p) => {
-              const on = opts.paper === p.id;
-              return (
-                <Pressable key={p.id} style={[s.paper, on && s.on]} onPress={() => setOpt({ paper: p.id })} accessibilityRole="radio" accessibilityState={{ checked: on }}>
-                  <Text style={[s.paperT, on && { color: colors.primary }]}>{p.label}</Text>
-                  <Text style={s.paperH}>{p.hint}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* ข้อมูลบนป้าย + ตัวอย่าง */}
+        {/* โปรไฟล์ป้าย (ตั้งค่า → กระดาษบาร์โค้ด) + ตัวอย่าง */}
         <View style={[s.row, { alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }]}>
           <View style={{ gap: 6, flex: 1, minWidth: 220 }}>
-            <Text style={s.h}>แสดงบนป้าย</Text>
+            <Text style={s.h}>กระดาษ / รูปแบบป้าย</Text>
             <View style={s.wrap}>
-              {([
-                ['showName', 'ชื่อสินค้า'],
-                ['showVariant', 'สี / ไซซ์'],
-                ['showPrice', 'ราคา'],
-                ['showShop', 'ชื่อร้าน'],
-              ] as const).map(([k, label]) => (
-                <Pressable key={k} style={[s.chip, opts[k] && s.on]} onPress={() => setOpt({ [k]: !opts[k] } as Partial<LabelOptions>)} accessibilityRole="checkbox" accessibilityState={{ checked: opts[k] }}>
-                  <Icon name={opts[k] ? 'checkbox' : 'square-outline'} size={15} color={opts[k] ? colors.primary : colors.sub} />
-                  <Text style={s.chipT}>{label}</Text>
-                </Pressable>
-              ))}
+              {labelProfiles().map((p) => {
+                const on = profile.id === p.id;
+                return (
+                  <Pressable key={p.id} style={[s.paper, on && s.on]} onPress={() => pickProfile(p)} accessibilityRole="radio" accessibilityState={{ checked: on }}>
+                    <Text style={[s.paperT, on && { color: colors.primary }]}>{p.name}</Text>
+                    <Text style={s.paperH}>{profileSummary(p)}</Text>
+                  </Pressable>
+                );
+              })}
             </View>
+            <Text style={s.sub}>ขนาดกระดาษ จำนวนดวงต่อแถว และข้อมูลบนป้าย ตั้งได้ที่ ตั้งค่า → กระดาษบาร์โค้ด</Text>
           </View>
           {sample ? (
             <View style={s.preview} accessibilityLabel="ตัวอย่างป้าย">
-              {opts.showName ? <Text style={s.pvName} numberOfLines={1}>{sample.name}</Text> : null}
-              {opts.showVariant || opts.showPrice ? (
-                <View style={[s.row, { justifyContent: 'space-between' }]}>
-                  <Text style={s.pvMeta} numberOfLines={1}>{opts.showVariant ? sample.variant : ''}</Text>
-                  {opts.showPrice ? <Text style={[s.pvMeta, { fontWeight: '700' }]}>฿{sample.price.toLocaleString()}</Text> : null}
-                </View>
-              ) : null}
-              <Barcode value={sample.code} height={40} maxWidth={200} />
+              <LabelPreview profile={profile} sample={sample} maxWidth={260} />
             </View>
           ) : null}
         </View>
@@ -188,7 +161,7 @@ export function BarcodeLabelSheet({ visible, onClose, title = 'พิมพ์�
           {!items.length ? <Text style={[s.sub, { padding: 12 }]}>ไม่มี SKU ที่พิมพ์ได้</Text> : null}
         </View>
         {note ? <Text style={s.sub}>{note}</Text> : null}
-        <Text style={s.sub}>หน้าต่างพิมพ์จะเปิดขึ้น — เลือกเครื่องพิมพ์ป้าย (เช่น Xprinter, TSC, Zebra) และตั้งขนาดกระดาษให้ตรงกับสติ๊กเกอร์ · ระยะขอบ: ไม่มี (None)</Text>
+        <Text style={s.sub}>หน้าต่างพิมพ์จะเปิดขึ้น — เลือกเครื่องพิมพ์ป้าย (เช่น Xprinter, TSC, Zebra) ขนาดกระดาษให้ตรงกับ {profileSummary(profile)} · ระยะขอบ: ไม่มี (None)</Text>
       </ScrollView>
     </Sheet>
   );
@@ -205,9 +178,7 @@ const s = StyleSheet.create({
   paperH: { fontFamily: font, fontSize: 11, color: colors.sub },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: colors.line, borderRadius: radius.pill, paddingVertical: 7, paddingHorizontal: 12 },
   chipT: { fontFamily: font, fontSize: 13, color: colors.text },
-  preview: { width: 220, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.faint, borderRadius: radius.sm, padding: 8, gap: 2, backgroundColor: '#fff' },
-  pvName: { fontFamily: font, fontSize: 12, fontWeight: '700', color: '#000', textAlign: 'center' },
-  pvMeta: { fontFamily: font, fontSize: 11, color: '#000' },
+  preview: { width: 260, borderRadius: radius.md, backgroundColor: colors.surface, paddingVertical: 4 },
   list: { borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, overflow: 'hidden' },
   item: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 12, borderTopWidth: 1, borderTopColor: '#F0F2F5' },
   itemHead: { borderTopWidth: 0, backgroundColor: colors.surface },
