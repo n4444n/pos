@@ -300,7 +300,20 @@ ipcMain.on('shell:close-settings', (e) => fromShell(e) && settingsWin?.close());
 //         เครื่องที่เก่ากว่า minVersion → ขึ้นกล่องให้ติดตั้งทันที (ไม่มีปุ่มภายหลัง)
 const CHECK_EVERY_MS = 4 * 60 * 60 * 1000;
 let manualCheck = false;
-let update = { status: 'idle', current: app.getVersion(), version: null, percent: 0, forced: false };
+let update = { status: 'idle', current: app.getVersion(), version: null, percent: 0, forced: false, notes: [] };
+
+/** รายละเอียดอัปเดตจาก latest.yml (releaseNotes) → รายการข้อสั้น ๆ */
+function noteLines(raw) {
+  const text = Array.isArray(raw) ? raw.map((r) => r?.note ?? '').join('\n') : String(raw ?? '');
+  return text
+    .replace(/<\/(p|li|div)>|<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .split('\n')
+    .map((l) => l.replace(/^\s*([-*•]|\d+[.)])\s*/, '').trim())
+    .filter(Boolean)
+    .slice(0, 8);
+}
 
 function setUpdate(patch) {
   update = { ...update, ...patch };
@@ -359,7 +372,7 @@ function setupUpdater() {
     win?.setProgressBar(-1);
     const policy = await minVersionPolicy();
     const forced = !!policy && cmpVer(app.getVersion(), policy.minVersion) < 0;
-    setUpdate({ status: 'ready', version: info.version, percent: 100, forced });
+    setUpdate({ status: 'ready', version: info.version, percent: 100, forced, notes: noteLines(info.releaseNotes) });
     if (!forced) return; // ปกติ: แสดงเป็นปุ่มในหน้าโปรแกรม
     await dialog.showMessageBox(win, {
       type: 'info',

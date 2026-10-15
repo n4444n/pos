@@ -11,6 +11,8 @@ export type UpdateState = {
   percent: number;
   /** อัปเดตบังคับ (min-version.json บนเซิร์ฟเวอร์) */
   forced: boolean;
+  /** รายละเอียดอัปเดตเป็นข้อ ๆ (แอปตั้งแต่ 1.0.11) */
+  notes?: string[];
 };
 
 /** สะพานจากแอปเดสก์ท็อป (desktop/preload.cjs) — ไม่มีเมื่อเปิดผ่านเบราว์เซอร์ */
