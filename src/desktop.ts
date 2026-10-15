@@ -18,6 +18,8 @@ export type DesktopBridge = {
   version: string;
   paperWidth: () => 58 | 80 | null;
   print: (html: string, opts: { paperWidth: 58 | 80 }) => Promise<{ ok: boolean; error?: string }>;
+  /** ชื่อร้าน/สาขาบนหัวหน้าต่างโปรแกรม — มีตั้งแต่แอปเวอร์ชัน 1.0.3 */
+  setTitleInfo?: (info: { shop: string; branch: string }) => void;
   /** มีตั้งแต่แอปเวอร์ชัน 1.0.1 */
   update?: {
     get: () => Promise<UpdateState>;
