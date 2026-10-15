@@ -21,10 +21,13 @@ export type PrintKind = 'receipt' | 'shift' | 'day';
 /** ตั้งค่าเครื่องพิมพ์ของเครื่องนี้ (เก็บในแอปเดสก์ท็อป ไม่ใช่บนเซิร์ฟเวอร์) */
 export type PrinterConfig = {
   printMode: 'raster' | 'driver';
-  connection: 'usb' | 'network';
+  connection: 'usb' | 'network' | 'bluetooth';
   printer: string;
   host: string;
   port: number;
+  /** Bluetooth: พอร์ต COM เสมือนของเครื่องพิมพ์ที่จับคู่แล้ว */
+  comPort: string;
+  baud: number;
   paperWidth: 58 | 80 | null;
   dots: number;
   threshold: number;
@@ -48,6 +51,8 @@ export type DesktopBridge = {
   printer?: {
     get: () => Promise<(PrinterConfig & { version: string }) | null>;
     list: () => Promise<{ name: string; displayName: string; isDefault: boolean }[]>;
+    /** พอร์ต COM (Bluetooth / Serial) */
+    ports?: () => Promise<{ port: string; name: string; bluetooth: boolean }[]>;
     test: (c: Partial<PrinterConfig>) => Promise<PrinterResult>;
     preview: (c: Partial<PrinterConfig>) => Promise<PrinterResult>;
     testDrawer: (c: Partial<PrinterConfig>) => Promise<PrinterResult>;

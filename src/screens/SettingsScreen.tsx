@@ -30,7 +30,7 @@ const SECTIONS: { id: SectionId; label: string; icon: IconName; desc: string; su
   { id: 'payments', label: 'วิธีชำระเงิน & ค่าธรรมเนียม', icon: 'wallet-outline', desc: 'เปิด/ปิดวิธีชำระ ตั้งชื่อ ค่าธรรมเนียม % / บาท' },
   { id: 'barcode', label: 'บาร์โค้ด', icon: 'barcode-outline', desc: 'ประเภทบาร์โค้ด สร้างอัตโนมัติ ขนาดป้าย' },
   { id: 'receipt', label: 'ใบเสร็จ', icon: 'receipt-outline', desc: 'ภาษา (ไทย / English) · แก้คำในบิล · ขนาดกระดาษ · ข้อความหัว/ท้าย' },
-  { id: 'printer', label: 'ตั้งค่าเครื่องพิมพ์ใบเสร็จ', icon: 'print-outline', desc: 'เครื่องพิมพ์ของคอมพิวเตอร์เครื่องนี้ · USB / LAN · ขนาดกระดาษ · ตัดกระดาษ · ลิ้นชักเงิน', sub: true, local: true },
+  { id: 'printer', label: 'ตั้งค่าเครื่องพิมพ์ใบเสร็จ', icon: 'print-outline', desc: 'เครื่องพิมพ์ของคอมพิวเตอร์เครื่องนี้ · USB / LAN / Bluetooth · ขนาดกระดาษ · ตัดกระดาษ · ลิ้นชักเงิน', local: true },
   { id: 'notify', label: 'การแจ้งเตือน & API', icon: 'notifications-outline', desc: 'LINE (การ์ดปรับแต่งได้) · WhatsApp · Webhook · เหตุการณ์ที่ต้องการแจ้ง · API key' },
 ];
 
@@ -1371,13 +1371,23 @@ function PrinterSection({ shopPaper, notify, goReceipt }: { shopPaper: 58 | 80; 
   const [c, setC] = useState<PrinterConfig | null>(null);
   const [saved, setSaved] = useState<string>('');
   const [printers, setPrinters] = useState<{ name: string; displayName: string; isDefault: boolean }[]>([]);
-  const [busy, setBusy] = useState<'' | 'test' | 'preview' | 'drawer' | 'save'>('');
+  const [ports, setPorts] = useState<{ port: string; name: string; bluetooth: boolean }[] | null>(null);
+  const [busy, setBusy] = useState<'' | 'test' | 'preview' | 'drawer' | 'save' | 'ports'>('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [preview, setPreview] = useState<{ image: string; dots: number } | null>(null);
 
   const loadPrinters = useCallback(() => {
     bridge?.list().then(setPrinters).catch(() => {});
   }, [bridge]);
+  const loadPorts = useCallback(() => {
+    if (!bridge?.ports) return;
+    setBusy('ports');
+    bridge.ports().then(setPorts).catch(() => setPorts([])).finally(() => setBusy(''));
+  }, [bridge]);
+  const needPorts = c?.printMode === 'raster' && c.connection === 'bluetooth' && ports === null;
+  useEffect(() => {
+    if (needPorts) loadPorts();
+  }, [needPorts, loadPorts]);
   useEffect(() => {
     if (!bridge) return;
     bridge.get().then((x) => {
@@ -1424,6 +1434,7 @@ function PrinterSection({ shopPaper, notify, goReceipt }: { shopPaper: 58 | 80; 
   const save = async () => {
     if (raster && c.connection === 'network' && !c.host.trim()) return setMsg({ ok: false, text: 'ใส่ IP เครื่องพิมพ์' });
     if (raster && c.connection === 'usb' && !c.printer) return setMsg({ ok: false, text: 'เลือกเครื่องพิมพ์ใบเสร็จ' });
+    if (raster && c.connection === 'bluetooth' && !c.comPort) return setMsg({ ok: false, text: 'เลือกพอร์ต Bluetooth ของเครื่องพิมพ์' });
     setBusy('save');
     try {
       const x = await bridge.save(c);
@@ -1457,14 +1468,48 @@ function PrinterSection({ shopPaper, notify, goReceipt }: { shopPaper: 58 | 80; 
             <Seg value={c.printMode} options={[['raster', 'ESC/POS (แนะนำ)'], ['driver', 'ไดรเวอร์ Windows']]} onChange={(x) => set({ printMode: x as PrinterConfig['printMode'] })} />
           </Field>
           {raster ? (
-            <Field label="การเชื่อมต่อ" hint={c.connection === 'usb' ? 'สาย USB — ต้องติดตั้งไดรเวอร์ของเครื่องใน Windows แล้ว' : 'ต่อผ่านเครือข่าย — ดู IP จากใบที่พิมพ์ตอนกด FEED ค้างขณะเปิดเครื่อง'}>
-              <Seg value={c.connection} options={[['usb', 'USB'], ['network', 'LAN / WiFi']]} onChange={(x) => set({ connection: x as PrinterConfig['connection'] })} />
+            <Field
+              label="การเชื่อมต่อ"
+              hint={
+                c.connection === 'usb'
+                  ? 'สาย USB — ต้องติดตั้งไดรเวอร์ของเครื่องใน Windows แล้ว'
+                  : c.connection === 'network'
+                    ? 'ต่อผ่านเครือข่าย — ดู IP จากใบที่พิมพ์ตอนกด FEED ค้างขณะเปิดเครื่อง'
+                    : 'จับคู่เครื่องพิมพ์ใน Windows ก่อน แล้วเลือกพอร์ต COM ของเครื่องพิมพ์ด้านล่าง'
+              }
+            >
+              <Seg value={c.connection} options={[['usb', 'USB'], ['network', 'LAN / WiFi'], ['bluetooth', 'Bluetooth']]} onChange={(x) => set({ connection: x as PrinterConfig['connection'] })} />
             </Field>
           ) : (
             <Toggle label="พิมพ์ทันทีโดยไม่ถาม" hint="ปิด = แสดงกล่องเลือกเครื่องพิมพ์ทุกครั้ง" value={c.silent} onChange={(x) => set({ silent: x })} />
           )}
         </Grid>
-        {raster && c.connection === 'network' ? (
+        {raster && c.connection === 'bluetooth' ? (
+          <>
+            <Field label="พอร์ต Bluetooth (COM)">
+              <View style={[s.row, { flexWrap: 'wrap' }]}>
+                {(ports ?? []).map((p) => (
+                  <Pressable key={p.port} onPress={() => set({ comPort: p.port })} style={chip(c.comPort === p.port)}>
+                    <Text style={[s.segText, c.comPort === p.port && { color: '#fff' }]}>
+                      {p.bluetooth ? '🔵 ' : ''}{p.port}{p.name && p.name !== p.port ? ` · ${p.name.replace(/\s*\(COM\d+\)$/, '')}` : ''}
+                    </Text>
+                  </Pressable>
+                ))}
+                {c.comPort && ports && !ports.some((p) => p.port === c.comPort) ? (
+                  <View style={chip(true)}><Text style={[s.segText, { color: '#fff' }]}>{c.comPort} (ไม่พบตอนนี้)</Text></View>
+                ) : null}
+                <SmallBtn label="ค้นหาพอร์ตใหม่" icon="bluetooth-outline" onPress={loadPorts} busy={busy === 'ports'} />
+              </View>
+              <Text style={s.hint}>
+                ยังไม่มีพอร์ต: Windows → ตั้งค่า → Bluetooth และอุปกรณ์ → เพิ่มอุปกรณ์ → เลือกเครื่องพิมพ์ (รหัสจับคู่มักเป็น 0000 หรือ 1234) → กด "ค้นหาพอร์ตใหม่" ·
+                เครื่องเดียวอาจมี 2 พอร์ต — ถ้าพิมพ์ไม่ออก ให้ลองอีกพอร์ต · ใช้กับสาย Serial (RS-232) ได้ด้วย
+              </Text>
+            </Field>
+            <Field label="ความเร็วพอร์ต (baud)" hint="Bluetooth ใช้ค่าใดก็ได้ · สาย Serial ต้องตรงกับเครื่องพิมพ์ (ส่วนใหญ่ 9600 หรือ 115200)">
+              <Seg value={c.baud} options={[[9600, '9600'], [19200, '19200'], [38400, '38400'], [115200, '115200']]} onChange={(x) => set({ baud: Number(x) })} />
+            </Field>
+          </>
+        ) : raster && c.connection === 'network' ? (
           <Grid max={3}>
             <Field label="IP เครื่องพิมพ์" hint="ทดสอบด้วยเครื่องพิมพ์จำลอง: 127.0.0.1"><Input value={c.host} onChange={(t) => set({ host: t.trim() })} placeholder="เช่น 192.168.1.50" max={100} /></Field>
             <Field label="พอร์ต" hint="ปกติ 9100">{numIn('port', 65535)}</Field>

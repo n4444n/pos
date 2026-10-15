@@ -39,13 +39,21 @@
 
     <div id="rasterBox">
       <label>การเชื่อมต่อ</label>
-      <div class="seg" id="conn"><button data-v="usb">USB</button><button data-v="network">LAN / WiFi</button></div>
+      <div class="seg" id="conn"><button data-v="usb">USB</button><button data-v="network">LAN / WiFi</button><button data-v="bluetooth">Bluetooth</button></div>
     </div>
 
     <div id="printerBox">
       <label for="printer">เครื่องพิมพ์ใน Windows</label>
       <div class="row"><select id="printer"></select><button id="refresh" title="โหลดรายชื่อใหม่">↻</button></div>
       <div class="hint" id="printerHint"></div>
+    </div>
+
+    <div id="btBox">
+      <div class="grid">
+        <div><label for="comPort">พอร์ต Bluetooth (COM)</label><div class="row"><select id="comPort"></select><button id="portsRefresh" title="ค้นหาพอร์ตใหม่">↻</button></div></div>
+        <div><label for="baud">ความเร็วพอร์ต (baud)</label><select id="baud"><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select></div>
+      </div>
+      <div class="hint">จับคู่เครื่องพิมพ์ก่อน: Windows → ตั้งค่า → Bluetooth และอุปกรณ์ → เพิ่มอุปกรณ์ (รหัสมักเป็น 0000 / 1234) แล้วกด ↻ · เครื่องเดียวอาจมี 2 พอร์ต ถ้าพิมพ์ไม่ออกให้ลองอีกพอร์ต · ใช้กับสาย Serial ได้ด้วย</div>
     </div>
 
     <div id="netBox" class="grid">
@@ -123,7 +131,9 @@
     $('rasterBox').hidden = !raster;
     $('rasterOpts').hidden = !raster;
     $('netBox').hidden = !(raster && st.conn === 'network');
-    $('printerBox').hidden = raster && st.conn === 'network';
+    $('btBox').hidden = !(raster && st.conn === 'bluetooth');
+    $('printerBox').hidden = raster && st.conn !== 'usb';
+    if (raster && st.conn === 'bluetooth' && !portsLoaded) loadPorts($('comPort').value || initialPort);
     $('silentBox').hidden = raster;
     $('previewBtn').hidden = !raster;
     $('modeHint').textContent = raster
@@ -137,6 +147,20 @@
     if (first) first.hidden = raster;
     if (raster && !$('printer').value && $('printer').options.length > 1) $('printer').selectedIndex = 1;
     $('preview').style.display = 'none';
+  }
+
+  let portsLoaded = false;
+  let initialPort = '';
+  async function loadPorts(selected) {
+    portsLoaded = true;
+    const sel = $('comPort');
+    sel.innerHTML = '<option value="">กำลังค้นหา…</option>';
+    const list = await api.listPorts();
+    sel.innerHTML = '';
+    if (!list.length) sel.append(new Option('ไม่พบพอร์ต — จับคู่ Bluetooth ก่อน แล้วกด ↻', ''));
+    for (const p of list) sel.append(new Option(`${p.bluetooth ? '🔵 ' : ''}${p.port}${p.name && p.name !== p.port ? ' · ' + p.name.replace(/\s*\(COM\d+\)$/, '') : ''}`, p.port));
+    if (selected && !list.some((p) => p.port === selected)) sel.append(new Option(`${selected} (ไม่พบตอนนี้)`, selected));
+    sel.value = selected || (list.find((p) => p.bluetooth) || list[0] || {}).port || '';
   }
 
   async function loadPrinters(selected) {
@@ -154,6 +178,7 @@
   const current = () => ({
     printMode: st.mode, connection: st.conn, paperWidth: st.paper, drawer: st.drawer,
     printer: $('printer').value, host: $('host').value.trim(), port: Number($('port').value) || 9100,
+    comPort: $('comPort').value, baud: Number($('baud').value) || 9600,
     dots: Number($('dots').value) || 0, threshold: Number($('threshold').value),
     feedTop: Number($('feedTop').value) || 0, feedBottom: Number($('feedBottom').value) || 0,
     cut: $('cut').checked, drawerPin: Number($('drawerPin').value), silent: $('silent').checked,
@@ -170,6 +195,9 @@
     $('silent').checked = c.silent;
     $('host').value = c.host;
     $('port').value = c.port;
+    $('baud').value = String(c.baud || 9600);
+    initialPort = c.comPort || '';
+    if (initialPort) $('comPort').append(new Option(initialPort, initialPort));
     $('dots').value = c.dots;
     $('threshold').value = c.threshold; $('threshold').oninput();
     $('feedTop').value = c.feedTop;
@@ -182,6 +210,7 @@
   })();
 
   $('refresh').onclick = () => loadPrinters($('printer').value);
+  $('portsRefresh').onclick = () => loadPorts($('comPort').value);
   $('test').onclick = async () => {
     say(null, 'กำลังพิมพ์…');
     const r = await api.testPrint(current());
@@ -209,6 +238,7 @@
     if (!/^https?:\/\/[^/\s]+\/?$/i.test(c.serverUrl)) return bad('ที่อยู่เซิร์ฟเวอร์ไม่ถูกต้อง (เช่น https://pos.sh0p.tech)');
     if (c.printMode === 'raster' && c.connection === 'network' && !c.host) return bad('ใส่ IP เครื่องพิมพ์');
     if (c.printMode === 'raster' && c.connection === 'usb' && !c.printer) return bad('เลือกเครื่องพิมพ์ใบเสร็จ');
+    if (c.printMode === 'raster' && c.connection === 'bluetooth' && !c.comPort) return bad('เลือกพอร์ต Bluetooth');
     await api.saveConfig(c);
   };
 </script>
