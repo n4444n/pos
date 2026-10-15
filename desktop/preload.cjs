@@ -19,9 +19,23 @@ if (location.protocol === 'file:') {
     closeSettings: () => ipcRenderer.send('shell:close-settings'),
   });
 } else if (location.origin === cfg.serverOrigin) {
+  let paper = cfg.paperWidth; // ขนาดกระดาษของเครื่องนี้ (อัปเดตเมื่อบันทึกจากหน้า ตั้งค่า → ใบเสร็จ)
   contextBridge.exposeInMainWorld('posDesktop', {
     version: cfg.version,
-    paperWidth: () => cfg.paperWidth,
+    paperWidth: () => paper,
+    // ตั้งค่าเครื่องพิมพ์ของเครื่องนี้จากหน้า ตั้งค่า → ใบเสร็จ (มีตั้งแต่ 1.0.4)
+    printer: {
+      get: () => ipcRenderer.invoke('pos:printer-get'),
+      list: () => ipcRenderer.invoke('pos:printer-list'),
+      test: (c) => ipcRenderer.invoke('pos:printer-test', c),
+      preview: (c) => ipcRenderer.invoke('pos:printer-preview', c),
+      testDrawer: (c) => ipcRenderer.invoke('pos:printer-drawer', c),
+      save: async (c) => {
+        const saved = await ipcRenderer.invoke('pos:printer-save', c);
+        if (saved) paper = saved.paperWidth;
+        return saved;
+      },
+    },
     // ชื่อร้าน/สาขาบนหัวหน้าต่างโปรแกรม (มีตั้งแต่ 1.0.3)
     setTitleInfo: (info) => ipcRenderer.send('pos:title-info', { shop: String(info?.shop ?? ''), branch: String(info?.branch ?? '') }),
     print: (html, opts) =>

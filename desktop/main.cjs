@@ -433,21 +433,21 @@ ipcMain.on('pos:open-drawer', (e, info) => {
   }
 });
 
-ipcMain.handle('shell:get-config', (e) => (fromShell(e) ? { ...config, version: app.getVersion(), defaultServer: DEFAULT_SERVER } : null));
-ipcMain.handle('shell:list-printers', async (e) => {
-  if (!fromShell(e)) return [];
-  const list = await e.sender.getPrintersAsync();
+// ---- เครื่องพิมพ์: ใช้ทั้งหน้าตั้งค่าในแอป (file://) และหน้า ตั้งค่า → ใบเสร็จ ในระบบ POS (เซิร์ฟเวอร์)
+const PRINTER_KEYS = ['printMode', 'connection', 'printer', 'host', 'port', 'paperWidth', 'dots', 'threshold', 'cut', 'feedTop', 'feedBottom', 'drawer', 'drawerPin', 'silent'];
+const pickPrinter = (c) => Object.fromEntries(PRINTER_KEYS.filter((k) => c && k in c).map((k) => [k, c[k]]));
+const printerConfig = () => ({ ...pickPrinter(config), version: app.getVersion() });
+async function listPrinters(wc) {
+  const list = await wc.getPrintersAsync();
   return list.map((p) => ({ name: p.name, displayName: p.displayName || p.name, isDefault: !!p.isDefault }));
-});
-ipcMain.handle('shell:test-print', (e, c) => {
-  if (!fromShell(e)) return { ok: false, error: 'not allowed' };
-  const opts = sanitize({ ...config, ...c });
+}
+function testPrint(c) {
+  const opts = sanitize({ ...config, ...pickPrinter(c) });
   const pw = opts.paperWidth || 80;
   return printDoc(TEST_PAGE(pw, opts), pw, opts, { notify: false });
-});
-ipcMain.handle('shell:preview', async (e, c) => {
-  if (!fromShell(e)) return { ok: false, error: 'not allowed' };
-  const opts = sanitize({ ...config, ...c, printMode: 'raster' });
+}
+async function previewTest(c) {
+  const opts = sanitize({ ...config, ...pickPrinter(c), printMode: 'raster' });
   const pw = opts.paperWidth || 80;
   try {
     const { pages, dots } = await renderMono(TEST_PAGE(pw, opts), pw, opts);
@@ -455,15 +455,33 @@ ipcMain.handle('shell:preview', async (e, c) => {
   } catch (err) {
     return { ok: false, error: err.message };
   }
-});
-ipcMain.handle('shell:test-drawer', async (e, c) => {
-  if (!fromShell(e)) return { ok: false, error: 'not allowed' };
+}
+async function testDrawer(c) {
   try {
-    await openDrawer(sanitize({ ...config, ...c }));
+    await openDrawer(sanitize({ ...config, ...pickPrinter(c) }));
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
   }
+}
+const deny = { ok: false, error: 'not allowed' };
+
+ipcMain.handle('shell:get-config', (e) => (fromShell(e) ? { ...config, version: app.getVersion(), defaultServer: DEFAULT_SERVER } : null));
+ipcMain.handle('shell:list-printers', (e) => (fromShell(e) ? listPrinters(e.sender) : []));
+ipcMain.handle('shell:test-print', (e, c) => (fromShell(e) ? testPrint(c) : deny));
+ipcMain.handle('shell:preview', (e, c) => (fromShell(e) ? previewTest(c) : deny));
+ipcMain.handle('shell:test-drawer', (e, c) => (fromShell(e) ? testDrawer(c) : deny));
+
+// หน้า ตั้งค่า → ใบเสร็จ ในระบบ POS — แก้ได้เฉพาะค่าเครื่องพิมพ์ (ไม่ให้หน้าเว็บเปลี่ยนที่อยู่เซิร์ฟเวอร์)
+ipcMain.handle('pos:printer-get', (e) => (fromServer(e) ? printerConfig() : null));
+ipcMain.handle('pos:printer-list', (e) => (fromServer(e) ? listPrinters(e.sender) : []));
+ipcMain.handle('pos:printer-test', (e, c) => (fromServer(e) ? testPrint(c) : deny));
+ipcMain.handle('pos:printer-preview', (e, c) => (fromServer(e) ? previewTest(c) : deny));
+ipcMain.handle('pos:printer-drawer', (e, c) => (fromServer(e) ? testDrawer(c) : deny));
+ipcMain.handle('pos:printer-save', (e, c) => {
+  if (!fromServer(e)) return null;
+  saveConfig(pickPrinter(c));
+  return printerConfig();
 });
 ipcMain.handle('shell:save-config', (e, c) => {
   if (!fromShell(e)) return null;
