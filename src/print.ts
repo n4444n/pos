@@ -6,7 +6,7 @@ import type { FooterBlock } from './appSettings';
 import type { Order } from './types';
 import { getAppSettings } from './appSettings';
 import { code128 } from './components/stock/Barcode';
-import { desktop } from './desktop';
+import { desktop, type PrintKind } from './desktop';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const m = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -28,11 +28,11 @@ const AUTO_PRINT = '<script>window.onload = () => { window.print(); setTimeout((
  * - แอปเดสก์ท็อป: พิมพ์ตรงเข้าเครื่องพิมพ์ที่ตั้งไว้ ไม่ขึ้นกล่องเลือกเครื่องพิมพ์
  * - เบราว์เซอร์: เปิดหน้าต่างพิมพ์ตามเดิม
  */
-function output(doc: string, features: string, win?: Window | null) {
+function output(doc: string, features: string, kind: PrintKind, win?: Window | null) {
   const d = desktop();
   if (d) {
     win?.close();
-    void d.print(doc, { paperWidth: paperWidth() });
+    void d.print(doc, { paperWidth: paperWidth(), kind });
     return;
   }
   const w = win ?? window.open('', '_blank', features);
@@ -137,7 +137,7 @@ export function printReceipt(order: Order) {
   img { filter: grayscale(1) }
 </style></head><body>${copies}
 </body></html>`;
-  output(doc, `width=${pw === 58 ? 300 : 380},height=640`);
+  output(doc, `width=${pw === 58 ? 300 : 380},height=640`, 'receipt');
 }
 
 /** พิมพ์รายงานปิดกะ (กระดาษม้วน 58/80 มม.) */
@@ -186,7 +186,7 @@ export function printShiftReport(s: import('./types').Shift, shopName = getAppSe
   ${s.closeNote ? `<hr><div>หมายเหตุ: ${esc(s.closeNote)}</div>` : ''}
   <br><br><div class="c">ลงชื่อ ____________________</div>
 </body></html>`;
-  output(doc, 'width=380,height=700');
+  output(doc, 'width=380,height=700', 'shift');
 }
 
 /** เปิดหน้าต่างพิมพ์ล่วงหน้า (ต้องเปิดตอนกดปุ่ม ไม่งั้นเบราว์เซอร์บล็อกป๊อปอัป) */
@@ -262,7 +262,7 @@ export function printDaySummary(d: import('./api').DaySummary, closed?: import('
   hr { border: 0; border-top: 1px dashed #000; margin: 6px 0 } .t td { font-weight: 700; font-size: 15px } small { color: #444 }
 </style></head><body>${html}
 </body></html>`;
-  output(doc, 'width=380,height=720', win);
+  output(doc, 'width=380,height=720', 'day', win);
 }
 
 /** บาร์โค้ด Code128 ขนาดกำหนดเอง (ใบส่งของ: เล็ก ไม่เต็มหัวกระดาษ) */

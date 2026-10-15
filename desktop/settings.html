@@ -6,17 +6,23 @@
   h1{font-size:18px;margin:0 0 4px} .sub{color:#6b7280;font-size:12px;margin:0 0 16px}
   .card{background:#fff;border-radius:12px;padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
   .card h2{font-size:14px;margin:0 0 10px}
-  label{display:block;font-size:12px;color:#4b5563;margin:10px 0 4px} label:first-of-type{margin-top:0}
-  input[type=text],select{width:100%;box-sizing:border-box;font:inherit;padding:8px 10px;border:1px solid #d6dbe6;border-radius:8px;background:#fff}
+  label{display:block;font-size:12px;color:#4b5563;margin:12px 0 4px} .card > label:first-of-type{margin-top:0}
+  input[type=text],input[type=number],select{width:100%;box-sizing:border-box;font:inherit;padding:8px 10px;border:1px solid #d6dbe6;border-radius:8px;background:#fff}
+  input[type=range]{width:100%}
   .seg{display:flex;gap:6px} .seg button{flex:1}
   .hint{font-size:12px;color:#6b7280;margin-top:6px;line-height:1.5}
-  .row{display:flex;gap:8px;align-items:center}
+  .row{display:flex;gap:8px;align-items:center} .row > *{flex:1} .row > button{flex:none}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
   button{font:inherit;border:0;border-radius:8px;padding:8px 14px;cursor:pointer;background:#e6eaf3;color:#1b1f27}
   button.on{background:#2f6bff;color:#fff}
-  .check{display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:13px;color:#1b1f27} .check input{margin-top:3px}
+  .check{display:flex;gap:8px;align-items:flex-start;margin-top:12px;font-size:13px;color:#1b1f27} .check input{margin-top:3px}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
+  #preview{display:none;margin-top:12px;background:#ececE8;border-radius:10px;padding:12px;text-align:center;max-height:420px;overflow:auto}
+  #preview img{background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15);image-rendering:pixelated;max-width:100%}
   footer{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #e3e7ef;padding:12px 24px;display:flex;justify-content:space-between;align-items:center}
   .primary{background:#2f6bff;color:#fff;padding:9px 20px} #msg{font-size:12px;color:#6b7280}
   .ok{color:#109e5e!important} .err{color:#d33!important}
+  [hidden]{display:none!important}
 </style></head>
 <body>
 <main>
@@ -25,9 +31,28 @@
 
   <section class="card">
     <h2>เครื่องพิมพ์ใบเสร็จ</h2>
-    <label for="printer">เครื่องพิมพ์</label>
-    <div class="row"><select id="printer"></select><button id="refresh" title="โหลดรายชื่อใหม่">↻</button></div>
-    <div class="hint">ใช้ได้กับเครื่องพิมพ์ใบเสร็จทุกรุ่นที่ติดตั้งไดรเวอร์ใน Windows แล้ว (USB / LAN / Bluetooth)</div>
+    <label>วิธีพิมพ์</label>
+    <div class="seg" id="mode">
+      <button data-v="raster">ESC/POS แบบรูปภาพ (แนะนำ)</button><button data-v="driver">ผ่านไดรเวอร์ Windows</button>
+    </div>
+    <div class="hint" id="modeHint"></div>
+
+    <div id="rasterBox">
+      <label>การเชื่อมต่อ</label>
+      <div class="seg" id="conn"><button data-v="usb">USB</button><button data-v="network">LAN / WiFi</button></div>
+    </div>
+
+    <div id="printerBox">
+      <label for="printer">เครื่องพิมพ์ใน Windows</label>
+      <div class="row"><select id="printer"></select><button id="refresh" title="โหลดรายชื่อใหม่">↻</button></div>
+      <div class="hint" id="printerHint"></div>
+    </div>
+
+    <div id="netBox" class="grid">
+      <div><label for="host">IP เครื่องพิมพ์</label><input type="text" id="host" placeholder="เช่น 192.168.1.50" spellcheck="false"></div>
+      <div><label for="port">พอร์ต</label><input type="number" id="port" min="1" max="65535"></div>
+      <div class="hint" style="grid-column:1/3">ดู IP ได้จากใบที่พิมพ์ออกมาตอนกดปุ่ม FEED ค้างขณะเปิดเครื่อง · ทดสอบบนคอมด้วยเครื่องพิมพ์จำลอง: IP <b>127.0.0.1</b> พอร์ต <b>9100</b></div>
+    </div>
 
     <label>ขนาดกระดาษ</label>
     <div class="seg" id="paper">
@@ -35,9 +60,35 @@
     </div>
     <div class="hint">"ตามตั้งค่าร้าน" ใช้ค่าจากเมนู ตั้งค่า → ใบเสร็จ ในระบบ · เลือก 58/80 เมื่อเครื่องพิมพ์ของสาขานี้ต่างจากสาขาอื่น</div>
 
-    <label class="check"><input type="checkbox" id="silent"> <span>พิมพ์ทันทีโดยไม่ถาม (แนะนำ)<br><span class="hint" style="margin:0">ถ้าปิด จะแสดงกล่องเลือกเครื่องพิมพ์ทุกครั้ง</span></span></label>
+    <div id="rasterOpts">
+      <div class="grid">
+        <div><label for="dots">ความกว้างพิมพ์ (จุด)</label><input type="number" id="dots" min="0" max="1024" step="8"></div>
+        <div><label for="threshold">ความเข้ม <span id="thVal"></span></label><input type="range" id="threshold" min="80" max="230" step="5"></div>
+      </div>
+      <div class="hint">ความกว้าง 0 = อัตโนมัติ (58 มม. → 384 · 80 มม. → 576) · ถ้าขอบขวาหาย ให้ลดทีละ 8 เช่น 368 / 560</div>
 
-    <div class="row" style="margin-top:12px"><button id="test">🖨 พิมพ์ทดสอบ</button><span id="testmsg" class="hint" style="margin:0"></span></div>
+      <div class="grid">
+        <div><label for="feedTop">เว้นหัวกระดาษ (มม.)</label><input type="number" id="feedTop" min="0" max="30"></div>
+        <div><label for="feedBottom">เว้นท้ายก่อนตัด (มม.)</label><input type="number" id="feedBottom" min="0" max="50"></div>
+      </div>
+      <label class="check"><input type="checkbox" id="cut"> <span>ตัดกระดาษหลังพิมพ์ <span class="hint">(เฉพาะเครื่องที่มีใบมีดตัด)</span></span></label>
+
+      <label>เปิดลิ้นชักเงิน (เสียบสายเข้าเครื่องพิมพ์)</label>
+      <div class="seg" id="drawer"><button data-v="off">ไม่เปิด</button><button data-v="cash">ขายด้วยเงินสด</button><button data-v="sale">ทุกการขาย</button></div>
+      <div class="grid">
+        <div><label for="drawerPin">ขาสัญญาณลิ้นชัก</label><select id="drawerPin"><option value="0">ขา 2 (ทั่วไป)</option><option value="1">ขา 5</option></select></div>
+        <div style="display:flex;align-items:flex-end"><button id="drawerTest" style="width:100%">ทดสอบเปิดลิ้นชัก</button></div>
+      </div>
+    </div>
+
+    <label class="check" id="silentBox"><input type="checkbox" id="silent"> <span>พิมพ์ทันทีโดยไม่ถาม (แนะนำ)<br><span class="hint" style="margin:0">ถ้าปิด จะแสดงกล่องเลือกเครื่องพิมพ์ทุกครั้ง</span></span></label>
+
+    <div class="actions">
+      <button id="test">🖨 พิมพ์ทดสอบ</button>
+      <button id="previewBtn">👁 ดูตัวอย่าง</button>
+      <span id="testmsg" class="hint" style="margin:0"></span>
+    </div>
+    <div id="preview"><div class="hint" id="previewInfo" style="margin:0 0 8px"></div><img id="previewImg" alt=""></div>
   </section>
 
   <section class="card">
@@ -54,13 +105,39 @@
 <script>
   const api = window.desktopShell;
   const $ = (id) => document.getElementById(id);
-  let paper = null;
+  const st = { mode: 'raster', conn: 'usb', paper: null, drawer: 'off' };
 
-  function setPaper(v) {
-    paper = v ? Number(v) : null;
-    for (const b of $('paper').children) b.classList.toggle('on', (b.dataset.v || null) === (paper ? String(paper) : null));
+  function seg(id, key, parse = (v) => v) {
+    const el = $(id);
+    const paint = () => { for (const b of el.children) b.classList.toggle('on', parse(b.dataset.v) === st[key]); };
+    for (const b of el.children) b.onclick = () => { st[key] = parse(b.dataset.v); paint(); layout(); };
+    return paint;
   }
-  for (const b of $('paper').children) b.onclick = () => setPaper(b.dataset.v);
+  const paintMode = seg('mode', 'mode');
+  const paintConn = seg('conn', 'conn');
+  const paintPaper = seg('paper', 'paper', (v) => (v ? Number(v) : null));
+  const paintDrawer = seg('drawer', 'drawer');
+
+  function layout() {
+    const raster = st.mode === 'raster';
+    $('rasterBox').hidden = !raster;
+    $('rasterOpts').hidden = !raster;
+    $('netBox').hidden = !(raster && st.conn === 'network');
+    $('printerBox').hidden = raster && st.conn === 'network';
+    $('silentBox').hidden = raster;
+    $('previewBtn').hidden = !raster;
+    $('modeHint').textContent = raster
+      ? 'ส่งใบเสร็จเป็นรูปภาพตรงเข้าเครื่องพิมพ์ใบเสร็จ (ESC/POS) — ภาษาไทยถูกทุกตัว ตัดกระดาษ/เปิดลิ้นชักได้ ไม่ต้องตั้งค่าไดรเวอร์'
+      : 'พิมพ์เหมือนเอกสารทั่วไปผ่านไดรเวอร์ Windows — ใช้กับเครื่องพิมพ์ที่ไม่รองรับ ESC/POS (ตัดกระดาษ/ลิ้นชักขึ้นกับไดรเวอร์)';
+    $('printerHint').textContent = raster
+      ? 'เลือกเครื่องพิมพ์ใบเสร็จที่ต่อ USB (ต้องติดตั้งไดรเวอร์ของเครื่องใน Windows แล้ว)'
+      : 'ใช้ได้กับเครื่องพิมพ์ทุกรุ่นที่ติดตั้งไดรเวอร์ใน Windows แล้ว';
+    // ESC/POS ต้องระบุเครื่อง (ไม่มี "เครื่องหลักของ Windows")
+    const first = $('printer').options[0];
+    if (first) first.hidden = raster;
+    if (raster && !$('printer').value && $('printer').options.length > 1) $('printer').selectedIndex = 1;
+    $('preview').style.display = 'none';
+  }
 
   async function loadPrinters(selected) {
     const list = await api.listPrinters();
@@ -71,8 +148,19 @@
     for (const p of list) sel.append(new Option(p.displayName + (p.isDefault ? ' ★' : ''), p.name));
     if (selected && !list.some((p) => p.name === selected)) sel.append(new Option(`${selected} (ไม่พบ — ตรวจการเชื่อมต่อ)`, selected));
     sel.value = selected || '';
+    layout();
   }
-  const current = () => ({ printer: $('printer').value, paperWidth: paper, silent: $('silent').checked, serverUrl: $('server').value.trim() });
+
+  const current = () => ({
+    printMode: st.mode, connection: st.conn, paperWidth: st.paper, drawer: st.drawer,
+    printer: $('printer').value, host: $('host').value.trim(), port: Number($('port').value) || 9100,
+    dots: Number($('dots').value) || 0, threshold: Number($('threshold').value),
+    feedTop: Number($('feedTop').value) || 0, feedBottom: Number($('feedBottom').value) || 0,
+    cut: $('cut').checked, drawerPin: Number($('drawerPin').value), silent: $('silent').checked,
+    serverUrl: $('server').value.trim(),
+  });
+  const say = (ok, text) => { $('testmsg').className = ok == null ? 'hint' : ok ? 'hint ok' : 'hint err'; $('testmsg').textContent = text; };
+  $('threshold').oninput = () => ($('thVal').textContent = `(${$('threshold').value})`);
 
   (async () => {
     const c = await api.getConfig();
@@ -80,21 +168,47 @@
     $('defsrv').textContent = c.defaultServer;
     $('server').value = c.serverUrl;
     $('silent').checked = c.silent;
-    setPaper(c.paperWidth);
+    $('host').value = c.host;
+    $('port').value = c.port;
+    $('dots').value = c.dots;
+    $('threshold').value = c.threshold; $('threshold').oninput();
+    $('feedTop').value = c.feedTop;
+    $('feedBottom').value = c.feedBottom;
+    $('cut').checked = c.cut;
+    $('drawerPin').value = String(c.drawerPin);
+    Object.assign(st, { mode: c.printMode, conn: c.connection, paper: c.paperWidth, drawer: c.drawer });
+    paintMode(); paintConn(); paintPaper(); paintDrawer();
     await loadPrinters(c.printer);
   })();
 
   $('refresh').onclick = () => loadPrinters($('printer').value);
   $('test').onclick = async () => {
-    $('testmsg').className = 'hint'; $('testmsg').textContent = 'กำลังพิมพ์…';
+    say(null, 'กำลังพิมพ์…');
     const r = await api.testPrint(current());
-    $('testmsg').className = r.ok ? 'hint ok' : 'hint err';
-    $('testmsg').textContent = r.ok ? 'ส่งงานพิมพ์แล้ว ✓' : r.error;
+    say(r.ok, r.ok ? 'ส่งงานพิมพ์แล้ว ✓' : r.error);
+  };
+  $('previewBtn').onclick = async () => {
+    say(null, 'กำลังสร้างตัวอย่าง…');
+    const r = await api.preview(current());
+    if (!r.ok) return say(false, r.error);
+    say(true, '');
+    $('previewImg').src = r.image;
+    $('previewImg').style.width = `${Math.min(r.dots, 460)}px`;
+    $('previewInfo').textContent = `ภาพที่จะส่งเข้าเครื่องพิมพ์ · กว้าง ${r.dots} จุด · เส้นประแดง = ตัดกระดาษ`;
+    $('preview').style.display = 'block';
+  };
+  $('drawerTest').onclick = async () => {
+    say(null, 'กำลังส่งคำสั่งเปิดลิ้นชัก…');
+    const r = await api.testDrawer(current());
+    say(r.ok, r.ok ? 'ส่งคำสั่งเปิดลิ้นชักแล้ว ✓ (ไม่เปิด → ลองเปลี่ยนขาสัญญาณ)' : r.error);
   };
   $('cancel').onclick = () => api.closeSettings();
   $('save').onclick = async () => {
     const c = current();
-    if (!/^https?:\/\/[^/\s]+\/?$/i.test(c.serverUrl)) { $('msg').className = 'err'; $('msg').textContent = 'ที่อยู่เซิร์ฟเวอร์ไม่ถูกต้อง (เช่น https://pos.sh0p.tech)'; return; }
+    const bad = (t) => { $('msg').className = 'err'; $('msg').textContent = t; };
+    if (!/^https?:\/\/[^/\s]+\/?$/i.test(c.serverUrl)) return bad('ที่อยู่เซิร์ฟเวอร์ไม่ถูกต้อง (เช่น https://pos.sh0p.tech)');
+    if (c.printMode === 'raster' && c.connection === 'network' && !c.host) return bad('ใส่ IP เครื่องพิมพ์');
+    if (c.printMode === 'raster' && c.connection === 'usb' && !c.printer) return bad('เลือกเครื่องพิมพ์ใบเสร็จ');
     await api.saveConfig(c);
   };
 </script>

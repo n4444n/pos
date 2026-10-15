@@ -16,10 +16,15 @@ export type UpdateState = {
 };
 
 /** สะพานจากแอปเดสก์ท็อป (desktop/preload.cjs) — ไม่มีเมื่อเปิดผ่านเบราว์เซอร์ */
+export type PrintKind = 'receipt' | 'shift' | 'day';
+
 export type DesktopBridge = {
   version: string;
   paperWidth: () => 58 | 80 | null;
-  print: (html: string, opts: { paperWidth: 58 | 80 }) => Promise<{ ok: boolean; error?: string }>;
+  /** kind: ชนิดเอกสาร (แอปตั้งแต่ 1.0.4 ใช้เลือกเครื่องพิมพ์/การตัดกระดาษ) */
+  print: (html: string, opts: { paperWidth: 58 | 80; kind?: PrintKind }) => Promise<{ ok: boolean; error?: string }>;
+  /** เปิดลิ้นชักเงินตามตั้งค่าเครื่องนี้ (cash = ขายด้วยเงินสด) — มีตั้งแต่แอปเวอร์ชัน 1.0.4 */
+  openDrawer?: (info: { cash: boolean }) => void;
   /** ชื่อร้าน/สาขาบนหัวหน้าต่างโปรแกรม — มีตั้งแต่แอปเวอร์ชัน 1.0.3 */
   setTitleInfo?: (info: { shop: string; branch: string }) => void;
   /** มีตั้งแต่แอปเวอร์ชัน 1.0.1 */
