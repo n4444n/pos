@@ -1,7 +1,8 @@
 # สร้างตัวติดตั้ง Clothing POS (.exe) อัตโนมัติ แล้วส่งขึ้น VPS
-# - ทำงานเมื่อ push ขึ้น main และมีการแก้ไฟล์ใน desktop/  (หรือกด Run workflow เองในแท็บ Actions)
-# - เวอร์ชันใหม่ (เลข version ใน desktop/package.json ยังไม่เคยส่ง): build .exe → ส่งขึ้น /updates/ → ร้านได้ปุ่ม "อัปเดต"
-# - เวอร์ชันเดิม: ไม่ build ใหม่ (ใช้ .exe ตัวเดิมจากเซิร์ฟเวอร์) แค่แพ็ก zip ใหม่ — เช่น แก้คู่มือใน desktop/package-extras/
+# - ทำงานทุกครั้งที่ push ขึ้น main (ยกเว้นแก้แค่ไฟล์ .md)  หรือกด Run workflow เองในแท็บ Actions
+# - เลขเวอร์ชันออกให้อัตโนมัติ: <major>.<minor> จาก desktop/package.json + .<เลขรอบ build>  เช่น 1.0.8, 1.0.9 …
+#   → ทุกการ push ได้เวอร์ชันใหม่เสมอ → ส่งขึ้น /updates/ → แอปที่ร้านขึ้นปุ่ม "อัปเดต" เอง (ไม่ต้องแก้เลขเวอร์ชันด้วยมือ)
+#   อยากขึ้นเลขหลัก (เช่น 1.1.x / 2.0.x) ให้แก้ version ใน desktop/package.json เป็น 1.1.0 / 2.0.0
 # - ทุกครั้ง: แพ็ก ClothingPOS-vX.Y.Z.zip = ตัวติดตั้ง + ทุกไฟล์ใน desktop/package-extras/ → https://<VPS_HOST>/download/
 # ⚠️ repo นี้เป็นสาธารณะ: ห้ามเก็บไฟล์ .exe เป็น artifact หรือ GitHub Release (มีกุญแจแอปฝังอยู่)
 # ต้องตั้ง secrets: VPS_HOST, VPS_SSH_KEY, APP_KEY — ดู deploy/release-setup.sh
@@ -10,7 +11,7 @@ name: Desktop installer
 on:
   push:
     branches: [main]
-    paths: ['desktop/**']
+    paths-ignore: ['**/*.md']
   workflow_dispatch:
 
 concurrency:
@@ -30,7 +31,13 @@ jobs:
       - name: Read version
         id: v
         shell: bash
-        run: echo "version=$(node -p "require('./desktop/package.json').version")" >> "$GITHUB_OUTPUT"
+        # <major>.<minor> จาก desktop/package.json + เลขรอบ build (เพิ่มขึ้นทุกครั้ง) เป็นเลขท้าย
+        run: |
+          BASE=$(node -p "require('./desktop/package.json').version.split('.').slice(0,2).join('.')")
+          V="$BASE.${{ github.run_number }}"
+          node -e "const f='./desktop/package.json',p=require(f);p.version='$V';require('fs').writeFileSync(f,JSON.stringify(p,null,2)+'\\n')"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "::notice::Clothing POS $V"
 
       - name: Check secrets
         shell: bash
