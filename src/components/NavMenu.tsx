@@ -8,7 +8,13 @@ import { BranchChip } from './BranchPicker';
 import { Icon, type IconName } from './Icon';
 import { AppVersionChip, UpdateButton } from './UpdateButton';
 
-export type Route = 'sales' | 'dashboard' | 'history' | 'shifts' | 'expenses' | 'staff' | 'stock' | 'skus' | 'shipments' | 'branches' | 'settings';
+export type Route =
+  | 'sales' | 'dashboard' | 'salesReport' | 'productReport' | 'history' | 'shifts' | 'expenses' | 'staff' | 'stock' | 'skus' | 'shipments' | 'branches' | 'settings';
+
+/** หน้าที่อยู่ใต้เมนู "รายงาน" (เฉพาะผู้จัดการ) */
+export const REPORT_ROUTES: Route[] = ['dashboard', 'salesReport', 'productReport'];
+// เปิด/ปิดกลุ่มเมนูรายงาน — จำไว้ระหว่างเปลี่ยนหน้า (แต่ละหน้ามี sidebar ของตัวเอง)
+let reportOpen: boolean | null = null;
 
 // ---- ป้ายแจ้งเตือนสต็อก (ใช้ร่วมกันทุกเมนู โหลดครั้งเดียว) ----
 let stockBadge = 0;
@@ -37,9 +43,17 @@ function useStockBadge() {
   return n;
 }
 
-const ITEMS: { id: Route | 'stock' | 'report'; label: string; icon: IconName; soon?: boolean; manager?: boolean }[] = [
+interface Item { id: Route | 'report'; label: string; icon: IconName; soon?: boolean; manager?: boolean; children?: Item[] }
+const ITEMS: Item[] = [
   { id: 'sales', label: 'หน้าขาย', icon: 'storefront-outline' },
-  { id: 'dashboard', label: 'รายงาน', icon: 'stats-chart-outline', manager: true },
+  {
+    id: 'report', label: 'รายงาน', icon: 'stats-chart-outline', manager: true,
+    children: [
+      { id: 'dashboard', label: 'รายงานรวม', icon: 'grid-outline' },
+      { id: 'salesReport', label: 'ยอดขาย', icon: 'cash-outline' },
+      { id: 'productReport', label: 'สินค้า', icon: 'pricetags-outline' },
+    ],
+  },
   { id: 'history', label: 'ประวัติการขาย', icon: 'receipt-outline' },
   { id: 'shifts', label: 'กะการขาย', icon: 'time-outline' },
   { id: 'expenses', label: 'ค่าใช้จ่าย / ลิ้นชัก', icon: 'wallet-outline' },
@@ -62,12 +76,55 @@ interface MenuProps {
 export function NavMenu({ route, onNavigate, header }: MenuProps) {
   const { me, logout } = useSession();
   const badge = useStockBadge();
+  const inReport = REPORT_ROUTES.includes(route);
+  const [open, setOpen] = useState(reportOpen ?? inReport);
+  const toggle = () => {
+    reportOpen = !open;
+    setOpen(!open);
+  };
   return (
     <View style={s.menu}>
       <BranchChip block />
       {header}
       <View style={{ gap: 8 }}>
         {ITEMS.filter((it) => !it.manager || me.role === 'manager').map((it) => {
+          if (it.children) {
+            const expanded = open;
+            return (
+              <View key={it.id} style={{ gap: 6 }}>
+                <Pressable
+                  onPress={toggle}
+                  style={({ hovered }: { hovered?: boolean }) => [s.item, inReport && s.groupOn, hovered && !inReport && s.itemHover]}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded }}
+                  accessibilityLabel={`${it.label} — ${expanded ? 'ย่อ' : 'แสดง'}เมนูย่อย`}
+                >
+                  <Icon name={it.icon} size={19} color={inReport ? colors.primary : colors.text} />
+                  <Text style={[s.itemText, inReport && { color: colors.primary, fontWeight: '600' }]}>{it.label}</Text>
+                  <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={inReport ? colors.primary : colors.sub} />
+                </Pressable>
+                {expanded ? (
+                  <View style={s.sub}>
+                    {it.children.map((c) => {
+                      const on = c.id === route;
+                      return (
+                        <Pressable
+                          key={c.id}
+                          onPress={() => onNavigate(c.id as Route)}
+                          style={({ hovered }: { hovered?: boolean }) => [s.subItem, on && s.itemOn, hovered && !on && s.itemHover]}
+                          accessibilityRole="link"
+                          accessibilityState={{ selected: on }}
+                        >
+                          <Icon name={c.icon} size={17} color={on ? '#fff' : colors.sub} />
+                          <Text style={[s.itemText, on && { color: '#fff' }]}>{c.label}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : null}
+              </View>
+            );
+          }
           const on = it.id === route;
           return (
             <Pressable
@@ -165,6 +222,9 @@ const s = StyleSheet.create({
   item: { flexDirection: 'row', alignItems: 'center', gap: 12, height: 52, paddingHorizontal: 16, borderRadius: radius.md, backgroundColor: colors.surface },
   itemOn: { backgroundColor: colors.primary },
   itemHover: { backgroundColor: '#EDF0F5' },
+  groupOn: { backgroundColor: colors.primarySoft },
+  sub: { gap: 6, marginLeft: 18, paddingLeft: 10, borderLeftWidth: 2, borderLeftColor: colors.line },
+  subItem: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 44, paddingHorizontal: 14, borderRadius: radius.md, backgroundColor: colors.surface },
   itemText: { fontFamily: font, fontSize: 14, color: colors.text, flex: 1 },
   badge: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center' },
   badgeText: { fontFamily: font, fontSize: 11, fontWeight: '700', color: '#fff' },

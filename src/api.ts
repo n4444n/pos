@@ -176,6 +176,8 @@ export const api = {
     request<ImportResult>('/api/products/import', { method: 'POST', body: JSON.stringify(b) }),
   shipments: () => request<ShipmentList>('/api/shipments'),
   shipment: (id: number) => request<ShipmentDetail>(`/api/shipments/${id}`),
+  /** ใบส่งของเป็น Excel (หน้าตาเดียวกับใบพิมพ์ A4) */
+  shipmentXlsxUrl: (id: number) => `${BASE}/api/shipments/${id}/export.xlsx${qs({ token: auth.get() ?? '' })}`,
   createShipment: (b: { destBranchId: number; sourceBranchId: number | null; bags: number; note?: string }) =>
     request<ShipmentDetail>('/api/shipments', { method: 'POST', body: JSON.stringify(b) }),
   updateShipment: (id: number, b: Partial<{ destBranchId: number; sourceBranchId: number | null; bags: number; note: string }>) =>
@@ -224,6 +226,13 @@ export const api = {
   daySummary: (date?: string) => request<DaySummary>(`/api/reports/day${qs({ date })}`),
   drawer: (shift?: number) => request<DrawerLedger>(`/api/expenses/drawer${qs({ shift })}`),
   dashboardCsvUrl: (f: { from: string; to: string; branch?: string }) => `${BASE}/api/dashboard.csv${qs({ ...f, token: auth.get() ?? '' })}`,
+  dashboardXlsxUrl: (f: { from: string; to: string; branch?: string }) => `${BASE}/api/dashboard.xlsx${qs({ ...f, token: auth.get() ?? '' })}`,
+  stockXlsxUrl: () => `${BASE}/api/stock/export.xlsx${qs({ token: auth.get() ?? '' })}`,
+  // รายงานย่อย (เมนู รายงาน → ยอดขาย / สินค้า)
+  salesReport: (f: SalesReportFilter) => request<SalesReport>(`/api/reports/sales${qs(f)}`),
+  salesReportXlsxUrl: (f: SalesReportFilter) => `${BASE}/api/reports/sales.xlsx${qs({ ...f, token: auth.get() ?? '' })}`,
+  productReport: (f: ProductReportFilter) => request<ProductReport>(`/api/reports/products${qs(f)}`),
+  productReportXlsxUrl: (f: ProductReportFilter) => `${BASE}/api/reports/products.xlsx${qs({ ...f, token: auth.get() ?? '' })}`,
 
   // ----- พนักงาน / เข้าสู่ระบบ -----
   login: (pin: string) => request<{ token: string; staff: Me }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ pin }) }),
@@ -397,6 +406,8 @@ export interface Shipment {
 }
 export interface ImportRow {
   line: number; code: string; barcode: string; qty: string; name: string; color: string; size: string; category: string; lowStock: string; price: string;
+  /** คุณสมบัติที่ 3 · รหัส SKU ที่ระบบสร้าง (ไฟล์จาก "ส่งออก Excel") */
+  extra: string; variantSku: string;
 }
 export interface ImportResult {
   applied: boolean; mode: 'add' | 'set';
@@ -415,4 +426,30 @@ export interface ShipmentDetail {
   /** สต็อกปัจจุบันของสาขาที่จะตัด (variantId → จำนวน) · null = ไม่ตัดสต็อก */
   sourceStock: Record<string, number> | null;
   scanned?: { variantId: number; name: string; label: string; sku: string; qty: number; added: number };
+}
+
+// ---------- รายงานย่อย ----------
+export interface SalesReportFilter { from: string; to: string; group: 'day' | 'week' | 'month'; branch?: string }
+export interface SalesReportRow {
+  key: string; label: string; from: string; to: string;
+  bills: number; units: number; gross: number; discount: number; refund: number; net: number; vat: number; cost: number; profit: number;
+}
+export interface SalesReport {
+  range: { from: string; to: string }; group: 'day' | 'week' | 'month'; rows: SalesReportRow[];
+  total: Omit<SalesReportRow, 'key' | 'label' | 'from' | 'to'>;
+}
+export interface ProductReportFilter {
+  from: string; to: string; branch?: string; q?: string; category?: string; mode?: 'product' | 'sku'; sold?: '0' | '1';
+  productId?: number; sort?: string; dir?: 'asc' | 'desc'; page?: number; limit?: number;
+}
+export interface ProductReportRow {
+  key: string; productId: number | null; code: string; name: string; category: string; categoryId: string | null;
+  variantId: number | null; sku: string; barcode: string; attribute: string; skuCount: number;
+  units: number; bills: number; sales: number; cost: number; profit: number; avgCost: number | null; avgSell: number | null;
+  stock: number | null; price: number | null;
+}
+export interface ProductReport {
+  range: { from: string; to: string }; mode: 'product' | 'sku'; soldOnly: boolean; sort: string; dir: 'asc' | 'desc';
+  page: number; pages: number; limit: number; rows: ProductReportRow[];
+  total: { rows: number; units: number; sales: number; cost: number; profit: number; stock: number };
 }

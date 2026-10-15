@@ -6,6 +6,7 @@ import { Icon, type IconName } from '../components/Icon';
 import { NavDrawer, refreshStockBadge, Sidebar, type Route } from '../components/NavMenu';
 import { Sheet } from '../components/Sheet';
 import { Barcode } from '../components/stock/Barcode';
+import { ImportProductsSheet } from '../components/stock/ImportProductsSheet';
 import { ProductEditor } from '../components/stock/ProductEditor';
 import { StockCommand } from '../components/stock/StockCommand';
 import { ToastView } from '../components/ToastView';
@@ -109,6 +110,10 @@ export function SkuStockScreen({ onNavigate, onStockChanged }: Props) {
   const inputRefs = useRef<Record<number, TextInput | null>>({});
   const inlinePid = inline?.pid ?? null;
   const [toast, setToast] = useState<Toast | null>(null);
+  /** เมนู Excel: ส่งออก / นำเข้ากลับ */
+  const [excelMenu, setExcelMenu] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const canImport = manager && appBranch.isMain;
   const scrollRef = useRef<ScrollView>(null);
 
   const notify = useCallback((kind: Toast['kind'], text: string) => setToast({ id: Date.now(), kind, text }), []);
@@ -442,12 +447,18 @@ export function SkuStockScreen({ onNavigate, onStockChanged }: Props) {
                   <Text style={s.sub} numberOfLines={1}>จำนวนแยกตาม สี × ไซซ์ · กำหนดบาร์โค้ดสำหรับพิมพ์ป้าย</Text>
                 </View>
               </View>
-              {manager ? (
-                <Pressable style={[s.pillBtn, s.addBtn]} onPress={() => setEditing('new')} accessibilityLabel="เพิ่มสินค้า">
-                  <Icon name="add" size={18} color="#fff" />
-                  {!mobile ? <Text style={[s.pillText, { color: '#fff' }]}>เพิ่มสินค้า</Text> : null}
+              <View style={[s.row, { gap: 8 }]}>
+                <Pressable style={s.pillBtn} onPress={() => setExcelMenu(true)} accessibilityLabel="Excel: ส่งออก / นำเข้าสต็อก">
+                  <Icon name="grid-outline" size={18} color={colors.success} />
+                  {!mobile ? <Text style={s.pillText}>Excel</Text> : null}
                 </Pressable>
-              ) : null}
+                {manager ? (
+                  <Pressable style={[s.pillBtn, s.addBtn]} onPress={() => setEditing('new')} accessibilityLabel="เพิ่มสินค้า">
+                    <Icon name="add" size={18} color="#fff" />
+                    {!mobile ? <Text style={[s.pillText, { color: '#fff' }]}>เพิ่มสินค้า</Text> : null}
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
 
             {/* ---------- ตัวกรอง ---------- */}
@@ -734,6 +745,65 @@ export function SkuStockScreen({ onNavigate, onStockChanged }: Props) {
       ) : null}
 
       <NavDrawer visible={drawer} onClose={() => setDrawer(false)} route="skus" onNavigate={onNavigate} />
+
+      {/* ---------- Excel: ส่งออก / นำเข้ากลับ ---------- */}
+      <Sheet visible={excelMenu} onClose={() => setExcelMenu(false)} title="Excel — สต็อกสินค้า" width={440}>
+        <View style={{ gap: 8, paddingBottom: 8 }}>
+          <Pressable
+            style={s.xlOpt}
+            onPress={() => {
+              setExcelMenu(false);
+              if (Platform.OS === 'web') window.open(api.stockXlsxUrl(), '_blank');
+            }}
+            accessibilityLabel="ส่งออกสต็อกเป็น Excel"
+          >
+            <Icon name="download-outline" size={22} color={colors.primary} />
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={[s.pillText, { fontWeight: '700' }]}>ส่งออกสต็อกทั้งหมด (.xlsx)</Text>
+              <Text style={s.xlNote}>
+                ทุกสินค้า × สี × ไซซ์ ของ{appBranch.isMain ? 'สาขาหลัก' : appBranch.name} · ชีตสินค้าหมด/ใกล้หมด · สรุปตามสินค้า{manager ? ' · สต็อกทุกสาขา' : ''} — ชีตแรกแก้ไขแล้วนำเข้ากลับได้
+              </Text>
+            </View>
+          </Pressable>
+          <Pressable
+            style={[s.xlOpt, !canImport && { opacity: 0.5 }]}
+            disabled={!canImport}
+            onPress={() => {
+              setExcelMenu(false);
+              setImporting(true);
+            }}
+            accessibilityLabel="นำเข้าไฟล์ Excel ที่แก้ไขแล้ว"
+          >
+            <Icon name="cloud-upload-outline" size={22} color={colors.primary} />
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={[s.pillText, { fontWeight: '700' }]}>นำเข้าไฟล์ที่แก้ไขแล้ว</Text>
+              <Text style={s.xlNote}>
+                {canImport
+                  ? 'ตรวจผลก่อนบันทึกเสมอ · เลือก "ตั้งเป็นจำนวนในไฟล์" เมื่อแก้ยอดคงเหลือ · ติ๊ก "อัปเดตชื่อ / หมวดหมู่ / ราคา" เมื่อแก้ข้อมูลอื่น'
+                  : manager
+                    ? 'นำเข้าได้ที่สาขาหลักเท่านั้น'
+                    : 'เฉพาะผู้จัดการ'}
+              </Text>
+            </View>
+          </Pressable>
+        </View>
+      </Sheet>
+      <ImportProductsSheet
+        visible={importing}
+        onClose={() => setImporting(false)}
+        onDone={(r) => {
+          setImporting(false);
+          const m = r.summary;
+          notify(
+            r.failed.length ? 'info' : 'success',
+            `นำเข้าแล้ว: สินค้าใหม่ ${m.newProducts} · ปรับสินค้าเดิม ${m.updatedProducts} · SKU ที่เปลี่ยน ${m.newSkus + m.updatedSkus}${r.failed.length ? ` · ไม่สำเร็จ ${r.failed.length} สินค้า` : ''}`,
+          );
+          load();
+          loadCategories();
+          onStockChanged();
+          refreshStockBadge();
+        }}
+      />
       <ToastView toast={toast} onDone={clearToast} />
     </View>
   );
@@ -1064,6 +1134,8 @@ const s = StyleSheet.create({
   label: { fontFamily: font, fontSize: 13, fontWeight: '600', color: colors.text },
   pillBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: 16, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line },
   addBtn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  xlOpt: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: radius.md, backgroundColor: colors.surface },
+  xlNote: { fontFamily: font, fontSize: 12, color: colors.sub },
   pillText: { fontFamily: font, fontSize: 13, color: colors.text, fontWeight: '500' },
   drop: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 40, paddingHorizontal: 14, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, maxWidth: 220 },
   dropText: { fontFamily: font, fontSize: 13, color: colors.text, flexShrink: 1 },

@@ -2,7 +2,7 @@
 // ส่งออกแล้ว: ตัดสต็อกจากสาขาที่เลือก (หรือไม่ตัด) และเพิ่มสต็อกให้สาขาปลายทาง · รายการถูกล็อก
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
+  ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
 } from 'react-native';
 import { api, type ShipBranch, type Shipment, type ShipmentDetail } from '../api';
 import { beep } from '../appSettings';
@@ -209,6 +209,14 @@ export function ShipmentScreen({ onNavigate, onStockChanged }: { onNavigate: (r:
               <Pressable style={s.pillBtn} onPress={() => cur && printShipment(cur)} accessibilityLabel="พิมพ์ใบส่งของ A4">
                 <Icon name="print-outline" size={16} color={colors.text} />
                 <Text style={s.pillText}>พิมพ์ใบส่งของ (A4)</Text>
+              </Pressable>
+              <Pressable
+                style={[s.pillBtn, { backgroundColor: colors.successSoft, borderColor: colors.successSoft }]}
+                onPress={() => cur && Platform.OS === 'web' && window.open(api.shipmentXlsxUrl(cur.shipment.id), '_blank')}
+                accessibilityLabel="ส่งออกใบส่งของเป็น Excel"
+              >
+                <Icon name="grid-outline" size={16} color={colors.success} />
+                <Text style={[s.pillText, { color: colors.success, fontWeight: '700' }]}>ส่งออก Excel</Text>
               </Pressable>
             </View>
 
