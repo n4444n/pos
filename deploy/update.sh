@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # อัปเดตโค้ดบนเซิร์ฟเวอร์ — สำรองข้อมูลก่อน แล้ว pull + build + restart
-# ใช้: pos-update            (ดึง branch ปัจจุบัน)
+# ใช้: pos-update            (ดึง branch main ล่าสุดจาก GitHub)
+#      pos-update --force    (build + restart ใหม่ แม้โค้ดไม่เปลี่ยน)
 # ควรทำนอกเวลาขาย: ระหว่าง restart (ไม่กี่วินาที) ทุกสาขาจะใช้งานไม่ได้
 set -euo pipefail
 APP_DIR=/opt/pos
@@ -9,11 +10,17 @@ echo "==> สำรองข้อมูลก่อนอัปเดต"
 /usr/local/bin/pos-backup
 
 cd "$APP_DIR"
-echo "==> ดึงโค้ดใหม่"
+echo "==> ดึงโค้ดใหม่ (main)"
 OLD=$(git rev-parse --short HEAD)
-git pull --ff-only
+# ใช้ main เสมอ — เครื่องที่ติดตั้งจาก branch อื่น (เช่น vps-deploy ที่ถูกลบไปแล้ว) ย้ายมา main ให้เอง
+git fetch origin main
+git checkout -q -B main origin/main
+git branch -q --set-upstream-to=origin/main main
 NEW=$(git rev-parse --short HEAD)
-[ "$OLD" = "$NEW" ] && { echo "ไม่มีอะไรใหม่ ($NEW)"; exit 0; }
+if [ "$OLD" = "$NEW" ] && [ "${1:-}" != "--force" ]; then
+  echo "ไม่มีอะไรใหม่ ($NEW) — ถ้าต้องการ build ใหม่ใช้: pos-update --force"
+  exit 0
+fi
 
 echo "==> ติดตั้งแพ็กเกจ + build หน้าเว็บ"
 npm install --no-audit --no-fund

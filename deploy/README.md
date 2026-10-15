@@ -24,7 +24,7 @@ Windows: เปิด PowerShell แล้ว `ssh root@179.197.244.102` (หร
 ## 3. ดึงโค้ดและติดตั้ง
 ```bash
 apt-get update && apt-get install -y git
-git clone -b vps-deploy https://github.com/n4444n/pos.git /opt/pos
+git clone https://github.com/n4444n/pos.git /opt/pos
 bash /opt/pos/deploy/setup-vps.sh pos.sh0p.tech
 ```
 ใช้เวลาราว 5–15 นาที (build หน้าเว็บนานที่สุด)
