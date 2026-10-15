@@ -20,6 +20,8 @@ const HEADERS: Record<keyof Omit<ImportRow, 'line'>, string[]> = {
   category: ['category', 'หมวดหมู่', 'หมวด'],
   lowStock: ['notify when product less than', 'low stock', 'แจ้งเตือนเมื่อเหลือ', 'แจ้งเตือน'],
   price: ['price', 'ราคา', 'ราคาขาย'],
+  extra: ['คุณสมบัติอื่น', 'extra', 'option', 'design', 'ดีไซน์'],
+  variantSku: ['รหัส sku (ระบบ)', 'variant sku', 'sku id'],
 };
 
 function parse(table: string[][]): { rows: ImportRow[]; missing: string[] } {
@@ -37,6 +39,7 @@ function parse(table: string[][]): { rows: ImportRow[]; missing: string[] } {
     .map((r, i) => ({
       line: hi + i + 2, code: get(r, 'code'), barcode: get(r, 'barcode'), qty: get(r, 'qty'), name: get(r, 'name'), color: get(r, 'color'),
       size: get(r, 'size'), category: get(r, 'category'), lowStock: get(r, 'lowStock'), price: get(r, 'price'),
+      extra: get(r, 'extra'), variantSku: get(r, 'variantSku'),
     }))
     .filter((r) => r.code || r.name);
   return { rows, missing };
@@ -84,7 +87,7 @@ export function ImportProductsSheet({ visible, onClose, onDone }: { visible: boo
     setFile(f.name);
     try {
       const { rows: r, missing } = parse(await fileToRows(f));
-      if (missing.length) throw new Error(`ไม่พบคอลัมน์ ${missing.join(', ')} ในไฟล์ — ใช้หัวตาราง: Code, Custom barcode id, Quantity, Product name, Colors, Size, Category, Notify when product less than, Price`);
+      if (missing.length) throw new Error(`ไม่พบคอลัมน์ ${missing.join(', ')} ในไฟล์ — ใช้ไฟล์จากปุ่ม Excel → ส่งออกสต็อก (หน้า สต็อกสินค้า (คุณสมบัติ)) หรือหัวตาราง: Code, Custom barcode id, Quantity, Product name, Colors, Size, Category, Notify when product less than, Price`);
       if (!r.length) throw new Error('ไม่พบรายการสินค้าในไฟล์');
       setRows(r);
       check(r);
@@ -136,7 +139,7 @@ export function ImportProductsSheet({ visible, onClose, onDone }: { visible: boo
           <View style={{ flex: 1 }}>
             <Text style={s.dropTitle}>{file ?? 'เลือกไฟล์ .xlsx หรือ .csv'}</Text>
             <Text style={s.small}>
-              {file ? `${n0(rows.length)} แถว · กดเพื่อเลือกไฟล์ใหม่` : 'คอลัมน์: Code · Custom barcode id · Quantity · Product name · Colors · Size · Category · Notify when product less than · Price'}
+              {file ? `${n0(rows.length)} แถว · กดเพื่อเลือกไฟล์ใหม่` : 'ไฟล์จาก "ส่งออกสต็อก" ที่แก้ไขแล้ว หรือไฟล์ที่มีคอลัมน์: Code · Custom barcode id · Quantity · Product name · Colors · Size · Category · Notify when product less than · Price'}
             </Text>
           </View>
         </Pressable>

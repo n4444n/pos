@@ -89,6 +89,7 @@ export function DashboardScreen({ onNavigate }: Props) {
   const [scope, setScope] = useState('');
   const [branches, setBranches] = useState<Branch[]>([]);
   const [pickBranch, setPickBranch] = useState(false);
+  const [pickDownload, setPickDownload] = useState(false);
   useEffect(() => {
     api.branchManage().then((r) => setBranches(r.list), () => {});
   }, []);
@@ -115,8 +116,11 @@ export function DashboardScreen({ onNavigate }: Props) {
     load();
   }, [load]);
 
-  const download = () => {
-    if (Platform.OS === 'web') window.open(api.dashboardCsvUrl({ ...range, branch: scope || undefined }), '_blank');
+  /** xlsx = ข้อมูลครบสำหรับวิเคราะห์ (หลายชีต + ข้อมูลดิบ) · csv = สรุปสั้น (แบบเดิม) */
+  const download = (kind: 'xlsx' | 'csv') => {
+    setPickDownload(false);
+    const f = { ...range, branch: scope || undefined };
+    if (Platform.OS === 'web') window.open(kind === 'xlsx' ? api.dashboardXlsxUrl(f) : api.dashboardCsvUrl(f), '_blank');
   };
 
   const m = METRICS.find((x) => x.id === metric)!;
@@ -156,7 +160,7 @@ export function DashboardScreen({ onNavigate }: Props) {
             <Pressable style={s.iconBtn} onPress={() => (showSidebar ? setSidebarOpen((o) => !o) : setDrawer(true))} accessibilityLabel="เมนู">
               <Icon name="menu-outline" size={24} color={colors.primary} />
             </Pressable>
-            <Text style={s.title}>รายงาน</Text>
+            <Text style={s.title}>รายงานรวม</Text>
           </View>
           <View style={[s.row, { flexWrap: 'wrap', justifyContent: 'flex-end' }]}>
             {branches.length > 1 ? (
@@ -166,7 +170,7 @@ export function DashboardScreen({ onNavigate }: Props) {
                 <Icon name="chevron-down" size={14} color={colors.primary} />
               </Pressable>
             ) : null}
-            <Pressable style={s.pillBtn} onPress={download} accessibilityLabel="ดาวน์โหลดรายงาน CSV">
+            <Pressable style={s.pillBtn} onPress={() => setPickDownload(true)} accessibilityLabel="ดาวน์โหลดรายงาน (Excel / CSV)">
               {!mobile ? <Text style={s.pillText}>ดาวน์โหลด</Text> : null}
               <View style={s.dlIcon}>
                 <Icon name="download-outline" size={15} color="#fff" />
@@ -479,6 +483,27 @@ export function DashboardScreen({ onNavigate }: Props) {
           })}
         </View>
       </Sheet>
+      <Sheet visible={pickDownload} onClose={() => setPickDownload(false)} title="ดาวน์โหลดรายงาน" width={420}>
+        <View style={{ gap: 8, paddingBottom: 8 }}>
+          <Text style={s.dlNote}>
+            {range.from === range.to ? bucketLabel(range.from, 'day') : `${bucketLabel(range.from, 'day')} – ${bucketLabel(range.to, 'day')}`} · {scopeLabel}
+          </Text>
+          {([
+            ['xlsx', 'grid-outline', 'Excel (.xlsx) — ข้อมูลครบสำหรับวิเคราะห์',
+              'ยอดรายวัน/เดือน/ชั่วโมง · วัน×ชั่วโมง · สินค้า / SKU / ไซซ์ / สี / หมวดขายดี · การชำระเงิน · พนักงาน · สาขา · โปรโมชั่น · ข้อมูลดิบบิลและรายการขาย (ทำ Pivot ต่อได้)'],
+            ['csv', 'document-text-outline', 'CSV — สรุปสั้น', 'ตัวชี้วัด · ยอดตามช่วงเวลา · สินค้าขายดี 10 อันดับ'],
+          ] as const).map(([k, icon, label, sub]) => (
+            <Pressable key={k} onPress={() => download(k)} style={s.dlOpt} accessibilityLabel={label}>
+              <Icon name={icon} size={22} color={colors.primary} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={[s.pillText, { fontWeight: '700' }]}>{label}</Text>
+                <Text style={s.dlNote}>{sub}</Text>
+              </View>
+              <Icon name="download-outline" size={18} color={colors.sub} />
+            </Pressable>
+          ))}
+        </View>
+      </Sheet>
       <NavDrawer visible={drawer} onClose={() => setDrawer(false)} route="dashboard" onNavigate={onNavigate} />
 
       <Sheet visible={pickPeriod} onClose={() => setPickPeriod(false)} title="เลือกช่วงเวลา" width={360}>
@@ -597,6 +622,8 @@ function ReturnStat({ label, value, danger }: { label: string; value: string; da
 }
 
 const s = StyleSheet.create({
+  dlOpt: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: radius.md, backgroundColor: colors.surface },
+  dlNote: { fontFamily: font, fontSize: 12, color: colors.sub },
   scopeOpt: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 46, paddingHorizontal: 14, borderRadius: radius.md, backgroundColor: colors.surface },
   root: { flex: 1, flexDirection: 'row', gap: 14, backgroundColor: colors.bg },
   main: { flex: 1, minWidth: 0, backgroundColor: colors.panel, borderRadius: radius.xl, padding: 16, gap: 12 },

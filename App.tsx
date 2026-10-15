@@ -5,9 +5,11 @@ import { api } from './src/api';
 import { useAppSettings } from './src/appSettings';
 import { desktop } from './src/desktop';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { NavDrawer, refreshStockBadge, type Route } from './src/components/NavMenu';
+import { NavDrawer, refreshStockBadge, REPORT_ROUTES, type Route } from './src/components/NavMenu';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { DashboardScreen } from './src/screens/DashboardScreen';
+import { ProductReportScreen } from './src/screens/ProductReportScreen';
+import { SalesReportScreen } from './src/screens/SalesReportScreen';
 import { BranchScreen } from './src/screens/BranchScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { SkuStockScreen } from './src/screens/SkuStockScreen';
@@ -38,7 +40,8 @@ function useRoute(): [Route, (r: Route) => void] {
   const read = (): Route => {
     if (Platform.OS !== 'web') return 'sales';
     const h = window.location.hash.slice(1);
-    return h === 'history' || h === 'shifts' || h === 'expenses' || h === 'staff' || h === 'dashboard' || h === 'stock' || h === 'skus' || h === 'shipments' || h === 'branches' || h === 'settings' ? h : 'sales';
+    const routes: Route[] = ['history', 'shifts', 'expenses', 'staff', 'dashboard', 'salesReport', 'productReport', 'stock', 'skus', 'shipments', 'branches', 'settings'];
+    return (routes as string[]).includes(h) ? (h as Route) : 'sales';
   };
   const [route, setRoute] = useState<Route>(read);
   useEffect(() => {
@@ -107,7 +110,7 @@ function Main({ me }: { me: Me }) {
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const page: Partial<Record<Route, string>> = {
-      history: 'ประวัติการขาย', shifts: 'กะการขาย', expenses: 'ค่าใช้จ่าย', staff: 'พนักงาน', dashboard: 'รายงาน', stock: 'สต็อกสินค้า', skus: 'สต็อกสินค้า (คุณสมบัติ)', shipments: 'ส่งของจากโรงงาน', branches: 'สาขา', settings: 'ตั้งค่า',
+      history: 'ประวัติการขาย', shifts: 'กะการขาย', expenses: 'ค่าใช้จ่าย', staff: 'พนักงาน', dashboard: 'รายงานรวม', salesReport: 'รายงานยอดขาย', productReport: 'รายงานสินค้า', stock: 'สต็อกสินค้า', skus: 'สต็อกสินค้า (คุณสมบัติ)', shipments: 'ส่งของจากโรงงาน', branches: 'สาขา', settings: 'ตั้งค่า',
     };
     // ชื่อสาขาบนแท็บเบราว์เซอร์ — เปิดหลายสาขาพร้อมกันก็แยกออก
     const branch = shop.branchName || shop.name;
@@ -128,7 +131,7 @@ function Main({ me }: { me: Me }) {
 
   // หน้าพนักงานเฉพาะผู้จัดการ
   useEffect(() => {
-    if ((route === 'staff' || route === 'dashboard' || route === 'settings' || route === 'branches' || route === 'shipments') && me.role !== 'manager') go('sales');
+    if ((route === 'staff' || REPORT_ROUTES.includes(route) || route === 'settings' || route === 'branches' || route === 'shipments') && me.role !== 'manager') go('sales');
   }, [route, me.role, go]);
 
   return (
@@ -144,6 +147,8 @@ function Main({ me }: { me: Me }) {
       {route === 'shifts' ? <ShiftScreen onNavigate={go} onShiftChanged={() => setStockVersion((v) => v + 1)} /> : null}
       {route === 'staff' && me.role === 'manager' ? <StaffScreen onNavigate={go} /> : null}
       {route === 'dashboard' && me.role === 'manager' ? <DashboardScreen onNavigate={go} /> : null}
+      {route === 'salesReport' && me.role === 'manager' ? <SalesReportScreen onNavigate={go} /> : null}
+      {route === 'productReport' && me.role === 'manager' ? <ProductReportScreen onNavigate={go} /> : null}
       {route === 'stock' ? <StockScreen onNavigate={go} onStockChanged={() => setStockVersion((v) => v + 1)} /> : null}
       {route === 'settings' && me.role === 'manager' ? <SettingsScreen onNavigate={go} onSettingsChanged={() => setStockVersion((v) => v + 1)} /> : null}
       {route === 'branches' && me.role === 'manager' ? <BranchScreen onNavigate={go} /> : null}

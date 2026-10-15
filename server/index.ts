@@ -26,6 +26,11 @@ import {
 } from './shifts.ts';
 import { dashboard, dashboardCsv } from './dashboard.ts';
 import { importProducts } from './productImport.ts';
+import { reportXlsx } from './reportExport.ts';
+import { shipmentXlsx } from './shipmentExport.ts';
+import { productReport, productReportXlsx, salesReport, salesReportXlsx } from './reports.ts';
+import { stockXlsx } from './stockExport.ts';
+import { XLSX_TYPE } from './xlsx.ts';
 import { cancelShipment, createShipment, holdShipment, listShipments, restoreShipment, resumeShipment, scanShipment, setShipmentItem, shipmentDetail, shipShipment, updateShipment } from './shipments.ts';
 import {
   createCategory, getProduct, listCategories, saveBranchStock, listProducts, listSkus, patchVariant, bulkUpdateSkus, stockCommand, bulkProducts, readUpload, saveProduct, saveUpload, saveUploadVariants, uploadsMissingVariants, setProductActive, stockSummary,
@@ -410,6 +415,13 @@ const server = createServer(async (req, res) => {
       if (path === '/api/products' && req.method === 'POST') { requireManager(me); requireMain(); return json(req, res, 201, saveProduct(null, (await readBody(req)) as never, me)); }
       if (path === '/api/products/import' && req.method === 'POST') { requireManager(me); requireMain(); return json(req, res, 200, importProducts((await readBody(req, 8_000_000)) as never, me)); }
       if (path === '/api/stock/alerts' && req.method === 'GET') return json(req, res, 200, stockSummary());
+      // ส่งออกสต็อก (Excel) — ชีตแรกนำเข้ากลับได้ที่ "นำเข้าสินค้า" · ?branch=all (ผู้จัดการ) = เพิ่มชีตสต็อกทุกสาขา
+      if (path === '/api/stock/export.xlsx' && req.method === 'GET') {
+        const d = new Date();
+        const p2 = (n: number) => String(n).padStart(2, '0');
+        res.setHeader('Content-Disposition', `attachment; filename="stock-${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}.xlsx"`);
+        return send(req, res, 200, stockXlsx(me), XLSX_TYPE);
+      }
       // ----- ตั้งค่า (ผู้จัดการ) -----
       if (path === '/api/settings' && req.method === 'GET') { requireManager(me); return json(req, res, 200, { settings: forAdmin(), keys: listKeys() }); }
       {
@@ -454,6 +466,16 @@ const server = createServer(async (req, res) => {
       // ---- ส่งของจากโรงงาน (ใบส่งของ DO) — ผู้จัดการเท่านั้น (ย้ายสต็อกข้ามสาขา) ----
       if (path === '/api/shipments' && req.method === 'GET') { requireManager(me); return json(req, res, 200, listShipments()); }
       if (path === '/api/shipments' && req.method === 'POST') { requireManager(me); return json(req, res, 201, createShipment((await readBody(req)) as never, me)); }
+      {
+        // ใบส่งของเป็น Excel (หน้าตาเดียวกับใบพิมพ์ A4)
+        const se = /^\/api\/shipments\/(\d+)\/export\.xlsx$/.exec(path);
+        if (se && req.method === 'GET') {
+          requireManager(me);
+          const { file, docNo } = shipmentXlsx(Number(se[1]));
+          res.setHeader('Content-Disposition', `attachment; filename="${docNo.replace(/[^\w.-]/g, '_')}.xlsx"`);
+          return send(req, res, 200, file, XLSX_TYPE);
+        }
+      }
       {
         const sh = /^\/api\/shipments\/(\d+)(?:\/(scan|ship|cancel|restore|hold|resume|items\/(\d+)))?$/.exec(path);
         if (sh) {
@@ -503,7 +525,7 @@ const server = createServer(async (req, res) => {
       }
 
       // ----- รายงาน / Dashboard (ผู้จัดการ) -----
-      if ((path === '/api/dashboard' || path === '/api/dashboard.csv') && req.method === 'GET') {
+      if ((path === '/api/dashboard' || path === '/api/dashboard.csv' || path === '/api/dashboard.xlsx') && req.method === 'GET') {
         requireManager(me);
         const f = { from: url.searchParams.get('from') ?? undefined, to: url.searchParams.get('to') ?? undefined };
         // ?branch=all = รวมทุกสาขา · ?branch=<id> = สาขาที่เลือก
@@ -511,8 +533,34 @@ const server = createServer(async (req, res) => {
         if (bq === 'all') setBranch(0);
         else if (bq && me.branchIds.includes(Number(bq))) setBranch(Number(bq));
         if (path === '/api/dashboard') return json(req, res, 200, dashboard(f));
+        if (path === '/api/dashboard.xlsx') {
+          const d = dashboard(f);
+          const bName = currentBranchInfo().name;
+          const scope = currentBranch() === 0 ? 'รวมทุกสาขา' : bName.startsWith('สาขา') ? bName : `สาขา ${bName}`;
+          res.setHeader('Content-Disposition', `attachment; filename="report-${d.range.from}-to-${d.range.to}.xlsx"`);
+          return send(req, res, 200, reportXlsx(f, scope), XLSX_TYPE);
+        }
         res.setHeader('Content-Disposition', `attachment; filename="report-${f.from ?? ''}-${f.to ?? ''}.csv"`);
         return send(req, res, 200, dashboardCsv(f), 'text/csv; charset=utf-8');
+      }
+
+      // ----- รายงานย่อย: ยอดขาย / สินค้า (ผู้จัดการ) -----
+      {
+        const rm = /^\/api\/reports\/(sales|products)(\.xlsx)?$/.exec(path);
+        if (rm && req.method === 'GET') {
+          requireManager(me);
+          const sp = url.searchParams;
+          const bq = sp.get('branch');
+          if (bq === 'all') setBranch(0);
+          else if (bq && me.branchIds.includes(Number(bq))) setBranch(Number(bq));
+          const f = Object.fromEntries(sp.entries()) as Record<string, string>;
+          if (!rm[2]) return json(req, res, 200, rm[1] === 'sales' ? salesReport(f) : productReport(f));
+          const bName = currentBranchInfo().name;
+          const scope = currentBranch() === 0 ? 'รวมทุกสาขา' : bName.startsWith('สาขา') ? bName : `สาขา ${bName}`;
+          const r = rm[1] === 'sales' ? salesReport(f).range : { from: f.from ?? '', to: f.to ?? '' };
+          res.setHeader('Content-Disposition', `attachment; filename="${rm[1]}-report-${r.from}-to-${r.to}.xlsx"`);
+          return send(req, res, 200, rm[1] === 'sales' ? salesReportXlsx(f, scope) : productReportXlsx(f, scope), XLSX_TYPE);
+        }
       }
 
       // ----- ค่าใช้จ่าย & สมุดลิ้นชัก -----
