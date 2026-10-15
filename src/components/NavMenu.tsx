@@ -13,8 +13,8 @@ export type Route =
 
 /** หน้าที่อยู่ใต้เมนู "รายงาน" (เฉพาะผู้จัดการ) */
 export const REPORT_ROUTES: Route[] = ['dashboard', 'salesReport', 'productReport'];
-// เปิด/ปิดกลุ่มเมนูรายงาน — จำไว้ระหว่างเปลี่ยนหน้า (แต่ละหน้ามี sidebar ของตัวเอง)
-let reportOpen: boolean | null = null;
+// เปิด/ปิดกลุ่มเมนู (รายงาน / สต็อกสินค้า) — จำไว้ระหว่างเปลี่ยนหน้า (แต่ละหน้ามี sidebar ของตัวเอง)
+const groupOpen: Partial<Record<string, boolean>> = {};
 
 // ---- ป้ายแจ้งเตือนสต็อก (ใช้ร่วมกันทุกเมนู โหลดครั้งเดียว) ----
 let stockBadge = 0;
@@ -43,7 +43,7 @@ function useStockBadge() {
   return n;
 }
 
-interface Item { id: Route | 'report'; label: string; icon: IconName; soon?: boolean; manager?: boolean; children?: Item[] }
+interface Item { id: Route | 'report' | 'stockGroup'; label: string; icon: IconName; soon?: boolean; manager?: boolean; children?: Item[] }
 const ITEMS: Item[] = [
   { id: 'sales', label: 'หน้าขาย', icon: 'storefront-outline' },
   {
@@ -58,8 +58,13 @@ const ITEMS: Item[] = [
   { id: 'shifts', label: 'กะการขาย', icon: 'time-outline' },
   { id: 'expenses', label: 'ค่าใช้จ่าย / ลิ้นชัก', icon: 'wallet-outline' },
   { id: 'staff', label: 'พนักงาน', icon: 'people-outline', manager: true },
-  { id: 'stock', label: 'สต็อกสินค้า', icon: 'shirt-outline' },
-  { id: 'skus', label: 'สต็อกสินค้า (คุณสมบัติ)', icon: 'barcode-outline' },
+  {
+    id: 'stockGroup', label: 'สต็อกสินค้า', icon: 'shirt-outline',
+    children: [
+      { id: 'stock', label: 'สต็อกสินค้า', icon: 'shirt-outline' },
+      { id: 'skus', label: 'สต็อกสินค้า (คุณสมบัติ)', icon: 'barcode-outline' },
+    ],
+  },
   { id: 'shipments', label: 'ส่งของจากโรงงาน', icon: 'cube-outline', manager: true },
   { id: 'branches', label: 'สาขา', icon: 'business-outline', manager: true },
   { id: 'settings', label: 'ตั้งค่า', icon: 'settings-outline', manager: true },
@@ -76,12 +81,19 @@ interface MenuProps {
 export function NavMenu({ route, onNavigate, header }: MenuProps) {
   const { me, logout } = useSession();
   const badge = useStockBadge();
-  const inReport = REPORT_ROUTES.includes(route);
-  const [open, setOpen] = useState(reportOpen ?? inReport);
-  const toggle = () => {
-    reportOpen = !open;
-    setOpen(!open);
+  // กลุ่มเมนูย่อย: ถ้ายังไม่เคยกดเปิด/ปิด → เปิดอยู่เมื่อหน้าปัจจุบันอยู่ในกลุ่มนั้น
+  const [, rerender] = useState(0);
+  const isOpen = (it: Item) => groupOpen[it.id] ?? !!it.children?.some((c) => c.id === route);
+  const toggle = (it: Item) => {
+    groupOpen[it.id] = !isOpen(it);
+    rerender((n) => n + 1);
   };
+  const stockBadgeView = (on: boolean) =>
+    badge > 0 ? (
+      <View style={[s.badge, on && { backgroundColor: '#fff' }]} accessibilityLabel={`สินค้าเหลือน้อยหรือหมด ${badge} รายการ`}>
+        <Text style={[s.badgeText, on && { color: colors.danger }]}>{badge > 99 ? '99+' : badge}</Text>
+      </View>
+    ) : null;
   return (
     <View style={s.menu}>
       <BranchChip block />
@@ -89,19 +101,21 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
       <View style={{ gap: 8 }}>
         {ITEMS.filter((it) => !it.manager || me.role === 'manager').map((it) => {
           if (it.children) {
-            const expanded = open;
+            const expanded = isOpen(it);
+            const inGroup = it.children.some((c) => c.id === route);
             return (
               <View key={it.id} style={{ gap: 6 }}>
                 <Pressable
-                  onPress={toggle}
-                  style={({ hovered }: { hovered?: boolean }) => [s.item, inReport && s.groupOn, hovered && !inReport && s.itemHover]}
+                  onPress={() => toggle(it)}
+                  style={({ hovered }: { hovered?: boolean }) => [s.item, inGroup && s.groupOn, hovered && !inGroup && s.itemHover]}
                   accessibilityRole="button"
                   accessibilityState={{ expanded }}
                   accessibilityLabel={`${it.label} — ${expanded ? 'ย่อ' : 'แสดง'}เมนูย่อย`}
                 >
-                  <Icon name={it.icon} size={19} color={inReport ? colors.primary : colors.text} />
-                  <Text style={[s.itemText, inReport && { color: colors.primary, fontWeight: '600' }]}>{it.label}</Text>
-                  <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={inReport ? colors.primary : colors.sub} />
+                  <Icon name={it.icon} size={19} color={inGroup ? colors.primary : colors.text} />
+                  <Text style={[s.itemText, inGroup && { color: colors.primary, fontWeight: '600' }]}>{it.label}</Text>
+                  {it.id === 'stockGroup' && !expanded ? stockBadgeView(false) : null}
+                  <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={inGroup ? colors.primary : colors.sub} />
                 </Pressable>
                 {expanded ? (
                   <View style={s.sub}>
@@ -116,7 +130,8 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
                           accessibilityState={{ selected: on }}
                         >
                           <Icon name={c.icon} size={17} color={on ? '#fff' : colors.sub} />
-                          <Text style={[s.itemText, on && { color: '#fff' }]}>{c.label}</Text>
+                          <Text style={[s.itemText, on && { color: '#fff' }]} numberOfLines={1}>{c.label}</Text>
+                          {c.id === 'stock' ? stockBadgeView(on) : null}
                         </Pressable>
                       );
                     })}
@@ -138,11 +153,6 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
               <Icon name={it.icon} size={19} color={on ? '#fff' : it.soon ? colors.faint : colors.text} />
               <Text style={[s.itemText, on && { color: '#fff' }, it.soon && { color: colors.faint }]}>{it.label}</Text>
               {it.soon ? <Text style={s.soon}>เร็ว ๆ นี้</Text> : null}
-              {it.id === 'stock' && badge > 0 ? (
-                <View style={[s.badge, on && { backgroundColor: '#fff' }]} accessibilityLabel={`สินค้าเหลือน้อยหรือหมด ${badge} รายการ`}>
-                  <Text style={[s.badgeText, on && { color: colors.danger }]}>{badge > 99 ? '99+' : badge}</Text>
-                </View>
-              ) : null}
             </Pressable>
           );
         })}
