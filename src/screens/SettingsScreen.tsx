@@ -19,16 +19,21 @@ import { baht, thaiDateTime } from '../format';
 import type { Toast } from '../store/usePos';
 import { colors, font, radius } from '../theme';
 import { desktop, type PrinterConfig } from '../desktop';
+import { DEFAULT_LABEL_PROFILE, type LabelProfile } from '../appSettings';
+import { LABEL_PRESETS, profileSummary } from '../labels';
+import { LabelPreview } from '../components/stock/LabelPreview';
 
-type SectionId = 'shop' | 'display' | 'stock' | 'payments' | 'barcode' | 'receipt' | 'printer' | 'notify';
-const dataKey = (id: SectionId) => id as keyof AdminSettings;
+type SectionId = 'shop' | 'display' | 'stock' | 'payments' | 'barcode' | 'labels' | 'receipt' | 'printer' | 'notify';
+/** หมวดที่บันทึกลงตั้งค่าร้านชุดเดียวกัน (กระดาษบาร์โค้ด → barcode) */
+const dataKey = (id: SectionId) => (id === 'labels' ? 'barcode' : id) as keyof AdminSettings;
 /** sub = เมนูย่อย (แสดงเยื้องใต้เมนูก่อนหน้า) · local = เก็บในเครื่องนี้ ไม่ใช่ตั้งค่าร้าน (มีปุ่มบันทึกของตัวเอง) */
 const SECTIONS: { id: SectionId; label: string; icon: IconName; desc: string; sub?: boolean; local?: boolean }[] = [
   { id: 'shop', label: 'ข้อมูลร้าน', icon: 'storefront-outline', desc: 'ชื่อร้าน เลขผู้เสียภาษี ที่อยู่/เบอร์ค่าเริ่มต้น' },
   { id: 'display', label: 'การแสดงผลหน้าขาย', icon: 'grid-outline', desc: 'มุมมองสินค้า รูปทรง/คุณภาพรูป ตัวอักษร การแสดงสต็อก' },
   { id: 'stock', label: 'สต็อก', icon: 'cube-outline', desc: 'จุดแจ้งเตือนสินค้าเหลือน้อย · รูปแบบรหัส SKU' },
   { id: 'payments', label: 'วิธีชำระเงิน & ค่าธรรมเนียม', icon: 'wallet-outline', desc: 'เปิด/ปิดวิธีชำระ ตั้งชื่อ ค่าธรรมเนียม % / บาท' },
-  { id: 'barcode', label: 'บาร์โค้ด', icon: 'barcode-outline', desc: 'ประเภทบาร์โค้ด สร้างอัตโนมัติ ขนาดป้าย' },
+  { id: 'barcode', label: 'บาร์โค้ด', icon: 'barcode-outline', desc: 'ประเภทบาร์โค้ด · สร้างบาร์โค้ดอัตโนมัติ' },
+  { id: 'labels', label: 'กระดาษบาร์โค้ด', icon: 'pricetags-outline', desc: 'โปรไฟล์ป้าย · ขนาดสติ๊กเกอร์/ดวงต่อแถว · ขนาดบาร์โค้ด · ข้อมูลและตัวอักษรบนป้าย' },
   { id: 'receipt', label: 'ใบเสร็จ', icon: 'receipt-outline', desc: 'ภาษา (ไทย / English) · แก้คำในบิล · ขนาดกระดาษ · ข้อความหัว/ท้าย' },
   { id: 'printer', label: 'ตั้งค่าเครื่องพิมพ์ใบเสร็จ', icon: 'print-outline', desc: 'เครื่องพิมพ์ของคอมพิวเตอร์เครื่องนี้ · USB / LAN / Bluetooth · ขนาดกระดาษ · ตัดกระดาษ · ลิ้นชักเงิน', local: true },
   { id: 'notify', label: 'การแจ้งเตือน & API', icon: 'notifications-outline', desc: 'LINE (การ์ดปรับแต่งได้) · WhatsApp · Webhook · เหตุการณ์ที่ต้องการแจ้ง · API key' },
@@ -103,7 +108,7 @@ export function SettingsScreen({ onNavigate, onSettingsChanged }: Props) {
       setDraft((d) => (d ? { ...d, [dk]: structuredClone(r.settings[dk]) } : d));
       // ให้หน้าขาย/ใบเสร็จเปลี่ยนตามทันที
       const s = r.settings;
-      setAppSettings({ shop: s.shop, display: s.display, payments: s.payments, receipt: s.receipt, barcode: { symbology: s.barcode.symbology }, stock: { lowStockDefault: s.stock.lowStockDefault, allowNegative: s.stock.allowNegative } });
+      setAppSettings({ shop: s.shop, display: s.display, payments: s.payments, receipt: s.receipt, barcode: { symbology: s.barcode.symbology, labelProfiles: s.barcode.labelProfiles, labelProfile: s.barcode.labelProfile }, stock: { lowStockDefault: s.stock.lowStockDefault, allowNegative: s.stock.allowNegative } });
       onSettingsChanged();
       notify('success', `บันทึก "${SECTIONS.find((x) => x.id === section)!.label}" แล้ว`);
     } catch (e) {
@@ -188,7 +193,8 @@ export function SettingsScreen({ onNavigate, onSettingsChanged }: Props) {
                   <StockSection v={draft.stock} set={(v) => patch('stock', v)} openBranches={() => onNavigate('branches')} />
                 ) : null}
                 {section === 'payments' ? <PaymentsSection v={draft.payments} set={(v) => patch('payments', v)} /> : null}
-                {section === 'barcode' ? <BarcodeSection v={draft.barcode} set={(v) => patch('barcode', v)} stock={draft.stock} goStock={() => setSection('stock')} /> : null}
+                {section === 'barcode' ? <BarcodeSection v={draft.barcode} set={(v) => patch('barcode', v)} stock={draft.stock} goStock={() => setSection('stock')} goLabels={() => setSection('labels')} /> : null}
+                {section === 'labels' ? <LabelsSection v={draft.barcode} set={(v) => patch('barcode', v)} /> : null}
                 {section === 'receipt' ? <ReceiptSection v={draft.receipt} shop={draft.shop} vat={draft.payments.vat} set={(v) => patch('receipt', v)} goPrinter={() => setSection('printer')} /> : null}
                 {section === 'printer' ? <PrinterSection shopPaper={draft.receipt.paperWidth} notify={notify} goReceipt={() => setSection('receipt')} /> : null}
                 {section === 'notify' ? (
@@ -478,7 +484,7 @@ function PaymentsSection({ v, set }: { v: AdminSettings['payments']; set: Upd<Ad
   );
 }
 
-function BarcodeSection({ v, set, stock, goStock }: { v: AdminSettings['barcode']; set: Upd<AdminSettings['barcode']>; stock: AdminSettings['stock']; goStock: () => void }) {
+function BarcodeSection({ v, set, stock, goStock, goLabels }: { v: AdminSettings['barcode']; set: Upd<AdminSettings['barcode']>; stock: AdminSettings['stock']; goStock: () => void; goLabels: () => void }) {
   const sample = v.symbology === 'ean13' ? '8850001234560' : `TS-001${stock.skuSeparator}${'1'.padStart(stock.skuDigits, '0')}`;
   return (
     <>
@@ -502,15 +508,14 @@ function BarcodeSection({ v, set, stock, goStock }: { v: AdminSettings['barcode'
           รูปแบบรหัส SKU (ตัวคั่น/จำนวนหลัก) ตั้งได้ที่ <Text style={s.link} onPress={goStock}>สต็อก & เชื่อมสาขา</Text>
         </Text>
       </Card>
-      <Card title="ป้ายสินค้า (สำหรับพิมพ์ติดสินค้า)">
-        <Grid>
-          <Field label="กว้าง (มม.)"><Input value={String(v.labelWidth)} onChange={(t) => set({ labelWidth: Number(t.replace(/[^0-9]/g, '')) || 0 })} keyboard="number-pad" max={3} /></Field>
-          <Field label="สูง (มม.)"><Input value={String(v.labelHeight)} onChange={(t) => set({ labelHeight: Number(t.replace(/[^0-9]/g, '')) || 0 })} keyboard="number-pad" max={3} /></Field>
-        </Grid>
-        <Toggle label="แสดงชื่อสินค้าบนป้าย" value={v.labelShowName} onChange={(x) => set({ labelShowName: x })} />
-        <Toggle label="แสดงราคาบนป้าย" value={v.labelShowPrice} onChange={(x) => set({ labelShowPrice: x })} />
-        <Text style={s.sub}>ค่าขนาดป้ายเตรียมไว้สำหรับระบบพิมพ์ป้ายบาร์โค้ด (เฟสถัดไป)</Text>
-      </Card>
+      <Pressable style={({ hovered }: { hovered?: boolean }) => [s.linkCard, hovered && { backgroundColor: '#E3EBFF' }]} onPress={goLabels} accessibilityRole="link">
+        <Icon name="pricetags-outline" size={20} color={colors.primary} />
+        <View style={{ flex: 1 }}>
+          <Text style={s.linkTitle}>กระดาษบาร์โค้ด (ป้ายติดสินค้า)</Text>
+          <Text style={s.hint}>ขนาดสติ๊กเกอร์ · ดวงต่อแถว · ขนาดบาร์โค้ด · ชื่อ/ราคา/รหัสบนป้าย · หลายโปรไฟล์</Text>
+        </View>
+        <Icon name="chevron-forward" size={18} color={colors.primary} />
+      </Pressable>
     </>
   );
 }
@@ -1362,6 +1367,173 @@ function AutoImage({ uri, width, maxHeight }: { uri: string; width: number; maxH
 }
 
 /**
+ * กระดาษบาร์โค้ด — โปรไฟล์ป้ายติดสินค้า (ขนาดกระดาษ ดวงต่อแถว บาร์โค้ด ข้อความ) ใช้ตอนพิมพ์ป้ายในหน้าสต็อก
+ * บันทึกในตั้งค่าร้าน (ทุกเครื่อง/ทุกสาขาใช้ร่วมกัน)
+ */
+function LabelsSection({ v, set }: { v: AdminSettings['barcode']; set: Upd<AdminSettings['barcode']> }) {
+  const profiles = v.labelProfiles?.length ? v.labelProfiles : [DEFAULT_LABEL_PROFILE];
+  const [selId, setSelId] = useState(v.labelProfile || profiles[0].id);
+  const p = profiles.find((x) => x.id === selId) ?? profiles[0];
+  const { width } = useWindowDimensions();
+  const wide = width >= 1250;
+  const upd = (x: Partial<LabelProfile>) => set({ labelProfiles: profiles.map((q) => (q.id === p.id ? { ...q, ...x } : q)) });
+  const add = (base?: LabelProfile) => {
+    if (profiles.length >= 12) return;
+    const id = `p${Date.now().toString(36)}`;
+    const np: LabelProfile = { ...(base ?? DEFAULT_LABEL_PROFILE), id, name: base ? `${base.name} (สำเนา)`.slice(0, 40) : `โปรไฟล์ ${profiles.length + 1}` };
+    set({ labelProfiles: [...profiles, np] });
+    setSelId(id);
+  };
+  const remove = () => {
+    if (profiles.length <= 1) return;
+    const rest = profiles.filter((q) => q.id !== p.id);
+    set({ labelProfiles: rest, labelProfile: v.labelProfile === p.id ? rest[0].id : v.labelProfile });
+    setSelId(rest[0].id);
+  };
+  const isDefault = (v.labelProfile || profiles[0].id) === p.id;
+  const rollWidth = p.marginLeft + p.cols * p.width + (p.cols - 1) * p.gapX;
+  const a4 = p.paper === 'a4';
+
+  const settings = (
+    <View style={{ flex: 1, minWidth: 0, gap: 12 }}>
+      <Card title="โปรไฟล์">
+        <View style={[s.row, { flexWrap: 'wrap' }]}>
+          {profiles.map((q) => {
+            const on = q.id === p.id;
+            const def = (v.labelProfile || profiles[0].id) === q.id;
+            return (
+              <Pressable key={q.id} onPress={() => setSelId(q.id)} style={[s.profileChip, on && s.profileOn]} accessibilityRole="radio" accessibilityState={{ checked: on }}>
+                <Text style={[s.profileName, on && { color: colors.primary }]} numberOfLines={1}>{def ? '★ ' : ''}{q.name}</Text>
+                <Text style={s.hint} numberOfLines={1}>{profileSummary(q)}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <View style={[s.row, { flexWrap: 'wrap' }]}>
+          <SmallBtn label="เพิ่มโปรไฟล์" icon="add" onPress={() => add()} disabled={profiles.length >= 12} />
+          <SmallBtn label="ทำสำเนา" icon="copy-outline" onPress={() => add(p)} disabled={profiles.length >= 12} />
+          <SmallBtn label={isDefault ? 'ค่าเริ่มต้นอยู่แล้ว' : 'ตั้งเป็นค่าเริ่มต้น'} icon="star-outline" onPress={() => set({ labelProfile: p.id })} disabled={isDefault} />
+          <SmallBtn label="ลบโปรไฟล์นี้" icon="trash-outline" onPress={remove} disabled={profiles.length <= 1} />
+        </View>
+        <Field label="ชื่อโปรไฟล์" hint="★ = โปรไฟล์ที่เลือกไว้ก่อนเมื่อพิมพ์ป้าย (แต่ละเครื่องจำโปรไฟล์ที่ใช้ล่าสุด)">
+          <Input value={p.name} onChange={(t) => upd({ name: t })} max={40} placeholder="เช่น สติ๊กเกอร์ม้วน 50×30" />
+        </Field>
+      </Card>
+
+      <Card title="ขนาดกระดาษ">
+        <Field label="แบบสำเร็จรูป" hint="กดเพื่อกรอกขนาด จำนวนดวง และขนาดตัวอักษรที่เหมาะสมให้ แล้วปรับต่อได้">
+          <View style={[s.row, { flexWrap: 'wrap' }]}>
+            {LABEL_PRESETS.map((x) => (
+              <Pressable key={x.id} onPress={() => upd(x.apply)} style={({ hovered }: { hovered?: boolean }) => [s.presetChip, hovered && { borderColor: colors.primary }]}>
+                <Text style={s.presetT}>{x.label}</Text>
+                <Text style={s.hint}>{x.hint}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Field>
+        <Field label="ชนิดกระดาษ">
+          <Seg value={p.paper} options={[['roll', 'สติ๊กเกอร์ม้วน (เครื่องพิมพ์ป้าย)'], ['a4', 'กระดาษสติ๊กเกอร์ A4']]} onChange={(x) => upd({ paper: x as LabelProfile['paper'], cols: x === 'a4' ? Math.max(p.cols, 2) : Math.min(p.cols, 4), rows: x === 'a4' ? Math.max(p.rows, 5) : 1 })} />
+        </Field>
+        <Grid max={4}>
+          <Field label="กว้างต่อดวง (มม.)"><NumStep value={p.width} min={10} max={210} step={1} onChange={(n) => upd({ width: n })} /></Field>
+          <Field label="สูงต่อดวง (มม.)"><NumStep value={p.height} min={8} max={297} step={1} onChange={(n) => upd({ height: n })} /></Field>
+          <Field label="ดวงต่อแถว"><NumStep value={p.cols} min={1} max={a4 ? 8 : 4} step={1} onChange={(n) => upd({ cols: n })} /></Field>
+          {a4 ? <Field label="แถวต่อแผ่น"><NumStep value={p.rows} min={1} max={30} step={1} onChange={(n) => upd({ rows: n })} /></Field> : null}
+        </Grid>
+        <Grid max={4}>
+          {p.cols > 1 ? <Field label="ห่างระหว่างดวง (มม.)"><NumStep value={p.gapX} min={0} max={20} step={0.5} onChange={(n) => upd({ gapX: n })} /></Field> : null}
+          {a4 ? <Field label="ห่างระหว่างแถว (มม.)"><NumStep value={p.gapY} min={0} max={20} step={0.5} onChange={(n) => upd({ gapY: n })} /></Field> : null}
+          <Field label="ขอบซ้าย (มม.)"><NumStep value={p.marginLeft} min={0} max={30} step={0.5} onChange={(n) => upd({ marginLeft: n })} /></Field>
+          <Field label="ขอบบน (มม.)"><NumStep value={p.marginTop} min={0} max={30} step={0.5} onChange={(n) => upd({ marginTop: n })} /></Field>
+          <Field label="ขอบในดวง (มม.)"><NumStep value={p.padding} min={0} max={6} step={0.2} onChange={(n) => upd({ padding: n })} /></Field>
+        </Grid>
+        <Text style={s.hint}>
+          {a4
+            ? `แผ่น A4 · ${p.cols} × ${p.rows} = ${p.cols * p.rows} ดวง/แผ่น`
+            : `ความกว้างม้วนรวม ${Math.round(rollWidth * 10) / 10} มม. · ตั้งขนาดกระดาษในเครื่องพิมพ์ป้ายเป็น ${Math.round(rollWidth * 10) / 10} × ${p.height} มม.`}
+        </Text>
+      </Card>
+
+      <Card title="บาร์โค้ด">
+        <Field label="ประเภท" hint="ตามตั้งค่าร้าน = ตามเมนู บาร์โค้ด · EAN-13 ใช้เมื่อรหัสเป็นตัวเลข 13 หลักที่ถูกต้อง (ไม่งั้นพิมพ์เป็น Code 128)">
+          <Seg value={p.symbology} options={[['auto', 'ตามตั้งค่าร้าน'], ['code128', 'Code 128'], ['ean13', 'EAN-13']]} onChange={(x) => upd({ symbology: x as LabelProfile['symbology'] })} />
+        </Field>
+        <Grid max={3}>
+          <Field label="ความสูงบาร์โค้ด (มม.)"><NumStep value={p.barHeight} min={3} max={60} step={0.5} onChange={(n) => upd({ barHeight: n })} /></Field>
+          <Field label="ความกว้างบาร์โค้ด (% ของดวง)"><NumStep value={p.barWidth} min={30} max={100} step={5} onChange={(n) => upd({ barWidth: n })} /></Field>
+          <Field label="ระยะห่างบาร์โค้ด/ตัวหนังสือ (มม.)"><NumStep value={p.textGap} min={0} max={10} step={0.5} onChange={(n) => upd({ textGap: n })} /></Field>
+        </Grid>
+      </Card>
+
+      <Card title="ข้อความบนป้าย">
+        <Grid max={4}>
+          <Toggle label="แสดงรหัส" value={p.showCode} onChange={(x) => upd({ showCode: x })} />
+          <Toggle label="ชื่อสินค้า" value={p.showName} onChange={(x) => upd({ showName: x })} />
+          <Toggle label="สี / ไซซ์" value={p.showVariant} onChange={(x) => upd({ showVariant: x })} />
+          <Toggle label="ราคา" value={p.showPrice} onChange={(x) => upd({ showPrice: x })} />
+          <Toggle label="ชื่อร้าน" value={p.showShop} onChange={(x) => upd({ showShop: x })} />
+          <Toggle label="ตัวหนา" value={p.bold} onChange={(x) => upd({ bold: x })} />
+          <Toggle label="ตัวเอียง" value={p.italic} onChange={(x) => upd({ italic: x })} />
+        </Grid>
+        <Field label="ตำแหน่งของตัวอักษร">
+          <Seg value={p.align} options={[['left', 'ชิดซ้าย'], ['center', 'กึ่งกลาง'], ['right', 'ชิดขวา']]} onChange={(x) => upd({ align: x as LabelProfile['align'] })} />
+        </Field>
+        <Grid max={3}>
+          <Field label="ขนาดรหัส (pt)"><NumStep value={p.codeSize} min={4} max={20} step={0.5} onChange={(n) => upd({ codeSize: n })} /></Field>
+          <Field label="ขนาดชื่อ (pt)"><NumStep value={p.nameSize} min={4} max={20} step={0.5} onChange={(n) => upd({ nameSize: n })} /></Field>
+          <Field label="ขนาดราคา (pt)"><NumStep value={p.priceSize} min={4} max={24} step={0.5} onChange={(n) => upd({ priceSize: n })} /></Field>
+        </Grid>
+      </Card>
+    </View>
+  );
+
+  const side = (
+    <View style={[{ gap: 12 }, wide ? { width: 380 } : { width: '100%' }]}>
+      <Card title="ตัวอย่างป้าย">
+        <View style={s.previewBox}>
+          <LabelPreview profile={p} maxWidth={wide ? 340 : 520} />
+        </View>
+        <Text style={s.hint}>{p.name} · {profileSummary(p)}</Text>
+        <Text style={s.hint}>
+          ตัวอย่างใช้รูปแบบเดียวกับตอนพิมพ์จริง · พิมพ์ป้ายได้ที่หน้า สต็อกสินค้า → ปุ่มพิมพ์บาร์โค้ด · ในหน้าต่างพิมพ์ เลือกเครื่องพิมพ์ป้าย ขนาดกระดาษให้ตรง และระยะขอบ: ไม่มี
+        </Text>
+      </Card>
+    </View>
+  );
+
+  return (
+    <View style={[{ gap: 12 }, wide ? { flexDirection: 'row', alignItems: 'flex-start' } : null]}>
+      {settings}
+      {side}
+    </View>
+  );
+}
+
+/** ช่องตัวเลข + ปุ่ม − / + (รองรับทศนิยมตาม step) */
+function NumStep({ value, min, max, step, onChange }: { value: number; min: number; max: number; step: number; onChange: (n: number) => void }) {
+  const dec = step < 1 ? 1 : 0;
+  const fmt = (n: number) => (dec ? String(Math.round(n * 10) / 10) : String(Math.round(n)));
+  const [text, setText] = useState(fmt(value));
+  useEffect(() => setText(fmt(value)), [value]); // eslint-disable-line react-hooks/exhaustive-deps
+  const commit = (n: number) => onChange(Math.max(min, Math.min(max, dec ? Math.round(n * 10) / 10 : Math.round(n))));
+  return (
+    <View style={s.row}>
+      <Pressable style={s.arrow} onPress={() => commit(value - step)} accessibilityLabel="ลด"><Icon name="remove" size={16} color={colors.text} /></Pressable>
+      <TextInput
+        value={text}
+        onChangeText={(t) => setText(t.replace(dec ? /[^0-9.]/g : /[^0-9]/g, '').slice(0, 6))}
+        onBlur={() => (text.trim() === '' || !Number.isFinite(Number(text)) ? setText(fmt(value)) : commit(Number(text)))}
+        onSubmitEditing={() => Number.isFinite(Number(text)) && commit(Number(text))}
+        keyboardType={dec ? 'decimal-pad' : 'number-pad'}
+        selectTextOnFocus
+        style={[s.input, { width: 72, textAlign: 'center', paddingHorizontal: 4 }]}
+      />
+      <Pressable style={s.arrow} onPress={() => commit(value + step)} accessibilityLabel="เพิ่ม"><Icon name="add" size={16} color={colors.text} /></Pressable>
+    </View>
+  );
+}
+
+/**
  * ตั้งค่าเครื่องพิมพ์ใบเสร็จของ "เครื่องนี้" — เก็บในแอปเดสก์ท็อป (แต่ละเครื่อง/สาขาตั้งไม่เหมือนกันได้)
  * บันทึกแยกจากตั้งค่าร้าน (ปุ่มบันทึกในการ์ดด้านขวา) · เปิดผ่านเบราว์เซอร์จะไม่มีส่วนนี้
  */
@@ -1856,6 +2028,11 @@ const s = StyleSheet.create({
   previewBox: { gap: 8, padding: 12, borderRadius: radius.md, backgroundColor: '#ECECE8', alignItems: 'center' },
   previewPaper: { backgroundColor: '#fff', padding: 6 },
   previewEmpty: { alignItems: 'center', justifyContent: 'center', gap: 8, height: 160, borderRadius: radius.md, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.line, backgroundColor: colors.surface },
+  profileChip: { minWidth: 150, maxWidth: 240, paddingVertical: 8, paddingHorizontal: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: '#fff', gap: 2 },
+  profileOn: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  profileName: { fontFamily: font, fontSize: 13, fontWeight: '600', color: colors.text },
+  presetChip: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: '#fff' },
+  presetT: { fontFamily: font, fontSize: 12, fontWeight: '600', color: colors.text },
   linkCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: radius.lg, borderWidth: 1, borderColor: '#D5E1FF', backgroundColor: colors.primarySoft },
   linkTitle: { fontFamily: font, fontSize: 14, fontWeight: '600', color: colors.primary },
   smallBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: colors.primarySoft },
