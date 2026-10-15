@@ -5,10 +5,15 @@ import { MAX_SKU, rowLabel, type DAttr, type DRow } from '../../stockDraft';
 import { colors, font, radius } from '../../theme';
 import { Icon } from '../Icon';
 import { Sheet } from '../Sheet';
+import { Barcode } from './Barcode';
+import { BarcodeLabelSheet } from './BarcodeLabelSheet';
+import type { LabelItem } from '../../labels';
 
 interface Props {
   /** รหัสสินค้า — ใช้แสดงตัวอย่างรหัสอัตโนมัติของ SKU ใหม่ (รหัสสินค้า-0001) */
   productCode: string;
+  /** ชื่อสินค้า — พิมพ์บนป้ายบาร์โค้ด */
+  productName?: string;
   attrs: DAttr[];
   rows: DRow[];
   lowStock: number;
@@ -24,9 +29,12 @@ type Col = 'cost' | 'price' | 'stock';
 const COL_LABEL: Record<Col, string> = { cost: 'ต้นทุน', price: 'ราคาขาย', stock: 'จำนวน' };
 
 /** ตาราง SKU: ต้นทุน · ราคา · จำนวน · แสดงขาย (ตั้งค่าทุกแถวพร้อมกันได้) */
-export function SkuMatrix({ productCode, attrs, rows, lowStock, showCost, compact, lockActive, onChange }: Props) {
+export function SkuMatrix({ productCode, productName = '', attrs, rows, lowStock, showCost, compact, lockActive, onChange }: Props) {
   const [bulk, setBulk] = useState<Col | null>(null);
   const [bulkVal, setBulkVal] = useState('');
+  // แสดงบาร์โค้ดแทนป้ายรหัส · หน้าต่างพิมพ์ป้ายบาร์โค้ด
+  const [showBc, setShowBc] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
   const cols: Col[] = showCost ? ['cost', 'price', 'stock'] : ['price', 'stock'];
 
   const set = (key: string, patch: Partial<DRow>) => onChange(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -43,6 +51,43 @@ export function SkuMatrix({ productCode, attrs, rows, lowStock, showCost, compac
       else codeOf.set(r.key, { text: `${productCode || 'P…'}-${String(next++).padStart(4, '0')}`, custom: false, pending: true });
     }
   }
+
+  // ป้ายที่พิมพ์ได้ = SKU ที่บันทึกแล้ว (มีรหัสจริง)
+  const labelItems: LabelItem[] = rows
+    .filter((r) => !codeOf.get(r.key)!.pending)
+    .map((r) => ({
+      key: r.key,
+      name: productName.trim() || productCode,
+      variant: rowLabel(attrs, r.key),
+      code: codeOf.get(r.key)!.text,
+      price: Number(r.price) || 0,
+      stock: Math.max(0, Number(r.stock) || 0),
+    }));
+  const pendingCount = rows.length - labelItems.length;
+
+  const tools = (
+    <View style={s.tools}>
+      <Pressable
+        style={({ hovered }: { hovered?: boolean }) => [s.toolBtn, showBc && s.toolOn, hovered && !showBc && { backgroundColor: colors.surface }]}
+        onPress={() => setShowBc((v) => !v)}
+        accessibilityRole="switch"
+        accessibilityState={{ checked: showBc }}
+        accessibilityLabel={showBc ? 'ซ่อนบาร์โค้ด' : 'แสดงบาร์โค้ด'}
+      >
+        <Icon name="barcode-outline" size={18} color={showBc ? '#fff' : colors.text} />
+        <Text style={[s.toolText, showBc && { color: '#fff' }]}>{showBc ? 'ซ่อนบาร์โค้ด' : 'แสดงบาร์โค้ด'}</Text>
+      </Pressable>
+      <Pressable
+        style={({ hovered }: { hovered?: boolean }) => [s.toolBtn, hovered && { backgroundColor: colors.surface }, !labelItems.length && { opacity: 0.45 }]}
+        disabled={!labelItems.length}
+        onPress={() => setPrintOpen(true)}
+        accessibilityLabel="พิมพ์บาร์โค้ดทุกรุ่น"
+      >
+        <Icon name="print-outline" size={18} color={colors.text} />
+        <Text style={s.toolText}>พิมพ์บาร์โค้ด</Text>
+      </Pressable>
+    </View>
+  );
 
   const stockTone = (r: DRow) => {
     const n = Number(r.stock || 0);
@@ -69,6 +114,7 @@ export function SkuMatrix({ productCode, attrs, rows, lowStock, showCost, compac
 
   return (
     <View>
+      {tools}
       {!compact ? header : (
         <View style={s.bulkBar}>
           {cols.map((c) => (
@@ -116,6 +162,13 @@ export function SkuMatrix({ productCode, attrs, rows, lowStock, showCost, compac
             <View style={s.skuRow}>
               {(() => {
                 const c = codeOf.get(r.key)!;
+                if (showBc && !c.pending) {
+                  return (
+                    <View style={s.bcBox}>
+                      <Barcode value={c.text} height={34} maxWidth={compact ? 200 : 170} />
+                    </View>
+                  );
+                }
                 return (
                   <View
                     style={[s.skuChip, c.custom && s.skuChipCustom, tone && { backgroundColor: tone.bg }]}
@@ -152,6 +205,14 @@ export function SkuMatrix({ productCode, attrs, rows, lowStock, showCost, compac
       })}
       <Text style={s.foot}>ป้ายใต้ชื่อ SKU = บาร์โค้ด (กำหนดเอง) ถ้าตั้งไว้แล้ว ไม่งั้นเป็นรหัสอัตโนมัติ รหัสสินค้า-0001 · ป้ายสีเหลือง = เหลือน้อย · สีแดง = หมด · รองรับ SKU สูงสุด {MAX_SKU} รายการ (เช่น ดำ/XL = 1 รายการ) · จำนวนที่แก้จะปรับจากยอดล่าสุด ไม่ทับยอดที่ขายไประหว่างแก้ไข</Text>
 
+      <BarcodeLabelSheet
+        visible={printOpen}
+        onClose={() => setPrintOpen(false)}
+        title={`พิมพ์บาร์โค้ด · ${productName.trim() || productCode || 'สินค้า'}`}
+        items={labelItems}
+        note={pendingCount ? `มี ${pendingCount} SKU ที่ยังไม่บันทึก — กดบันทึกสินค้าก่อนจึงจะพิมพ์บาร์โค้ดได้` : undefined}
+      />
+
       <Sheet visible={!!bulk} onClose={() => setBulk(null)} title={bulk ? `ตั้ง${COL_LABEL[bulk]}ทุกแถว` : ''} width={360}
         footer={
           <Pressable
@@ -182,6 +243,11 @@ export function SkuMatrix({ productCode, attrs, rows, lowStock, showCost, compac
 }
 
 const s = StyleSheet.create({
+  tools: { flexDirection: 'row', gap: 8, marginBottom: 8, flexWrap: 'wrap' },
+  toolBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: '#fff' },
+  toolOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  toolText: { fontFamily: font, fontSize: 13, color: colors.text },
+  bcBox: { backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, borderRadius: radius.sm, paddingVertical: 4, paddingHorizontal: 6, alignSelf: 'stretch' },
   thead: { flexDirection: 'row', gap: 6, backgroundColor: colors.surface, borderRadius: radius.sm, paddingVertical: 8, paddingHorizontal: 6, alignItems: 'center' },
   th: { fontFamily: font, fontSize: 12, fontWeight: '600', color: colors.text, textAlign: 'center' },
   thBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },

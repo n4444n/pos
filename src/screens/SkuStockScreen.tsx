@@ -6,6 +6,8 @@ import { Icon, type IconName } from '../components/Icon';
 import { NavDrawer, refreshStockBadge, Sidebar, type Route } from '../components/NavMenu';
 import { Sheet } from '../components/Sheet';
 import { Barcode } from '../components/stock/Barcode';
+import { BarcodeLabelSheet } from '../components/stock/BarcodeLabelSheet';
+import type { LabelItem } from '../labels';
 import { ImportProductsSheet } from '../components/stock/ImportProductsSheet';
 import { ProductEditor } from '../components/stock/ProductEditor';
 import { StockCommand } from '../components/stock/StockCommand';
@@ -67,6 +69,20 @@ function matrixOf(p: SkuProduct): Matrix {
   };
 }
 
+/** SKU ทุกรุ่นของสินค้า → ป้ายบาร์โค้ด (รหัส = บาร์โค้ดกำหนดเอง ถ้าไม่มีใช้รหัส SKU) */
+function labelItemsOf(products: SkuProduct[]): LabelItem[] {
+  return products.flatMap((p) =>
+    p.variants.map((v) => ({
+      key: String(v.id),
+      name: p.name,
+      variant: [v.color, v.extra, v.size].filter((x) => x && x !== '-').join(' / ') || 'ปกติ',
+      code: v.barcode || v.sku,
+      price: v.price,
+      stock: v.stock,
+    })),
+  );
+}
+
 interface Props {
   onNavigate: (r: Route) => void;
   onStockChanged: () => void;
@@ -99,6 +115,8 @@ export function SkuStockScreen({ onNavigate, onStockChanged }: Props) {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [showImg, setShowImg] = useState(true);
+  // พิมพ์บาร์โค้ด: สินค้าเดียว (ทุกรุ่น) หรือทุกสินค้าในหน้านี้
+  const [labelFor, setLabelFor] = useState<{ title: string; products: SkuProduct[] } | null>(null);
   const [showCmd, setShowCmd] = useState(false); // ปิดไว้ทุกครั้งที่เข้าหน้า — กดปุ่ม >_ เพื่อเปิด
   const [menu, setMenu] = useState<'status' | 'category' | 'limit' | null>(null);
   const [cellDlg, setCellDlg] = useState<{ p: SkuProduct; cell: SkuCell } | null>(null);
@@ -510,6 +528,11 @@ export function SkuStockScreen({ onNavigate, onStockChanged }: Props) {
                 <Text style={s.count}>{data ? `${n0(data.total)} สินค้า · ${n0(data.skus)} SKU · ${n0(data.units)} ชิ้น` : '—'}</Text>
                 {loading ? <ActivityIndicator size="small" color={colors.primary} /> : null}
                 <ToolBtn icon={showImg ? 'image-outline' : 'image'} on={!showImg} label={showImg ? 'ซ่อนรูป' : 'แสดงรูป'} onPress={() => setShowImg((v) => !v)} />
+                <ToolBtn
+                  icon="print-outline"
+                  label="พิมพ์บาร์โค้ดทุกสินค้าในหน้านี้"
+                  onPress={() => data?.products.length && setLabelFor({ title: `พิมพ์บาร์โค้ด · ${data.products.length} สินค้าในหน้านี้`, products: data.products })}
+                />
                 <ToolBtn icon="terminal-outline" on={showCmd} label={showCmd ? 'ซ่อนคำสั่งพิเศษ' : 'แสดงคำสั่งพิเศษ'} onPress={() => setShowCmd((v) => !v)} />
                 <ToolBtn
                   icon="barcode-outline"
@@ -569,6 +592,14 @@ export function SkuStockScreen({ onNavigate, onStockChanged }: Props) {
                         </View>
                         {inlinePid === p.id ? null : manager ? <Icon name="pencil" size={16} color={colors.primary} /> : null}
                       </Pressable>
+                      <Pressable
+                        style={[s.row, { gap: 6, paddingHorizontal: 10, paddingBottom: 8 }]}
+                        onPress={() => setLabelFor({ title: `พิมพ์บาร์โค้ด · ${p.name}`, products: [p] })}
+                        accessibilityLabel={`พิมพ์บาร์โค้ด ${p.name}`}
+                      >
+                        <Icon name="barcode-outline" size={15} color={colors.primary} />
+                        <Text style={[s.sub, { color: colors.primary }]}>พิมพ์บาร์โค้ดทุกรุ่น</Text>
+                      </Pressable>
                       {inlinePid === p.id ? <View style={{ padding: 10, paddingBottom: 0 }}>{editActions(p, true)}</View> : null}
                       {m.rows.map((row) => (
                         <View key={row.key} style={s.cardRow}>
@@ -612,6 +643,14 @@ export function SkuStockScreen({ onNavigate, onStockChanged }: Props) {
                           <Text style={s.name} numberOfLines={2}>{p.name}</Text>
                           {!p.active ? <Text style={s.off}>ปิดขายทั้งสินค้า</Text> : p.category ? <Text style={s.sub}>{p.category}</Text> : null}
                         </View>
+                        <Pressable
+                          onPress={() => setLabelFor({ title: `พิมพ์บาร์โค้ด · ${p.name}`, products: [p] })}
+                          hitSlop={6}
+                          accessibilityLabel={`พิมพ์บาร์โค้ด ${p.name}`}
+                          style={s.editBtn}
+                        >
+                          <Icon name="barcode-outline" size={14} color={colors.text} />
+                        </Pressable>
                         {manager ? (
                           <Pressable
                             onPress={() => (inlinePid === p.id ? cancelInline() : startInline(p))}
@@ -803,6 +842,12 @@ export function SkuStockScreen({ onNavigate, onStockChanged }: Props) {
           onStockChanged();
           refreshStockBadge();
         }}
+      />
+      <BarcodeLabelSheet
+        visible={!!labelFor}
+        onClose={() => setLabelFor(null)}
+        title={labelFor?.title}
+        items={labelFor ? labelItemsOf(labelFor.products) : []}
       />
       <ToastView toast={toast} onDone={clearToast} />
     </View>

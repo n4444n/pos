@@ -278,6 +278,7 @@ export function ProductEditor({ productId, categories, onCategoriesChanged, onCl
         </View>
         <SkuMatrix
           productCode={draft.code.trim() || full?.sku || ''}
+          productName={draft.name}
           attrs={draft.attrs}
           rows={draft.rows}
           lowStock={draft.lowStock}
