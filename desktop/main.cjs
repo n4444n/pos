@@ -23,10 +23,12 @@ const DEFAULTS = {
   serverUrl: DEFAULT_SERVER,
   // วิธีพิมพ์: 'raster' = ESC/POS แบบรูปภาพ ส่งตรงเข้าเครื่องพิมพ์ใบเสร็จ (แนะนำ) · 'driver' = ผ่านไดรเวอร์ Windows (แบบเดิม)
   printMode: 'raster',
-  connection: 'usb', //   ESC/POS: 'usb' = เครื่องพิมพ์ใน Windows (ส่งแบบ RAW) · 'network' = LAN/WiFi
+  connection: 'usb', //   ESC/POS: 'usb' = เครื่องพิมพ์ใน Windows (ส่งแบบ RAW) · 'network' = LAN/WiFi · 'bluetooth' = พอร์ต COM
   printer: '', //          ชื่อเครื่องพิมพ์ใน Windows ('' = เครื่องหลัก — ใช้ได้เฉพาะโหมดไดรเวอร์)
   host: '', //             ESC/POS LAN: IP เครื่องพิมพ์
   port: 9100,
+  comPort: '', //          Bluetooth: พอร์ต COM เสมือนของเครื่องพิมพ์ที่จับคู่แล้ว (เช่น COM5)
+  baud: 9600, //           Bluetooth ไม่สนใจค่านี้ · สาย Serial ต้องตรงกับเครื่องพิมพ์
   paperWidth: null, //     null = ตามตั้งค่าร้าน · 58 / 80 = บังคับเฉพาะเครื่องนี้
   dots: 0, //              ความกว้างพิมพ์ (จุด) · 0 = อัตโนมัติ (58 → 384, 80 → 576)
   threshold: 160, //       ความเข้ม 80–230 (มาก = เข้ม)
@@ -60,10 +62,12 @@ function sanitize(c) {
   return {
     serverUrl,
     printMode: c.printMode === 'driver' ? 'driver' : 'raster',
-    connection: c.connection === 'network' ? 'network' : 'usb',
+    connection: c.connection === 'network' || c.connection === 'bluetooth' ? c.connection : 'usb',
     printer: String(c.printer || ''),
     host: String(c.host || '').trim().slice(0, 100),
     port: num(c.port, 1, 65535, 9100),
+    comPort: /^COM\d{1,3}$/i.test(String(c.comPort || '')) ? String(c.comPort).toUpperCase() : '',
+    baud: [9600, 19200, 38400, 57600, 115200].includes(Number(c.baud)) ? Number(c.baud) : 9600,
     paperWidth: c.paperWidth === 58 || c.paperWidth === 80 ? c.paperWidth : null,
     dots: dots && dots < 200 ? 200 : dots - (dots % 8), // ทวีคูณของ 8
     threshold: num(c.threshold, 80, 230, 160),
@@ -326,6 +330,7 @@ function sendRaw(data, opts) {
     if (!opts.host) throw new Error('ยังไม่ได้ใส่ IP เครื่องพิมพ์ (ตั้งค่าเครื่องนี้ → LAN/WiFi)');
     return escpos.sendNetwork(opts.host, opts.port, data);
   }
+  if (opts.connection === 'bluetooth') return escpos.sendSerial(opts.comPort, opts.baud, data);
   return escpos.sendWindowsRaw(opts.printer, data);
 }
 
@@ -367,7 +372,7 @@ const TEST_PAGE = (pw, opts = config) => `<!doctype html><html lang="th"><head><
 </style></head><body>
   <h3 class="c" style="margin:6px 0">ทดสอบเครื่องพิมพ์</h3>
   <div class="c">Clothing POS ${app.getVersion()}</div><hr>
-  <div>กระดาษ: ${pw} มม.${opts.printMode === 'raster' ? ` · ESC/POS ${dotsOf(pw, opts)} จุด · ${opts.connection === 'network' ? `LAN ${opts.host}:${opts.port}` : 'USB'}` : ' · ไดรเวอร์ Windows'}</div>
+  <div>กระดาษ: ${pw} มม.${opts.printMode === 'raster' ? ` · ESC/POS ${dotsOf(pw, opts)} จุด · ${opts.connection === 'network' ? `LAN ${opts.host}:${opts.port}` : opts.connection === 'bluetooth' ? `Bluetooth ${opts.comPort}` : 'USB'}` : ' · ไดรเวอร์ Windows'}</div>
   <div>เวลา: ${new Date().toLocaleString('th-TH')}</div>
   <div class="bar"></div><div class="ruler"><span>|ซ้าย</span><span>กลาง</span><span>ขวา|</span></div><div class="bar"></div>
   <div>ความเข้ม (ไล่สีขาว → ดำ)</div><div class="grey"></div>
@@ -434,7 +439,7 @@ ipcMain.on('pos:open-drawer', (e, info) => {
 });
 
 // ---- เครื่องพิมพ์: ใช้ทั้งหน้าตั้งค่าในแอป (file://) และหน้า ตั้งค่า → ใบเสร็จ ในระบบ POS (เซิร์ฟเวอร์)
-const PRINTER_KEYS = ['printMode', 'connection', 'printer', 'host', 'port', 'paperWidth', 'dots', 'threshold', 'cut', 'feedTop', 'feedBottom', 'drawer', 'drawerPin', 'silent'];
+const PRINTER_KEYS = ['printMode', 'connection', 'printer', 'host', 'port', 'comPort', 'baud', 'paperWidth', 'dots', 'threshold', 'cut', 'feedTop', 'feedBottom', 'drawer', 'drawerPin', 'silent'];
 const pickPrinter = (c) => Object.fromEntries(PRINTER_KEYS.filter((k) => c && k in c).map((k) => [k, c[k]]));
 const printerConfig = () => ({ ...pickPrinter(config), version: app.getVersion() });
 async function listPrinters(wc) {
@@ -468,6 +473,7 @@ const deny = { ok: false, error: 'not allowed' };
 
 ipcMain.handle('shell:get-config', (e) => (fromShell(e) ? { ...config, version: app.getVersion(), defaultServer: DEFAULT_SERVER } : null));
 ipcMain.handle('shell:list-printers', (e) => (fromShell(e) ? listPrinters(e.sender) : []));
+ipcMain.handle('shell:list-ports', (e) => (fromShell(e) ? escpos.listSerialPorts() : []));
 ipcMain.handle('shell:test-print', (e, c) => (fromShell(e) ? testPrint(c) : deny));
 ipcMain.handle('shell:preview', (e, c) => (fromShell(e) ? previewTest(c) : deny));
 ipcMain.handle('shell:test-drawer', (e, c) => (fromShell(e) ? testDrawer(c) : deny));
@@ -475,6 +481,7 @@ ipcMain.handle('shell:test-drawer', (e, c) => (fromShell(e) ? testDrawer(c) : de
 // หน้า ตั้งค่า → ใบเสร็จ ในระบบ POS — แก้ได้เฉพาะค่าเครื่องพิมพ์ (ไม่ให้หน้าเว็บเปลี่ยนที่อยู่เซิร์ฟเวอร์)
 ipcMain.handle('pos:printer-get', (e) => (fromServer(e) ? printerConfig() : null));
 ipcMain.handle('pos:printer-list', (e) => (fromServer(e) ? listPrinters(e.sender) : []));
+ipcMain.handle('pos:printer-ports', (e) => (fromServer(e) ? escpos.listSerialPorts() : []));
 ipcMain.handle('pos:printer-test', (e, c) => (fromServer(e) ? testPrint(c) : deny));
 ipcMain.handle('pos:printer-preview', (e, c) => (fromServer(e) ? previewTest(c) : deny));
 ipcMain.handle('pos:printer-drawer', (e, c) => (fromServer(e) ? testDrawer(c) : deny));

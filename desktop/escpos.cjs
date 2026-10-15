@@ -1,7 +1,7 @@
 // ESC/POS — พิมพ์ใบเสร็จเป็น "รูปภาพ" ส่งตรงเข้าเครื่องพิมพ์ใบเสร็จ (ไม่ผ่านไดรเวอร์ Windows)
 // - ภาษาไทยออกถูกทุกตัว (ส่งเป็นภาพ ไม่ใช้ตารางอักษรของเครื่องพิมพ์)
 // - ตัดกระดาษ (GS V) · เปิดลิ้นชักเงิน (ESC p) · เว้นระยะหัว/ท้าย (ESC J)
-// - ส่งทาง LAN/WiFi (TCP 9100) หรือ USB (Windows spooler แบบ RAW)
+// - ส่งทาง LAN/WiFi (TCP 9100) · USB (Windows spooler แบบ RAW) · Bluetooth (พอร์ต COM เสมือน)
 // ไม่พึ่ง Electron — ทดสอบด้วย node ได้ และใช้ร่วมกับตัวจำลองเครื่องพิมพ์ (tools/printer-emulator.cjs)
 const net = require('node:net');
 const fs = require('node:fs');
@@ -162,27 +162,104 @@ public static class PosRawPrinter {
 [PosRawPrinter]::Send($Printer, [System.IO.File]::ReadAllBytes($Path))
 `;
 
-function sendWindowsRaw(printerName, data) {
-  if (process.platform !== 'win32') return Promise.reject(new Error('ส่งแบบ USB (RAW) ใช้ได้บน Windows เท่านั้น'));
-  if (!printerName) return Promise.reject(new Error('ยังไม่ได้เลือกเครื่องพิมพ์ USB'));
+/** รันสคริปต์ PowerShell (เขียนเป็นไฟล์ชั่วคราว) · data = ไฟล์งานพิมพ์ที่ส่งเป็น -Path */
+function runPs(script, args, data, timeout = 30_000) {
+  if (process.platform !== 'win32') return Promise.reject(new Error('ใช้ได้บน Windows เท่านั้น'));
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pos-print-'));
-  const ps1 = path.join(dir, 'raw.ps1');
-  const bin = path.join(dir, 'job.bin');
-  fs.writeFileSync(ps1, '﻿' + RAW_PS1, 'utf8'); // BOM: ให้ PowerShell 5 อ่าน UTF-8 ถูก
-  fs.writeFileSync(bin, data);
+  const ps1 = path.join(dir, 'run.ps1');
+  fs.writeFileSync(ps1, '﻿' + script, 'utf8'); // BOM: ให้ PowerShell 5 อ่าน UTF-8 ถูก
+  const extra = [];
+  if (data) {
+    const bin = path.join(dir, 'job.bin');
+    fs.writeFileSync(bin, data);
+    extra.push('-Path', bin);
+  }
   return new Promise((resolve, reject) => {
     execFile(
       'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', ps1, '-Printer', printerName, '-Path', bin],
-      { windowsHide: true, timeout: 30_000 },
-      (err, _out, stderr) => {
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', ps1, ...args, ...extra],
+      { windowsHide: true, timeout, encoding: 'utf8' },
+      (err, out, stderr) => {
         fs.rm(dir, { recursive: true, force: true }, () => {});
-        if (!err) return resolve();
-        const msg = String(stderr || err.message).trim().split(/\r?\n/)[0];
-        reject(new Error(/OpenPrinter/.test(msg) ? `ไม่พบเครื่องพิมพ์ "${printerName}" ใน Windows` : `ส่งงานพิมพ์ไม่สำเร็จ: ${msg}`));
+        if (!err) return resolve(String(out));
+        reject(new Error(String(stderr || err.message).trim().split(/\r?\n/)[0]));
       },
     );
   });
 }
 
-module.exports = { DOTS_PER_MM, defaultDots, toMono, concatMono, sliceMono, trimBottom, buildJob, drawerOnly, sendNetwork, sendWindowsRaw };
+function sendWindowsRaw(printerName, data) {
+  if (!printerName) return Promise.reject(new Error('ยังไม่ได้เลือกเครื่องพิมพ์ USB'));
+  return runPs(RAW_PS1, ['-Printer', printerName], data).then(
+    () => undefined,
+    (e) => {
+      throw new Error(/OpenPrinter/.test(e.message) ? `ไม่พบเครื่องพิมพ์ "${printerName}" ใน Windows` : `ส่งงานพิมพ์ไม่สำเร็จ: ${e.message}`);
+    },
+  );
+}
+
+// Bluetooth (และสาย Serial/RS232): เครื่องพิมพ์ Bluetooth ที่จับคู่ใน Windows แล้วจะได้พอร์ต COM เสมือน
+// ("Standard Serial over Bluetooth link (COM5)") → เขียนข้อมูลดิบเข้าพอร์ตนั้น
+const SERIAL_PS1 = String.raw`param([string]$Port, [int]$Baud = 9600, [string]$Path)
+$ErrorActionPreference = 'Stop'
+$data = [System.IO.File]::ReadAllBytes($Path)
+$sp = New-Object System.IO.Ports.SerialPort $Port, $Baud, ([System.IO.Ports.Parity]::None), 8, ([System.IO.Ports.StopBits]::One)
+$sp.Handshake = [System.IO.Ports.Handshake]::None
+$sp.WriteTimeout = 15000
+$sp.Open()
+try {
+  # ส่งทีละช่วง — เครื่องพิมพ์ Bluetooth บางรุ่นบัฟเฟอร์เล็ก
+  for ($i = 0; $i -lt $data.Length; $i += 1024) {
+    $n = [Math]::Min(1024, $data.Length - $i)
+    $sp.Write($data, $i, $n)
+    while ($sp.BytesToWrite -gt 0) { Start-Sleep -Milliseconds 10 }
+  }
+  Start-Sleep -Milliseconds 300
+} finally { $sp.Close() }
+`;
+
+const LIST_PORTS_PS1 = String.raw`$ErrorActionPreference = 'SilentlyContinue'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$names = @{}
+Get-CimInstance Win32_PnPEntity -Filter "PNPClass='Ports'" | ForEach-Object {
+  if ($_.Name -match '\((COM\d+)\)') { $names[$Matches[1]] = @{ name = $_.Name; id = [string]$_.PNPDeviceID } }
+}
+$out = foreach ($p in [System.IO.Ports.SerialPort]::GetPortNames() | Sort-Object -Unique) {
+  $n = $names[$p]
+  [pscustomobject]@{ port = $p; name = $(if ($n) { $n.name } else { $p }); bluetooth = [bool]($n -and ($n.name -match 'Bluetooth' -or $n.id -match 'BTHENUM')) }
+}
+ConvertTo-Json -Compress @($out)
+`;
+
+/** รายชื่อพอร์ต COM (Bluetooth / Serial) ในเครื่องนี้ */
+async function listSerialPorts() {
+  if (process.platform !== 'win32') return [];
+  try {
+    const out = (await runPs(LIST_PORTS_PS1, [], null, 15_000)).trim();
+    const list = out ? JSON.parse(out) : [];
+    return (Array.isArray(list) ? list : [list]).filter((x) => x && x.port);
+  } catch {
+    return [];
+  }
+}
+
+function sendSerial(port, baud, data) {
+  if (!/^COM\d+$/i.test(port || '')) return Promise.reject(new Error('ยังไม่ได้เลือกพอร์ต Bluetooth (COM)'));
+  return runPs(SERIAL_PS1, ['-Port', port.toUpperCase(), '-Baud', String(baud || 9600)], data, 60_000).then(
+    () => undefined,
+    (e) => {
+      const m = e.message;
+      throw new Error(
+        /does not exist|ไม่มี/i.test(m)
+          ? `ไม่พบพอร์ต ${port} — จับคู่ Bluetooth ใหม่ หรือเลือกพอร์ตอื่น`
+          : /denied|in use|UnauthorizedAccess/i.test(m)
+            ? `พอร์ต ${port} ถูกใช้งานอยู่ หรือเครื่องพิมพ์ไม่ได้เปิด/อยู่ไกลเกินไป`
+            : /semaphore|timeout|timed out/i.test(m)
+              ? `เชื่อมต่อเครื่องพิมพ์ทาง ${port} ไม่ได้ — ตรวจว่าเครื่องพิมพ์เปิดอยู่และอยู่ใกล้ (ถ้ามี 2 พอร์ต ให้ลองอีกพอร์ต)`
+              : `ส่งงานพิมพ์ทาง ${port} ไม่สำเร็จ: ${m}`,
+      );
+    },
+  );
+}
+
+module.exports = { DOTS_PER_MM, defaultDots, toMono, concatMono, sliceMono, trimBottom, buildJob, drawerOnly, sendNetwork, sendWindowsRaw, sendSerial, listSerialPorts };

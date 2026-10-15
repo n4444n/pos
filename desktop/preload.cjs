@@ -11,6 +11,7 @@ if (location.protocol === 'file:') {
     getConfig: () => ipcRenderer.invoke('shell:get-config'),
     saveConfig: (c) => ipcRenderer.invoke('shell:save-config', c),
     listPrinters: () => ipcRenderer.invoke('shell:list-printers'),
+    listPorts: () => ipcRenderer.invoke('shell:list-ports'),
     testPrint: (c) => ipcRenderer.invoke('shell:test-print', c),
     preview: (c) => ipcRenderer.invoke('shell:preview', c),
     testDrawer: (c) => ipcRenderer.invoke('shell:test-drawer', c),
@@ -27,6 +28,7 @@ if (location.protocol === 'file:') {
     printer: {
       get: () => ipcRenderer.invoke('pos:printer-get'),
       list: () => ipcRenderer.invoke('pos:printer-list'),
+      ports: () => ipcRenderer.invoke('pos:printer-ports'),
       test: (c) => ipcRenderer.invoke('pos:printer-test', c),
       preview: (c) => ipcRenderer.invoke('pos:printer-preview', c),
       testDrawer: (c) => ipcRenderer.invoke('pos:printer-drawer', c),
