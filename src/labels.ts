@@ -122,8 +122,9 @@ function labelCss(p: LabelProfile) {
   * { box-sizing: border-box; margin: 0; padding: 0 }
   html, body { background: #fff; color: #000; font-family: 'Sarabun', 'Tahoma', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact }
   .lbl { width: ${p.width}mm; height: ${p.height}mm; padding: ${p.padding}mm; display: flex; flex-direction: column; justify-content: center; overflow: hidden; line-height: 1.15; text-align: ${p.align}; flex: none }
-  .shop { font-size: ${Math.max(4, p.nameSize - 1)}pt; ${tw} white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-  .name { font-size: ${p.nameSize}pt; ${tw} white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+  /* ชื่อยาว/ตัวใหญ่ → ขึ้นบรรทัดใหม่ (สูงสุด 2 บรรทัด) แทนการตัดเป็น … */
+  .shop { font-size: ${Math.max(4, p.nameSize - 1)}pt; ${tw} white-space: normal; overflow-wrap: anywhere; word-break: break-word; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; flex: none }
+  .name { font-size: ${p.nameSize}pt; ${tw} white-space: normal; overflow-wrap: anywhere; word-break: break-word; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; flex: none }
   .meta { display: flex; justify-content: ${just}; gap: 2mm; white-space: nowrap; font-size: ${p.nameSize}pt }
   .meta.both { justify-content: space-between }
   .meta span { overflow: hidden; text-overflow: ellipsis; ${p.italic ? 'font-style: italic;' : ''} }
@@ -133,7 +134,6 @@ function labelCss(p: LabelProfile) {
   .code { margin-top: ${p.textGap}mm; font-family: 'Consolas', 'Courier New', monospace; font-size: ${p.codeSize}pt; letter-spacing: .4px; white-space: nowrap; overflow: hidden }
   .bad { font-size: ${Math.max(4, p.codeSize - 1)}pt; color: #c00; text-align: center }
   /* แบบเดิม: รหัสตัวหนาใต้บาร์โค้ด ราคาอยู่ล่างสุด */
-  .classic .name { white-space: nowrap }
   .classic .code { font-weight: 700 }
   .classic .price { margin-top: .3mm; font-size: ${p.priceSize}pt; ${tw} white-space: nowrap }`;
 }
