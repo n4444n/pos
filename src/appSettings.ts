@@ -1,3 +1,4 @@
+import type { Symbology } from './barcodeEncode';
 // การตั้งค่าที่หน้าขาย/ใบเสร็จใช้ (โหลดมากับ bootstrap) — เก็บไว้ที่เดียวให้ทุกหน้าอ่านได้
 import { useEffect, useState } from 'react';
 import { PAYMENT_LABEL } from './format';
@@ -42,9 +43,10 @@ export interface LabelProfile {
   cols: number; rows: number;
   /** ระยะห่างระหว่างดวง / ขอบกระดาษ / ขอบในดวง (มม.) */
   gapX: number; gapY: number; marginTop: number; marginLeft: number; padding: number;
-  symbology: 'auto' | 'code128' | 'ean13';
-  /** ความสูงบาร์โค้ด (มม.) · ความกว้าง (% ของดวง) */
-  barHeight: number; barWidth: number;
+  /** ประเภทบาร์โค้ดบนป้าย (auto = ตามเมนู บาร์โค้ด) */
+  symbology: Symbology;
+  /** ความสูงบาร์โค้ด (มม.) · ความกว้าง (% ของดวง) · ความหนาแท่งแคบสุด (มม.: 0 = ยืดเต็มความกว้าง %) */
+  barHeight: number; barWidth: number; barModule: number;
   showCode: boolean; showName: boolean; showVariant: boolean; showPrice: boolean; showShop: boolean;
   bold: boolean; italic: boolean;
   align: 'left' | 'center' | 'right';
@@ -55,7 +57,7 @@ export interface LabelProfile {
 }
 export const DEFAULT_LABEL_PROFILE: LabelProfile = {
   id: 'p1', name: 'โปรไฟล์ 1', paper: 'roll', width: 50, height: 30, cols: 1, rows: 1, gapX: 2, gapY: 0, marginTop: 0, marginLeft: 0, padding: 1.2,
-  symbology: 'auto', barHeight: 10, barWidth: 90, showCode: true, showName: true, showVariant: true, showPrice: true, showShop: false,
+  symbology: 'auto', barHeight: 10, barWidth: 90, barModule: 0, showCode: true, showName: true, showVariant: true, showPrice: true, showShop: false,
   bold: true, italic: false, align: 'center', codeSize: 8, nameSize: 8, priceSize: 8, textGap: 0.5,
 };
 

@@ -20,7 +20,8 @@ import type { Toast } from '../store/usePos';
 import { colors, font, radius } from '../theme';
 import { desktop, type PrinterConfig } from '../desktop';
 import { DEFAULT_LABEL_PROFILE, type LabelProfile } from '../appSettings';
-import { LABEL_PRESETS, profileSummary } from '../labels';
+import { LABEL_PRESETS, profileSummary, resolveSymbology, SAMPLE_LABEL, symbologyLabel } from '../labels';
+import { SYMBOLOGIES, type Symbology } from '../barcodeEncode';
 import { LabelPreview } from '../components/stock/LabelPreview';
 
 type SectionId = 'shop' | 'display' | 'stock' | 'payments' | 'barcode' | 'labels' | 'receipt' | 'printer' | 'notify';
@@ -1391,6 +1392,9 @@ function LabelsSection({ v, set }: { v: AdminSettings['barcode']; set: Upd<Admin
     setSelId(rest[0].id);
   };
   const isDefault = (v.labelProfile || profiles[0].id) === p.id;
+  // ตัวอย่างใช้รหัสที่เข้ากับประเภทบาร์โค้ด (EAN/UPC ต้องเป็นตัวเลข)
+  const SAMPLE_CODES: Partial<Record<Symbology, string>> = { ean13: '8850001234568', ean8: '96385074', upca: '036000291452', code39: 'AC-004-90' };
+  const sample = { ...SAMPLE_LABEL, code: SAMPLE_CODES[resolveSymbology(p.symbology)] ?? SAMPLE_LABEL.code };
   const rollWidth = p.marginLeft + p.cols * p.width + (p.cols - 1) * p.gapX;
   const a4 = p.paper === 'a4';
 
@@ -1455,12 +1459,25 @@ function LabelsSection({ v, set }: { v: AdminSettings['barcode']; set: Upd<Admin
       </Card>
 
       <Card title="บาร์โค้ด">
-        <Field label="ประเภท" hint="ตามตั้งค่าร้าน = ตามเมนู บาร์โค้ด · EAN-13 ใช้เมื่อรหัสเป็นตัวเลข 13 หลักที่ถูกต้อง (ไม่งั้นพิมพ์เป็น Code 128)">
-          <Seg value={p.symbology} options={[['auto', 'ตามตั้งค่าร้าน'], ['code128', 'Code 128'], ['ean13', 'EAN-13']]} onChange={(x) => upd({ symbology: x as LabelProfile['symbology'] })} />
+        <Field label="ประเภท" hint="รหัสที่ใช้กับประเภทที่เลือกไม่ได้ (เช่น มีตัวอักษรแต่เลือก EAN-13) จะพิมพ์เป็น Code 128 อัตโนมัติแทน — สแกนขายได้เหมือนเดิม">
+          <View style={[s.row, { flexWrap: 'wrap' }]}>
+            {([{ id: 'auto', label: 'ตามตั้งค่าร้าน', hint: 'ตามเมนู บาร์โค้ด' }, ...SYMBOLOGIES] as { id: Symbology; label: string; hint: string }[]).map((x) => {
+              const on = p.symbology === x.id;
+              return (
+                <Pressable key={x.id} onPress={() => upd({ symbology: x.id })} style={({ hovered }: { hovered?: boolean }) => [s.presetChip, on && s.profileOn, hovered && !on && { borderColor: colors.primary }]} accessibilityRole="radio" accessibilityState={{ checked: on }}>
+                  <Text style={[s.presetT, on && { color: colors.primary }]}>{x.label}</Text>
+                  <Text style={s.hint}>{x.hint}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </Field>
-        <Grid max={3}>
+        <Grid max={4}>
           <Field label="ความสูงบาร์โค้ด (มม.)"><NumStep value={p.barHeight} min={3} max={60} step={0.5} onChange={(n) => upd({ barHeight: n })} /></Field>
-          <Field label="ความกว้างบาร์โค้ด (% ของดวง)"><NumStep value={p.barWidth} min={30} max={100} step={5} onChange={(n) => upd({ barWidth: n })} /></Field>
+          <Field label="ความหนาแท่ง (มม.)" hint="0 = ยืดตามความกว้าง % · เครื่องพิมพ์ 203 dpi แนะนำ 0.25 ขึ้นไป">
+            <NumStep value={p.barModule ?? 0} min={0} max={1} step={0.05} onChange={(n) => upd({ barModule: n })} />
+          </Field>
+          <Field label="ความกว้างบาร์โค้ด (% ของดวง)" hint={(p.barModule ?? 0) > 0 ? 'ไม่ใช้ เมื่อตั้งความหนาแท่ง' : undefined}><NumStep value={p.barWidth} min={30} max={100} step={5} onChange={(n) => upd({ barWidth: n })} /></Field>
           <Field label="ระยะห่างบาร์โค้ด/ตัวหนังสือ (มม.)"><NumStep value={p.textGap} min={0} max={10} step={0.5} onChange={(n) => upd({ textGap: n })} /></Field>
         </Grid>
       </Card>
@@ -1491,9 +1508,9 @@ function LabelsSection({ v, set }: { v: AdminSettings['barcode']; set: Upd<Admin
     <View style={[{ gap: 12 }, wide ? { width: 380 } : { width: '100%' }]}>
       <Card title="ตัวอย่างป้าย">
         <View style={s.previewBox}>
-          <LabelPreview profile={p} maxWidth={wide ? 340 : 520} />
+          <LabelPreview profile={p} sample={sample} maxWidth={wide ? 340 : 520} />
         </View>
-        <Text style={s.hint}>{p.name} · {profileSummary(p)}</Text>
+        <Text style={s.hint}>{p.name} · {profileSummary(p)} · {symbologyLabel(resolveSymbology(p.symbology))}</Text>
         <Text style={s.hint}>
           ตัวอย่างใช้รูปแบบเดียวกับตอนพิมพ์จริง · พิมพ์ป้ายได้ที่หน้า สต็อกสินค้า → ปุ่มพิมพ์บาร์โค้ด · ในหน้าต่างพิมพ์ เลือกเครื่องพิมพ์ป้าย ขนาดกระดาษให้ตรง และระยะขอบ: ไม่มี
         </Text>
@@ -1511,11 +1528,12 @@ function LabelsSection({ v, set }: { v: AdminSettings['barcode']; set: Upd<Admin
 
 /** ช่องตัวเลข + ปุ่ม − / + (รองรับทศนิยมตาม step) */
 function NumStep({ value, min, max, step, onChange }: { value: number; min: number; max: number; step: number; onChange: (n: number) => void }) {
-  const dec = step < 1 ? 1 : 0;
-  const fmt = (n: number) => (dec ? String(Math.round(n * 10) / 10) : String(Math.round(n)));
+  const dec = step < 0.1 ? 2 : step < 1 ? 1 : 0;
+  const k = 10 ** dec;
+  const fmt = (n: number) => String(Math.round(n * k) / k);
   const [text, setText] = useState(fmt(value));
   useEffect(() => setText(fmt(value)), [value]); // eslint-disable-line react-hooks/exhaustive-deps
-  const commit = (n: number) => onChange(Math.max(min, Math.min(max, dec ? Math.round(n * 10) / 10 : Math.round(n))));
+  const commit = (n: number) => onChange(Math.max(min, Math.min(max, Math.round(n * k) / k)));
   return (
     <View style={s.row}>
       <Pressable style={s.arrow} onPress={() => commit(value - step)} accessibilityLabel="ลด"><Icon name="remove" size={16} color={colors.text} /></Pressable>

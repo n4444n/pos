@@ -110,9 +110,11 @@ export interface LabelProfile {
   gapX: number; gapY: number; marginTop: number; marginLeft: number;
   /** ระยะขอบในดวง (มม.) */
   padding: number;
-  symbology: 'auto' | 'code128' | 'ean13';
+  symbology: 'auto' | 'code128' | 'code128b' | 'ean13' | 'ean8' | 'upca' | 'code39';
   /** ความสูงบาร์โค้ด (มม.) · ความกว้าง % ของดวง */
   barHeight: number; barWidth: number;
+  /** ความหนาแท่งแคบสุด (มม.) · 0 = ยืดเต็มความกว้าง % */
+  barModule: number;
   showCode: boolean; showName: boolean; showVariant: boolean; showPrice: boolean; showShop: boolean;
   bold: boolean; italic: boolean;
   align: 'left' | 'center' | 'right';
@@ -123,7 +125,7 @@ export interface LabelProfile {
 }
 export const DEFAULT_LABEL_PROFILE: LabelProfile = {
   id: 'p1', name: 'โปรไฟล์ 1', paper: 'roll', width: 50, height: 30, cols: 1, rows: 1, gapX: 2, gapY: 0, marginTop: 0, marginLeft: 0, padding: 1.2,
-  symbology: 'auto', barHeight: 10, barWidth: 90, showCode: true, showName: true, showVariant: true, showPrice: true, showShop: false,
+  symbology: 'auto', barHeight: 10, barWidth: 90, barModule: 0, showCode: true, showName: true, showVariant: true, showPrice: true, showShop: false,
   bold: true, italic: false, align: 'center', codeSize: 8, nameSize: 8, priceSize: 8, textGap: 0.5,
 };
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -140,8 +142,9 @@ export function cleanLabelProfile(v: Record<string, any>, i = 0): LabelProfile {
     cols: Math.round(n(v?.cols, 1, paper === 'a4' ? 8 : 4, 1)), rows: Math.round(n(v?.rows, 1, 30, 1)),
     gapX: n(v?.gapX, 0, 20, d.gapX), gapY: n(v?.gapY, 0, 20, d.gapY), marginTop: n(v?.marginTop, 0, 30, 0), marginLeft: n(v?.marginLeft, 0, 30, 0),
     padding: n(v?.padding, 0, 6, d.padding),
-    symbology: ['auto', 'code128', 'ean13'].includes(v?.symbology) ? v.symbology : 'auto',
+    symbology: ['auto', 'code128', 'code128b', 'ean13', 'ean8', 'upca', 'code39'].includes(v?.symbology) ? v.symbology : 'auto',
     barHeight: n(v?.barHeight, 3, 60, d.barHeight), barWidth: Math.round(n(v?.barWidth, 30, 100, d.barWidth)),
+    barModule: Math.round(Math.min(1, Math.max(0, Number(v?.barModule) || 0)) * 100) / 100,
     showCode: b(v?.showCode, true), showName: b(v?.showName, true), showVariant: b(v?.showVariant, true), showPrice: b(v?.showPrice, true), showShop: b(v?.showShop, false),
     bold: b(v?.bold, true), italic: b(v?.italic, false),
     align: ['left', 'center', 'right'].includes(v?.align) ? v.align : 'center',
