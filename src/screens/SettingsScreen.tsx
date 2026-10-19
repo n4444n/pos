@@ -20,7 +20,7 @@ import type { Toast } from '../store/usePos';
 import { colors, font, radius } from '../theme';
 import { desktop, type PrinterConfig } from '../desktop';
 import { DEFAULT_LABEL_PROFILE, type LabelProfile } from '../appSettings';
-import { LABEL_PRESETS, profileSummary, resolveSymbology, SAMPLE_LABEL, symbologyLabel } from '../labels';
+import { LABEL_PRESETS, printLabels, profileSummary, resolveSymbology, SAMPLE_LABEL, symbologyLabel } from '../labels';
 import { SYMBOLOGIES, type Symbology } from '../barcodeEncode';
 import { LabelPreview } from '../components/stock/LabelPreview';
 
@@ -1392,6 +1392,7 @@ function LabelsSection({ v, set }: { v: AdminSettings['barcode']; set: Upd<Admin
     setSelId(rest[0].id);
   };
   const isDefault = (v.labelProfile || profiles[0].id) === p.id;
+  const [testBlocked, setTestBlocked] = useState(false);
   // ตัวอย่างใช้รหัสที่เข้ากับประเภทบาร์โค้ด (EAN/UPC ต้องเป็นตัวเลข)
   const SAMPLE_CODES: Partial<Record<Symbology, string>> = { ean13: '8850001234568', ean8: '96385074', upca: '036000291452', code39: 'AC-004-90' };
   const sample = { ...SAMPLE_LABEL, code: SAMPLE_CODES[resolveSymbology(p.symbology)] ?? SAMPLE_LABEL.code };
@@ -1511,8 +1512,17 @@ function LabelsSection({ v, set }: { v: AdminSettings['barcode']; set: Upd<Admin
           <LabelPreview profile={p} sample={sample} maxWidth={wide ? 340 : 520} />
         </View>
         <Text style={s.hint}>{p.name} · {profileSummary(p)} · {symbologyLabel(resolveSymbology(p.symbology))}</Text>
+        {/* ทดสอบพิมพ์ด้วยค่าที่ตั้งอยู่ตอนนี้ (ยังไม่ต้องบันทึก) — 1 แถว (ไม่เปลืองสติ๊กเกอร์) */}
+        <View style={[s.row, { flexWrap: 'wrap' }]}>
+          <SmallBtn
+            label="ทดสอบพิมพ์"
+            icon="print-outline"
+            onPress={() => setTestBlocked(!printLabels(Array.from({ length: p.cols }, () => sample), p))}
+          />
+        </View>
+        {testBlocked ? <Text style={[s.hint, { color: colors.danger }]}>เปิดหน้าต่างพิมพ์ไม่ได้ — อนุญาต pop-up ของหน้านี้ แล้วกดอีกครั้ง</Text> : null}
         <Text style={s.hint}>
-          ตัวอย่างใช้รูปแบบเดียวกับตอนพิมพ์จริง · พิมพ์ป้ายได้ที่หน้า สต็อกสินค้า → ปุ่มพิมพ์บาร์โค้ด · ในหน้าต่างพิมพ์ เลือกเครื่องพิมพ์ป้าย ขนาดกระดาษให้ตรง และระยะขอบ: ไม่มี
+          ตัวอย่างใช้รูปแบบเดียวกับตอนพิมพ์จริง · ทดสอบพิมพ์ใช้ค่าที่ตั้งอยู่ตอนนี้ได้เลย (ยังไม่ต้องบันทึก) · ในหน้าต่างพิมพ์ เลือกเครื่องพิมพ์ป้าย ขนาดกระดาษให้ตรง และระยะขอบ: ไม่มี
         </Text>
       </Card>
       <Card title="รูปแบบป้าย">
@@ -1526,7 +1536,7 @@ function LabelsSection({ v, set }: { v: AdminSettings['barcode']; set: Upd<Admin
             const on = (p.layout ?? 'standard') === id;
             return (
               <View key={id} style={{ width: '33.333%', paddingHorizontal: 4 }}>
-                <Pressable onPress={() => upd({ layout: id })} style={({ hovered }: { hovered?: boolean }) => [s.profileChip, { minWidth: 0, maxWidth: undefined, flex: 1 }, on && s.profileOn, hovered && !on && { borderColor: colors.primary }]} accessibilityRole="radio" accessibilityState={{ checked: on }}>
+                <Pressable onPress={() => upd({ layout: id })} style={({ hovered }: { hovered?: boolean }) => [s.profileChip, { minWidth: 0, maxWidth: undefined, flex: 1, alignItems: 'center', justifyContent: 'center' }, on && s.profileOn, hovered && !on && { borderColor: colors.primary }]} accessibilityRole="radio" accessibilityState={{ checked: on }}>
                   <Text style={[s.profileName, { textAlign: 'center' }, on && { color: colors.primary }]}>{label}</Text>
                 </Pressable>
               </View>
