@@ -149,8 +149,9 @@ function oneLabel(it: LabelItem, p: LabelProfile, shop: string) {
   const shopLine = p.showShop && shop ? `<div class="shop">${esc(shop)}</div>` : '';
   if (p.layout === 'compact') return `<div class="lbl">${bars}${code}</div>`;
   if (p.layout === 'classic') {
-    // ชื่อ + สี/ไซซ์ บรรทัดเดียว เช่น "T-Shirt Oversized Slab Ivory S"
-    const title = [p.showName ? it.name : '', p.showVariant ? it.variant.replace(/\s*\/\s*/g, ' ') : ''].filter(Boolean).join(' ');
+    // ชื่อ สี / ไซซ์ เช่น "T-SHIRT Black / 2XL" (สินค้าไม่มีตัวเลือก "ปกติ" → แสดงแค่ชื่อ)
+    const v = it.variant.trim();
+    const title = [p.showName ? it.name : '', p.showVariant && v && v !== 'ปกติ' ? v.replace(/\s*\/\s*/g, ' / ') : ''].filter(Boolean).join(' ');
     return `<div class="lbl classic">
     ${shopLine}
     ${title ? `<div class="name">${esc(title)}</div>` : ''}
