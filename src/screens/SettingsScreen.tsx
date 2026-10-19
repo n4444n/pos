@@ -1482,24 +1482,6 @@ function LabelsSection({ v, set }: { v: AdminSettings['barcode']; set: Upd<Admin
         </Grid>
       </Card>
 
-      <Card title="รูปแบบป้าย">
-        <View style={[s.row, { flexWrap: 'wrap' }]}>
-          {([
-            ['standard', 'มาตรฐาน', 'ชื่อ · สี/ไซซ์ + ราคา · บาร์โค้ด · รหัส'],
-            ['classic', 'แบบเดิม', 'ชื่อ + สี/ไซซ์ · บาร์โค้ด · รหัสตัวหนา · ราคาล่างสุด'],
-            ['compact', 'บาร์โค้ดอย่างเดียว', 'บาร์โค้ด · รหัส (ป้ายเล็ก)'],
-          ] as const).map(([id, label, hint]) => {
-            const on = (p.layout ?? 'standard') === id;
-            return (
-              <Pressable key={id} onPress={() => upd({ layout: id })} style={({ hovered }: { hovered?: boolean }) => [s.profileChip, on && s.profileOn, hovered && !on && { borderColor: colors.primary }]} accessibilityRole="radio" accessibilityState={{ checked: on }}>
-                <Text style={[s.profileName, on && { color: colors.primary }]}>{label}</Text>
-                <Text style={s.hint}>{hint}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </Card>
-
       <Card title="ข้อความบนป้าย">
         <Grid max={4}>
           <Toggle label="แสดงรหัส" value={p.showCode} onChange={(x) => upd({ showCode: x })} />
@@ -1532,6 +1514,23 @@ function LabelsSection({ v, set }: { v: AdminSettings['barcode']; set: Upd<Admin
         <Text style={s.hint}>
           ตัวอย่างใช้รูปแบบเดียวกับตอนพิมพ์จริง · พิมพ์ป้ายได้ที่หน้า สต็อกสินค้า → ปุ่มพิมพ์บาร์โค้ด · ในหน้าต่างพิมพ์ เลือกเครื่องพิมพ์ป้าย ขนาดกระดาษให้ตรง และระยะขอบ: ไม่มี
         </Text>
+      </Card>
+      <Card title="รูปแบบป้าย">
+        <View style={{ gap: 8 }}>
+          {([
+            ['standard', 'มาตรฐาน', 'ชื่อ · สี/ไซซ์ + ราคา · บาร์โค้ด · รหัส'],
+            ['classic', 'แบบเดิม', 'ชื่อ + สี/ไซซ์ · บาร์โค้ด · รหัสตัวหนา · ราคาล่างสุด'],
+            ['compact', 'บาร์โค้ดอย่างเดียว', 'บาร์โค้ด · รหัส (ป้ายเล็ก)'],
+          ] as const).map(([id, label, hint]) => {
+            const on = (p.layout ?? 'standard') === id;
+            return (
+              <Pressable key={id} onPress={() => upd({ layout: id })} style={({ hovered }: { hovered?: boolean }) => [s.profileChip, { maxWidth: undefined, alignSelf: 'stretch' }, on && s.profileOn, hovered && !on && { borderColor: colors.primary }]} accessibilityRole="radio" accessibilityState={{ checked: on }}>
+                <Text style={[s.profileName, on && { color: colors.primary }]}>{label}</Text>
+                <Text style={s.hint}>{hint}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </Card>
     </View>
   );
