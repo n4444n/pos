@@ -35,6 +35,22 @@ export function SkuMatrix({ productCode, productName = '', attrs, rows, lowStock
   // แสดงบาร์โค้ดแทนป้ายรหัส · หน้าต่างพิมพ์ป้ายบาร์โค้ด
   const [showBc, setShowBc] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
+  // แถวที่ติ๊กไว้ (พิมพ์บาร์โค้ดเฉพาะแถวที่เลือก · ไม่ได้เลือก = ทุกรุ่น)
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const pickedKeys = rows.filter((r) => picked.has(r.key)).map((r) => r.key);
+  const allPicked = rows.length > 0 && pickedKeys.length === rows.length;
+  const togglePick = (key: string) =>
+    setPicked((p) => {
+      const n = new Set(p);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      return n;
+    });
+  const checkbox = (on: boolean, onPress: () => void, label: string) => (
+    <Pressable onPress={onPress} hitSlop={6} style={s.checkCell} accessibilityRole="checkbox" accessibilityState={{ checked: on }} accessibilityLabel={label}>
+      <Icon name={on ? 'checkbox' : 'square-outline'} size={20} color={on ? colors.primary : colors.sub} />
+    </Pressable>
+  );
   const cols: Col[] = showCost ? ['cost', 'price', 'stock'] : ['price', 'stock'];
 
   const set = (key: string, patch: Partial<DRow>) => onChange(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -81,10 +97,10 @@ export function SkuMatrix({ productCode, productName = '', attrs, rows, lowStock
         style={({ hovered }: { hovered?: boolean }) => [s.toolBtn, hovered && { backgroundColor: colors.surface }, !labelItems.length && { opacity: 0.45 }]}
         disabled={!labelItems.length}
         onPress={() => setPrintOpen(true)}
-        accessibilityLabel="พิมพ์บาร์โค้ดทุกรุ่น"
+        accessibilityLabel={pickedKeys.length ? `พิมพ์บาร์โค้ด ${pickedKeys.length} รุ่นที่เลือก` : 'พิมพ์บาร์โค้ดทุกรุ่น'}
       >
         <Icon name="print-outline" size={18} color={colors.text} />
-        <Text style={s.toolText}>พิมพ์บาร์โค้ด</Text>
+        <Text style={s.toolText}>{pickedKeys.length ? `พิมพ์บาร์โค้ด (${pickedKeys.length})` : 'พิมพ์บาร์โค้ด'}</Text>
       </Pressable>
     </View>
   );
@@ -99,7 +115,8 @@ export function SkuMatrix({ productCode, productName = '', attrs, rows, lowStock
 
   const header = (
     <View style={s.thead}>
-      <Text style={[s.th, { flex: 1.4, textAlign: 'left', paddingLeft: 8 }]}>คุณสมบัติ</Text>
+      {checkbox(allPicked, () => setPicked(allPicked ? new Set() : new Set(rows.map((r) => r.key))), 'เลือกทุกแถว')}
+      <Text style={[s.th, { flex: 1.4 }]}>คุณสมบัติ</Text>
       {cols.map((c) => (
         <Pressable key={c} style={[s.thBtn, { flex: 1 }]} onPress={() => { setBulk(c); setBulkVal(''); }} accessibilityLabel={`ตั้ง${COL_LABEL[c]}ทุกแถว`}>
           <Text style={[s.th, c !== 'stock' && { color: colors.primary }]}>{COL_LABEL[c]}</Text>
@@ -156,19 +173,19 @@ export function SkuMatrix({ productCode, productName = '', attrs, rows, lowStock
             <View style={[s.knob, r.active && { transform: [{ translateX: 18 }] }]} />
           </Pressable>
         );
-        const name = (
+        const cc = codeOf.get(r.key)!;
+        const name = showBc && !cc.pending ? (
+          // บาร์โค้ด: การ์ดกว้างเท่ากันทุกแถว → เรียงตรงกันในแนวตั้ง
+          <View style={[s.bcCard, compact && { alignSelf: 'flex-start' }]}>
+            <Text style={[s.bcLabel, !r.active && { color: colors.faint }]} numberOfLines={1}>{label}</Text>
+            <Barcode value={cc.text} height={34} maxWidth={160} />
+          </View>
+        ) : (
           <View style={{ gap: 3, alignItems: compact ? 'flex-start' : 'center' }}>
             <Text style={[s.label, !r.active && { color: colors.faint }]} numberOfLines={2}>{label}</Text>
             <View style={s.skuRow}>
               {(() => {
-                const c = codeOf.get(r.key)!;
-                if (showBc && !c.pending) {
-                  return (
-                    <View style={s.bcBox}>
-                      <Barcode value={c.text} height={34} maxWidth={compact ? 200 : 170} />
-                    </View>
-                  );
-                }
+                const c = cc;
                 return (
                   <View
                     style={[s.skuChip, c.custom && s.skuChipCustom, tone && { backgroundColor: tone.bg }]}
@@ -190,14 +207,16 @@ export function SkuMatrix({ productCode, productName = '', attrs, rows, lowStock
         return compact ? (
           <View key={r.key} style={[s.card, !r.active && { opacity: 0.6 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              {name}
+              {checkbox(picked.has(r.key), () => togglePick(r.key), `เลือก ${label}`)}
+              <View style={{ flex: 1, minWidth: 0 }}>{name}</View>
               {toggle}
             </View>
             <View style={{ flexDirection: 'row', gap: 8 }}>{cells}</View>
           </View>
         ) : (
           <View key={r.key} style={[s.tr, !r.active && { opacity: 0.6 }]}>
-            <View style={{ flex: 1.4 }}>{name}</View>
+            {checkbox(picked.has(r.key), () => togglePick(r.key), `เลือก ${label}`)}
+            <View style={{ flex: 1.4, alignItems: 'center' }}>{name}</View>
             {cells}
             <View style={{ width: 64, alignItems: 'center' }}>{toggle}</View>
           </View>
@@ -210,6 +229,7 @@ export function SkuMatrix({ productCode, productName = '', attrs, rows, lowStock
         onClose={() => setPrintOpen(false)}
         title={`พิมพ์บาร์โค้ด · ${productName.trim() || productCode || 'สินค้า'}`}
         items={labelItems}
+        preselect={pickedKeys.length ? pickedKeys : undefined}
         note={pendingCount ? `มี ${pendingCount} SKU ที่ยังไม่บันทึก — กดบันทึกสินค้าก่อนจึงจะพิมพ์บาร์โค้ดได้` : undefined}
       />
 
@@ -247,7 +267,9 @@ const s = StyleSheet.create({
   toolBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: '#fff' },
   toolOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   toolText: { fontFamily: font, fontSize: 13, color: colors.text },
-  bcBox: { backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, borderRadius: radius.sm, paddingVertical: 4, paddingHorizontal: 6, alignSelf: 'stretch' },
+  checkCell: { width: 32, alignItems: 'center', justifyContent: 'center' },
+  bcCard: { width: 176, alignSelf: 'center', alignItems: 'center', gap: 2, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, paddingVertical: 6, paddingHorizontal: 8 },
+  bcLabel: { fontFamily: font, fontSize: 12, fontWeight: '700', color: colors.text, textAlign: 'center' },
   thead: { flexDirection: 'row', gap: 6, backgroundColor: colors.surface, borderRadius: radius.sm, paddingVertical: 8, paddingHorizontal: 6, alignItems: 'center' },
   th: { fontFamily: font, fontSize: 12, fontWeight: '600', color: colors.text, textAlign: 'center' },
   thBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
