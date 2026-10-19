@@ -2,7 +2,7 @@
 // เปิดหน้าต่างพิมพ์ของระบบ ให้เลือกเครื่องพิมพ์ป้ายเอง (ป้ายมักใช้เครื่องพิมพ์คนละตัวกับใบเสร็จ)
 import { Platform } from 'react-native';
 import { DEFAULT_LABEL_PROFILE, getAppSettings, type LabelProfile } from './appSettings';
-import { code128, ean13 } from './components/stock/Barcode';
+import { encodeBarcode, SYMBOLOGIES, type Symbology } from './barcodeEncode';
 
 export interface LabelItem {
   key: string;
@@ -63,23 +63,33 @@ export function rememberLabelProfile(id: string) {
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
-/** ความกว้างแท่งบาร์โค้ด: auto = ตามตั้งค่าร้าน · ean13 ใช้เมื่อรหัสเป็น EAN-13 ที่ถูกต้อง ไม่งั้น Code 128 */
-export function barcodeWidths(code: string, symbology: LabelProfile['symbology'] = 'auto'): number[] | null {
-  const sym = symbology === 'auto' ? getAppSettings().barcode.symbology : symbology;
-  return (sym === 'ean13' && ean13(code)) || code128(code);
+/** ประเภทที่ใช้จริง: auto = ตามเมนู บาร์โค้ด ของร้าน */
+export const resolveSymbology = (sym: Symbology = 'auto'): Exclude<Symbology, 'auto'> =>
+  sym === 'auto' ? (getAppSettings().barcode.symbology === 'ean13' ? 'ean13' : 'code128') : sym;
+
+/** ความกว้างแท่งบาร์โค้ด (รหัสที่ใช้กับประเภทที่เลือกไม่ได้ → Code 128 อัตโนมัติ) */
+export function barcodeWidths(code: string, symbology: Symbology = 'auto'): number[] | null {
+  return encodeBarcode(code, resolveSymbology(symbology))?.widths ?? null;
 }
 
-function barsSvg(code: string, sym: LabelProfile['symbology']) {
+/** ชื่อประเภทบาร์โค้ด (ไว้แสดงในหน้าตั้งค่า) */
+export const symbologyLabel = (sym: Exclude<Symbology, 'auto'>) => SYMBOLOGIES.find((x) => x.id === sym)?.label ?? sym;
+
+/** ช่องว่างหัว-ท้ายบาร์โค้ด (หน่วยแท่งแคบ) ให้เครื่องสแกนจับขอบได้ */
+const QUIET = 8;
+
+/** แท่งบาร์โค้ด (SVG) + ความกว้างรวมเป็นหน่วยแท่งแคบ */
+function barsSvg(code: string, sym: Symbology): { svg: string; modules: number } {
   const w = barcodeWidths(code, sym);
-  if (!w) return '<div class="bad">รหัสมีตัวอักษรที่พิมพ์เป็นบาร์โค้ดไม่ได้</div>';
-  const quiet = 6;
-  let x = quiet;
+  if (!w) return { svg: '<div class="bad">รหัสมีตัวอักษรที่พิมพ์เป็นบาร์โค้ดไม่ได้</div>', modules: 0 };
+  let x = QUIET;
   const bars: string[] = [];
   w.forEach((n, i) => {
     if (i % 2 === 0) bars.push(`<rect x="${x}" y="0" width="${n}" height="40"/>`);
     x += n;
   });
-  return `<svg class="bars" viewBox="0 0 ${x + quiet} 40" preserveAspectRatio="none">${bars.join('')}</svg>`;
+  const total = x + QUIET;
+  return { svg: `<svg class="bars" viewBox="0 0 ${total} 40" preserveAspectRatio="none" shape-rendering="crispEdges">${bars.join('')}</svg>`, modules: total };
 }
 
 /** ขยายรายการตามจำนวนดวงของแต่ละ SKU */
@@ -125,11 +135,15 @@ function labelCss(p: LabelProfile) {
 
 function oneLabel(it: LabelItem, p: LabelProfile, shop: string) {
   const meta = p.showVariant || p.showPrice;
+  const bc = barsSvg(it.code, p.symbology);
+  // ความหนาแท่งคงที่: กว้าง = จำนวนแท่ง × ความหนา (ไม่เกินความกว้างในดวง) · ไม่งั้นยืดตาม % ที่ตั้งไว้
+  const inner = Math.max(1, p.width - p.padding * 2);
+  const fixedW = p.barModule > 0 && bc.modules ? Math.min(inner, bc.modules * p.barModule) : 0;
   return `<div class="lbl">
     ${p.showShop && shop ? `<div class="shop">${esc(shop)}</div>` : ''}
     ${p.showName ? `<div class="name">${esc(it.name)}</div>` : ''}
     ${meta ? `<div class="meta${p.showVariant && p.showPrice ? ' both' : ''}">${p.showVariant ? `<span>${esc(it.variant)}</span>` : ''}${p.showPrice ? `<b>${price(it.price)}</b>` : ''}</div>` : ''}
-    <div class="code-wrap">${barsSvg(it.code, p.symbology)}</div>
+    <div class="code-wrap"${fixedW ? ` style="width:${Math.round(fixedW * 100) / 100}mm"` : ''}>${bc.svg}</div>
     ${p.showCode ? `<div class="code">${esc(it.code)}</div>` : ''}
   </div>`;
 }
