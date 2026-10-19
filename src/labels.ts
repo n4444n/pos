@@ -24,6 +24,7 @@ export const LABEL_PRESETS: { id: string; label: string; hint: string; apply: Pa
   { id: 'r30x20', label: '30 × 20 มม.', hint: 'ม้วน · 1 ดวง/แถว', apply: { paper: 'roll', width: 30, height: 20, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 0.8, barHeight: 7, nameSize: 6, codeSize: 6, priceSize: 6 } },
   { id: 'r32x25', label: '32 × 25 มม.', hint: 'ม้วน · 1 ดวง/แถว', apply: { paper: 'roll', width: 32, height: 25, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1, barHeight: 9, nameSize: 6, codeSize: 6, priceSize: 6 } },
   { id: 'r40x30', label: '40 × 30 มม.', hint: 'ม้วน · 1 ดวง/แถว', apply: { paper: 'roll', width: 40, height: 30, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1.2, barHeight: 10, nameSize: 7, codeSize: 7, priceSize: 7 } },
+  { id: 'r50x30old', label: '50 × 30 แบบเดิม', hint: 'ชื่อ+สีไซซ์ · รหัสตัวหนา · ราคาล่าง', apply: { paper: 'roll', width: 50, height: 30, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1.2, layout: 'classic', align: 'center', bold: false, italic: false, showName: true, showVariant: true, showPrice: true, showCode: true, barHeight: 8, barWidth: 70, barModule: 0, textGap: 0.3, nameSize: 8, codeSize: 7, priceSize: 10 } },
   { id: 'r50x30', label: '50 × 30 มม.', hint: 'ม้วน · 1 ดวง/แถว (นิยม)', apply: { paper: 'roll', width: 50, height: 30, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1.2, barHeight: 10, nameSize: 8, codeSize: 8, priceSize: 8 } },
   { id: 'r60x40', label: '60 × 40 มม.', hint: 'ม้วน · 1 ดวง/แถว', apply: { paper: 'roll', width: 60, height: 40, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1.5, barHeight: 14, nameSize: 9, codeSize: 9, priceSize: 10 } },
   { id: 'r33x25x3', label: '33 × 25 มม. × 3', hint: 'ม้วน 105 มม. · 3 ดวง/แถว', apply: { paper: 'roll', width: 33, height: 25, cols: 3, rows: 1, gapX: 2, marginLeft: 1, marginTop: 0, padding: 1, barHeight: 9, nameSize: 6, codeSize: 6, priceSize: 6 } },
@@ -130,7 +131,11 @@ function labelCss(p: LabelProfile) {
   .code-wrap { height: ${p.barHeight}mm; width: ${p.barWidth}%; flex: none; margin: .5mm 0 0; align-self: ${just}; position: relative }
   .bars { position: absolute; inset: 0; width: 100%; height: 100% }
   .code { margin-top: ${p.textGap}mm; font-family: 'Consolas', 'Courier New', monospace; font-size: ${p.codeSize}pt; letter-spacing: .4px; white-space: nowrap; overflow: hidden }
-  .bad { font-size: ${Math.max(4, p.codeSize - 1)}pt; color: #c00; text-align: center }`;
+  .bad { font-size: ${Math.max(4, p.codeSize - 1)}pt; color: #c00; text-align: center }
+  /* แบบเดิม: รหัสตัวหนาใต้บาร์โค้ด ราคาอยู่ล่างสุด */
+  .classic .name { white-space: nowrap }
+  .classic .code { font-weight: 700 }
+  .classic .price { margin-top: .3mm; font-size: ${p.priceSize}pt; ${tw} white-space: nowrap }`;
 }
 
 function oneLabel(it: LabelItem, p: LabelProfile, shop: string) {
@@ -139,12 +144,25 @@ function oneLabel(it: LabelItem, p: LabelProfile, shop: string) {
   // ความหนาแท่งคงที่: กว้าง = จำนวนแท่ง × ความหนา (ไม่เกินความกว้างในดวง) · ไม่งั้นยืดตาม % ที่ตั้งไว้
   const inner = Math.max(1, p.width - p.padding * 2);
   const fixedW = p.barModule > 0 && bc.modules ? Math.min(inner, bc.modules * p.barModule) : 0;
+  const bars = `<div class="code-wrap"${fixedW ? ` style="width:${Math.round(fixedW * 100) / 100}mm"` : ''}>${bc.svg}</div>`;
+  const code = p.showCode ? `<div class="code">${esc(it.code)}</div>` : '';
+  const shopLine = p.showShop && shop ? `<div class="shop">${esc(shop)}</div>` : '';
+  if (p.layout === 'compact') return `<div class="lbl">${bars}${code}</div>`;
+  if (p.layout === 'classic') {
+    // ชื่อ + สี/ไซซ์ บรรทัดเดียว เช่น "T-Shirt Oversized Slab Ivory S"
+    const title = [p.showName ? it.name : '', p.showVariant ? it.variant.replace(/\s*\/\s*/g, ' ') : ''].filter(Boolean).join(' ');
+    return `<div class="lbl classic">
+    ${shopLine}
+    ${title ? `<div class="name">${esc(title)}</div>` : ''}
+    ${bars}${code}
+    ${p.showPrice ? `<div class="price">${price(it.price)}</div>` : ''}
+  </div>`;
+  }
   return `<div class="lbl">
-    ${p.showShop && shop ? `<div class="shop">${esc(shop)}</div>` : ''}
+    ${shopLine}
     ${p.showName ? `<div class="name">${esc(it.name)}</div>` : ''}
     ${meta ? `<div class="meta${p.showVariant && p.showPrice ? ' both' : ''}">${p.showVariant ? `<span>${esc(it.variant)}</span>` : ''}${p.showPrice ? `<b>${price(it.price)}</b>` : ''}</div>` : ''}
-    <div class="code-wrap"${fixedW ? ` style="width:${Math.round(fixedW * 100) / 100}mm"` : ''}>${bc.svg}</div>
-    ${p.showCode ? `<div class="code">${esc(it.code)}</div>` : ''}
+    ${bars}${code}
   </div>`;
 }
 

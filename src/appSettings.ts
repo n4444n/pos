@@ -47,6 +47,8 @@ export interface LabelProfile {
   symbology: Symbology;
   /** ความสูงบาร์โค้ด (มม.) · ความกว้าง (% ของดวง) · ความหนาแท่งแคบสุด (มม.: 0 = ยืดเต็มความกว้าง %) */
   barHeight: number; barWidth: number; barModule: number;
+  /** รูปแบบการจัดวาง: standard = ชื่อ / สี-ไซซ์·ราคา / บาร์โค้ด / รหัส · classic = ชื่อ+สีไซซ์ / บาร์โค้ด / รหัสตัวหนา / ราคา (แบบเดิม) · compact = บาร์โค้ด + รหัส */
+  layout: 'standard' | 'classic' | 'compact';
   showCode: boolean; showName: boolean; showVariant: boolean; showPrice: boolean; showShop: boolean;
   bold: boolean; italic: boolean;
   align: 'left' | 'center' | 'right';
@@ -57,7 +59,7 @@ export interface LabelProfile {
 }
 export const DEFAULT_LABEL_PROFILE: LabelProfile = {
   id: 'p1', name: 'โปรไฟล์ 1', paper: 'roll', width: 50, height: 30, cols: 1, rows: 1, gapX: 2, gapY: 0, marginTop: 0, marginLeft: 0, padding: 1.2,
-  symbology: 'auto', barHeight: 10, barWidth: 90, barModule: 0, showCode: true, showName: true, showVariant: true, showPrice: true, showShop: false,
+  symbology: 'auto', barHeight: 10, barWidth: 90, barModule: 0, layout: 'standard', showCode: true, showName: true, showVariant: true, showPrice: true, showShop: false,
   bold: true, italic: false, align: 'center', codeSize: 8, nameSize: 8, priceSize: 8, textGap: 0.5,
 };
 
