@@ -1516,18 +1516,21 @@ function LabelsSection({ v, set }: { v: AdminSettings['barcode']; set: Upd<Admin
         </Text>
       </Card>
       <Card title="รูปแบบป้าย">
-        <View style={{ gap: 8 }}>
+        {/* ตาราง 3 คอลัมน์ · มีรูปแบบเพิ่ม → ขึ้นแถวใหม่ */}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4, rowGap: 8 }}>
           {([
-            ['standard', 'มาตรฐาน', 'ชื่อ · สี/ไซซ์ + ราคา · บาร์โค้ด · รหัส'],
-            ['classic', 'แบบเดิม', 'ชื่อ + สี/ไซซ์ · บาร์โค้ด · รหัสตัวหนา · ราคาล่างสุด'],
-            ['compact', 'บาร์โค้ดอย่างเดียว', 'บาร์โค้ด · รหัส (ป้ายเล็ก)'],
+            ['standard', 'มาตรฐาน', 'ชื่อ / สีไซซ์ + ราคา / บาร์โค้ด / รหัส'],
+            ['classic', 'แบบเดิม', 'ชื่อ+สีไซซ์ / บาร์โค้ด / รหัสหนา / ราคาล่าง'],
+            ['compact', 'บาร์โค้ดอย่างเดียว', 'บาร์โค้ด / รหัส (ป้ายเล็ก)'],
           ] as const).map(([id, label, hint]) => {
             const on = (p.layout ?? 'standard') === id;
             return (
-              <Pressable key={id} onPress={() => upd({ layout: id })} style={({ hovered }: { hovered?: boolean }) => [s.profileChip, { maxWidth: undefined, alignSelf: 'stretch' }, on && s.profileOn, hovered && !on && { borderColor: colors.primary }]} accessibilityRole="radio" accessibilityState={{ checked: on }}>
-                <Text style={[s.profileName, on && { color: colors.primary }]}>{label}</Text>
-                <Text style={s.hint}>{hint}</Text>
-              </Pressable>
+              <View key={id} style={{ width: '33.333%', paddingHorizontal: 4 }}>
+                <Pressable onPress={() => upd({ layout: id })} style={({ hovered }: { hovered?: boolean }) => [s.profileChip, { minWidth: 0, maxWidth: undefined, flex: 1 }, on && s.profileOn, hovered && !on && { borderColor: colors.primary }]} accessibilityRole="radio" accessibilityState={{ checked: on }}>
+                  <Text style={[s.profileName, on && { color: colors.primary }]}>{label}</Text>
+                  <Text style={s.hint}>{hint}</Text>
+                </Pressable>
+              </View>
             );
           })}
         </View>
