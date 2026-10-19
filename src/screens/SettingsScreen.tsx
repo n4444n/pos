@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type ViewStyle } from 'react-native';
 import { api, BASE, imageSrc, type AdminSettings, type ApiKeyRow, type NotifyEventInfo, type NotifyEventKey } from '../api';
 import { FlexCard } from '../components/notify/FlexCard';
 import { QrView } from '../components/QrView';
@@ -1523,7 +1523,7 @@ function LabelsSection({ v, set }: { v: AdminSettings['barcode']; set: Upd<Admin
   );
 
   const side = (
-    <View style={[{ gap: 12 }, wide ? { width: 380 } : { width: '100%' }]}>
+    <View style={[{ gap: 12 }, wide ? [{ width: 380 }, STICKY] : { width: '100%' }]}>
       <Card title="ตัวอย่างป้าย">
         <View style={s.previewBox}>
           <LabelPreview profile={p} sample={sample} maxWidth={wide ? 340 : 520} />
@@ -1784,7 +1784,7 @@ function PrinterSection({ shopPaper, notify, goReceipt }: { shopPaper: 58 | 80; 
 
   // ---------- คอลัมน์ขวา: บันทึก ทดสอบ ตัวอย่าง ----------
   const side = (
-    <View style={[{ gap: 12 }, wide ? { width: 380 } : { width: '100%' }]}>
+    <View style={[{ gap: 12 }, wide ? [{ width: 380 }, STICKY] : { width: '100%' }]}>
       <Card title="บันทึก & ทดสอบ">
         <Text style={s.hint}>ค่าในหน้านี้ใช้เฉพาะคอมพิวเตอร์เครื่องนี้ บันทึกแยกจากตั้งค่าร้าน · พิมพ์ทดสอบ/ดูตัวอย่างใช้ค่าที่เลือกอยู่ได้ก่อนบันทึก</Text>
         <View style={[s.row, { flexWrap: 'wrap' }]}>
@@ -1875,6 +1875,9 @@ function Stepper({ value, min, max, step, presets, onChange }: { value: number; 
 }
 
 // ======================= ชิ้นส่วนฟอร์ม =======================
+/** คอลัมน์ขวา (ตัวอย่าง / บันทึก) ติดอยู่ด้านบนขณะเลื่อนเนื้อหาฝั่งซ้าย — position: sticky ใช้ได้บนเว็บ */
+const STICKY = { position: 'sticky', top: 0, alignSelf: 'flex-start' } as unknown as ViewStyle;
+
 function Card({ title, children }: { title?: string; children: ReactNode }) {
   return (
     <View style={s.card}>
