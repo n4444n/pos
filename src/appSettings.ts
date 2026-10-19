@@ -54,13 +54,15 @@ export interface LabelProfile {
   align: 'left' | 'center' | 'right';
   /** ขนาดตัวอักษร (pt) */
   codeSize: number; nameSize: number; priceSize: number;
-  /** ระยะห่างบาร์โค้ด/ตัวหนังสือ (มม.) */
+  /** ระยะห่างบาร์โค้ด/รหัสใต้บาร์โค้ด (มม.) */
   textGap: number;
+  /** ระยะห่างชื่อสินค้า/บาร์โค้ด (มม.) */
+  nameGap: number;
 }
 export const DEFAULT_LABEL_PROFILE: LabelProfile = {
   id: 'p1', name: 'โปรไฟล์ 1', paper: 'roll', width: 50, height: 30, cols: 1, rows: 1, gapX: 2, gapY: 0, marginTop: 0, marginLeft: 0, padding: 1.2,
   symbology: 'auto', barHeight: 10, barWidth: 90, barModule: 0, layout: 'standard', showCode: true, showName: true, showVariant: true, showPrice: true, showShop: false,
-  bold: true, italic: false, align: 'center', codeSize: 8, nameSize: 8, priceSize: 8, textGap: 0.5,
+  bold: true, italic: false, align: 'center', codeSize: 8, nameSize: 8, priceSize: 8, textGap: 0.5, nameGap: 0.5,
 };
 
 export interface PublicSettings {

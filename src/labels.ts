@@ -24,7 +24,7 @@ export const LABEL_PRESETS: { id: string; label: string; hint: string; apply: Pa
   { id: 'r30x20', label: '30 × 20 มม.', hint: 'ม้วน · 1 ดวง/แถว', apply: { paper: 'roll', width: 30, height: 20, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 0.8, barHeight: 7, nameSize: 6, codeSize: 6, priceSize: 6 } },
   { id: 'r32x25', label: '32 × 25 มม.', hint: 'ม้วน · 1 ดวง/แถว', apply: { paper: 'roll', width: 32, height: 25, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1, barHeight: 9, nameSize: 6, codeSize: 6, priceSize: 6 } },
   { id: 'r40x30', label: '40 × 30 มม.', hint: 'ม้วน · 1 ดวง/แถว', apply: { paper: 'roll', width: 40, height: 30, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1.2, barHeight: 10, nameSize: 7, codeSize: 7, priceSize: 7 } },
-  { id: 'r50x30old', label: '50 × 30 แบบเดิม', hint: 'ชื่อ+สีไซซ์ · รหัสตัวหนา · ราคาล่าง', apply: { paper: 'roll', width: 50, height: 30, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1.2, layout: 'classic', align: 'center', bold: false, italic: false, showName: true, showVariant: true, showPrice: true, showCode: true, barHeight: 8, barWidth: 70, barModule: 0, textGap: 0.3, nameSize: 8, codeSize: 7, priceSize: 10 } },
+  { id: 'r50x30old', label: '50 × 30 แบบเดิม', hint: 'ชื่อ+สีไซซ์ · รหัสตัวหนา · ราคาล่าง', apply: { paper: 'roll', width: 50, height: 30, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1.2, layout: 'classic', align: 'center', bold: false, italic: false, showName: true, showVariant: true, showPrice: true, showCode: true, barHeight: 8, barWidth: 70, barModule: 0, textGap: 0.3, nameGap: 1, nameSize: 8, codeSize: 7, priceSize: 10 } },
   { id: 'r50x30', label: '50 × 30 มม.', hint: 'ม้วน · 1 ดวง/แถว (นิยม)', apply: { paper: 'roll', width: 50, height: 30, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1.2, barHeight: 10, nameSize: 8, codeSize: 8, priceSize: 8 } },
   { id: 'r60x40', label: '60 × 40 มม.', hint: 'ม้วน · 1 ดวง/แถว', apply: { paper: 'roll', width: 60, height: 40, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1.5, barHeight: 14, nameSize: 9, codeSize: 9, priceSize: 10 } },
   { id: 'r33x25x3', label: '33 × 25 มม. × 3', hint: 'ม้วน 105 มม. · 3 ดวง/แถว', apply: { paper: 'roll', width: 33, height: 25, cols: 3, rows: 1, gapX: 2, marginLeft: 1, marginTop: 0, padding: 1, barHeight: 9, nameSize: 6, codeSize: 6, priceSize: 6 } },
@@ -129,7 +129,7 @@ function labelCss(p: LabelProfile) {
   .meta.both { justify-content: space-between }
   .meta span { overflow: hidden; text-overflow: ellipsis; ${p.italic ? 'font-style: italic;' : ''} }
   .meta b { font-size: ${p.priceSize}pt; ${p.italic ? 'font-style: italic;' : ''} ${p.bold ? '' : 'font-weight: 400;'} }
-  .code-wrap { height: ${p.barHeight}mm; width: ${p.barWidth}%; flex: none; margin: .5mm 0 0; align-self: ${just}; position: relative }
+  .code-wrap { height: ${p.barHeight}mm; width: ${p.barWidth}%; flex: none; margin: ${p.nameGap ?? 0.5}mm 0 0; align-self: ${just}; position: relative }
   .bars { position: absolute; inset: 0; width: 100%; height: 100% }
   .code { margin-top: ${p.textGap}mm; font-family: 'Consolas', 'Courier New', monospace; font-size: ${p.codeSize}pt; letter-spacing: .4px; white-space: nowrap; overflow: hidden }
   .bad { font-size: ${Math.max(4, p.codeSize - 1)}pt; color: #c00; text-align: center }
