@@ -1479,7 +1479,8 @@ function LabelsSection({ v, set }: { v: AdminSettings['barcode']; set: Upd<Admin
             <NumStep value={p.barModule ?? 0} min={0} max={1} step={0.05} onChange={(n) => upd({ barModule: n })} />
           </Field>
           <Field label="ความกว้างบาร์โค้ด (% ของดวง)" hint={(p.barModule ?? 0) > 0 ? 'ไม่ใช้ เมื่อตั้งความหนาแท่ง' : undefined}><NumStep value={p.barWidth} min={30} max={100} step={5} onChange={(n) => upd({ barWidth: n })} /></Field>
-          <Field label="ระยะห่างบาร์โค้ด/ตัวหนังสือ (มม.)"><NumStep value={p.textGap} min={0} max={10} step={0.5} onChange={(n) => upd({ textGap: n })} /></Field>
+          <Field label="ระยะห่างชื่อสินค้า ↔ บาร์โค้ด (มม.)"><NumStep value={p.nameGap ?? 0.5} min={0} max={10} step={0.5} onChange={(n) => upd({ nameGap: n })} /></Field>
+          <Field label="ระยะห่างบาร์โค้ด ↔ รหัส (มม.)"><NumStep value={p.textGap} min={0} max={10} step={0.5} onChange={(n) => upd({ textGap: n })} /></Field>
         </Grid>
       </Card>
 

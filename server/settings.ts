@@ -121,13 +121,15 @@ export interface LabelProfile {
   align: 'left' | 'center' | 'right';
   /** ขนาดตัวอักษร (pt) */
   codeSize: number; nameSize: number; priceSize: number;
-  /** ระยะห่างบาร์โค้ด/ตัวหนังสือ (มม.) */
+  /** ระยะห่างบาร์โค้ด/รหัสใต้บาร์โค้ด (มม.) */
   textGap: number;
+  /** ระยะห่างชื่อสินค้า/บาร์โค้ด (มม.) */
+  nameGap: number;
 }
 export const DEFAULT_LABEL_PROFILE: LabelProfile = {
   id: 'p1', name: 'โปรไฟล์ 1', paper: 'roll', width: 50, height: 30, cols: 1, rows: 1, gapX: 2, gapY: 0, marginTop: 0, marginLeft: 0, padding: 1.2,
   symbology: 'auto', barHeight: 10, barWidth: 90, barModule: 0, layout: 'standard', showCode: true, showName: true, showVariant: true, showPrice: true, showShop: false,
-  bold: true, italic: false, align: 'center', codeSize: 8, nameSize: 8, priceSize: 8, textGap: 0.5,
+  bold: true, italic: false, align: 'center', codeSize: 8, nameSize: 8, priceSize: 8, textGap: 0.5, nameGap: 0.5,
 };
 const round1 = (n: number) => Math.round(n * 10) / 10;
 export function cleanLabelProfile(v: Record<string, any>, i = 0): LabelProfile {
@@ -152,6 +154,7 @@ export function cleanLabelProfile(v: Record<string, any>, i = 0): LabelProfile {
     align: ['left', 'center', 'right'].includes(v?.align) ? v.align : 'center',
     codeSize: n(v?.codeSize, 4, 20, d.codeSize), nameSize: n(v?.nameSize, 4, 20, d.nameSize), priceSize: n(v?.priceSize, 4, 24, d.priceSize),
     textGap: n(v?.textGap, 0, 10, d.textGap),
+    nameGap: n(v?.nameGap, 0, 10, d.nameGap),
   };
 }
 /** รายการโปรไฟล์: อย่างน้อย 1 · ไม่เกิน 12 · id ไม่ซ้ำ */
