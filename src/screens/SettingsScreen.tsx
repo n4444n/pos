@@ -1519,16 +1519,15 @@ function LabelsSection({ v, set }: { v: AdminSettings['barcode']; set: Upd<Admin
         {/* ตาราง 3 คอลัมน์ · มีรูปแบบเพิ่ม → ขึ้นแถวใหม่ */}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4, rowGap: 8 }}>
           {([
-            ['standard', 'มาตรฐาน', 'ชื่อ / สีไซซ์ + ราคา / บาร์โค้ด / รหัส'],
-            ['classic', 'แบบเดิม', 'ชื่อ+สีไซซ์ / บาร์โค้ด / รหัสหนา / ราคาล่าง'],
-            ['compact', 'บาร์โค้ดอย่างเดียว', 'บาร์โค้ด / รหัส (ป้ายเล็ก)'],
-          ] as const).map(([id, label, hint]) => {
+            ['standard', 'มาตรฐาน'],
+            ['classic', 'แบบเดิม'],
+            ['compact', 'บาร์โค้ดอย่างเดียว'],
+          ] as const).map(([id, label]) => {
             const on = (p.layout ?? 'standard') === id;
             return (
               <View key={id} style={{ width: '33.333%', paddingHorizontal: 4 }}>
                 <Pressable onPress={() => upd({ layout: id })} style={({ hovered }: { hovered?: boolean }) => [s.profileChip, { minWidth: 0, maxWidth: undefined, flex: 1 }, on && s.profileOn, hovered && !on && { borderColor: colors.primary }]} accessibilityRole="radio" accessibilityState={{ checked: on }}>
-                  <Text style={[s.profileName, on && { color: colors.primary }]}>{label}</Text>
-                  <Text style={s.hint}>{hint}</Text>
+                  <Text style={[s.profileName, { textAlign: 'center' }, on && { color: colors.primary }]}>{label}</Text>
                 </Pressable>
               </View>
             );
