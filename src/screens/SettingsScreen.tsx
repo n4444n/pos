@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type ViewStyle } from 'react-native';
 import { api, BASE, imageSrc, type AdminSettings, type ApiKeyRow, type NotifyEventInfo, type NotifyEventKey } from '../api';
 import { FlexCard } from '../components/notify/FlexCard';
@@ -23,6 +23,7 @@ import { DEFAULT_LABEL_PROFILE, type LabelProfile } from '../appSettings';
 import { LABEL_PRESETS, printLabels, profileSummary, resolveSymbology, SAMPLE_LABEL, symbologyLabel } from '../labels';
 import { SYMBOLOGIES, type Symbology } from '../barcodeEncode';
 import { LabelPreview } from '../components/stock/LabelPreview';
+import { useDragScroll } from '../dragScroll';
 
 type SectionId = 'shop' | 'display' | 'stock' | 'payments' | 'barcode' | 'labels' | 'labelPrinter' | 'receipt' | 'printer' | 'notify';
 /** หมวดที่บันทึกลงตั้งค่าร้านชุดเดียวกัน (กระดาษบาร์โค้ด → barcode) */
@@ -134,6 +135,8 @@ export function SettingsScreen({ onNavigate, onSettingsChanged }: Props) {
 
   const cur = SECTIONS.find((x) => x.id === section)!;
 
+  // จอแคบ: แถบแท็บแนวนอน — ลากด้วยเมาส์ / หมุนล้อเมาส์ / กดลูกศร เพื่อเลื่อน (ลากแล้วไม่นับเป็นการกดแท็บ)
+  const dragRef = useRef<() => boolean>(() => false);
   const nav = (
     <View style={twoPane ? s.navCol : s.navRow}>
       {SECTIONS.map((it) => {
@@ -142,6 +145,7 @@ export function SettingsScreen({ onNavigate, onSettingsChanged }: Props) {
           <Pressable
             key={it.id}
             onPress={() => {
+              if (!twoPane && dragRef.current()) return;
               if (dirty) notify('info', 'มีการแก้ไขที่ยังไม่บันทึกในหมวดเดิม — เปลี่ยนหมวดแล้ว ค่าที่แก้ยังอยู่จนกว่าจะออกจากหน้านี้');
               setSection(it.id);
             }}
@@ -179,7 +183,7 @@ export function SettingsScreen({ onNavigate, onSettingsChanged }: Props) {
           <ActivityIndicator style={{ marginTop: 40 }} color={colors.primary} />
         ) : (
           <View style={[{ flex: 1, minHeight: 0, gap: 12 }, twoPane && { flexDirection: 'row' }]}>
-            {twoPane ? <View style={{ width: 250 }}>{nav}</View> : <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>{nav}</ScrollView>}
+            {twoPane ? <View style={{ width: 250 }}>{nav}</View> : <TabScroller active={section} dragRef={dragRef}>{nav}</TabScroller>}
             <View style={{ flex: 1, minWidth: 0 }}>
               <View style={s.secHead}>
                 <Icon name={cur.icon} size={22} color={colors.primary} />
@@ -2077,6 +2081,67 @@ function Stepper({ value, min, max, step, presets, onChange }: { value: number; 
 /** คอลัมน์ขวา (ตัวอย่าง / บันทึก) ติดอยู่ด้านบนขณะเลื่อนเนื้อหาฝั่งซ้าย — position: sticky ใช้ได้บนเว็บ */
 const STICKY = { position: 'sticky', top: 0, alignSelf: 'flex-start' } as unknown as ViewStyle;
 
+/** แถบแท็บแนวนอน (จอแคบ): ลากเมาส์ · ล้อเมาส์ · ปุ่มลูกศรซ้าย/ขวา · เลื่อนแท็บที่เลือกให้อยู่ในจอ */
+function TabScroller({ children, active, dragRef }: { children: ReactNode; active: string; dragRef: MutableRefObject<() => boolean> }) {
+  const { ref, wasDragged } = useDragScroll();
+  dragRef.current = wasDragged;
+  const [state, setState] = useState({ x: 0, max: 0 });
+  const first = useRef(true);
+  const el = () => {
+    const sv = ref.current as unknown as { getScrollableNode?: () => HTMLElement } | null;
+    return (sv?.getScrollableNode?.() ?? null) as HTMLElement | null;
+  };
+  const measure = () => {
+    const e = el();
+    if (e) setState({ x: e.scrollLeft, max: Math.max(0, e.scrollWidth - e.clientWidth) });
+  };
+  // แท็บที่เลือกอยู่ → เลื่อนให้เห็น
+  useEffect(() => {
+    // รอ layout เสร็จก่อน (ตอนเปิดหน้าครั้งแรก ขนาดแท็บยังไม่ถูกคำนวณ)
+    const t = setTimeout(() => {
+      const e = el();
+      const i = SECTIONS.findIndex((x) => x.id === active);
+      const on = (i >= 0 ? e?.querySelectorAll('[role="tab"]')[i] : null) as HTMLElement | null;
+      if (e && on) {
+        const box = e.getBoundingClientRect();
+        const r = on.getBoundingClientRect();
+        if (r.left < box.left || r.right > box.right) e.scrollBy({ left: r.left - box.left - 40, behavior: first.current ? 'auto' : 'smooth' }); // (scrollTo ถูก RN Web ทับไว้ — ใช้ scrollBy)
+      }
+      first.current = false;
+      setTimeout(measure, 350);
+    }, 120);
+    return () => clearTimeout(t);
+  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+  const by = (dx: number) => el()?.scrollBy({ left: dx, behavior: 'smooth' });
+  const arrow = (dir: -1 | 1) => (
+    <Pressable
+      onPress={() => by(dir * 260)}
+      style={({ hovered }: { hovered?: boolean }) => [s.tabArrow, hovered && { backgroundColor: '#E3EBFF' }]}
+      accessibilityLabel={dir < 0 ? 'เลื่อนแท็บไปทางซ้าย' : 'เลื่อนแท็บไปทางขวา'}
+    >
+      <Icon name={dir < 0 ? 'chevron-back' : 'chevron-forward'} size={18} color={colors.primary} />
+    </Pressable>
+  );
+  return (
+    <View style={[s.row, { gap: 6 }]}>
+      {Platform.OS === 'web' && state.max > 0 && state.x > 2 ? arrow(-1) : null}
+      <ScrollView
+        ref={ref}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ flexGrow: 1, flexShrink: 1, minWidth: 0 }}
+        onScroll={measure}
+        scrollEventThrottle={50}
+        onLayout={measure}
+        onContentSizeChange={measure}
+      >
+        {children}
+      </ScrollView>
+      {Platform.OS === 'web' && state.max > 0 && state.x < state.max - 2 ? arrow(1) : null}
+    </View>
+  );
+}
+
 function Card({ title, children }: { title?: string; children: ReactNode }) {
   return (
     <View style={s.card}>
@@ -2194,6 +2259,7 @@ const s = StyleSheet.create({
   navRow: { flexDirection: 'row', gap: 6 },
   navItem: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 46, paddingHorizontal: 14, borderRadius: radius.md, backgroundColor: colors.surface },
   navSub: { height: 40, marginLeft: 18, paddingHorizontal: 10, gap: 8 },
+  tabArrow: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primarySoft, flexShrink: 0 },
   navChip: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 38, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: colors.surface },
   navOn: { backgroundColor: colors.primary },
   navText: { fontFamily: font, fontSize: 13, color: colors.text, flexShrink: 1 },
