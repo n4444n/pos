@@ -3,6 +3,7 @@
 import { Platform } from 'react-native';
 import { DEFAULT_LABEL_PROFILE, getAppSettings, type LabelProfile } from './appSettings';
 import { encodeBarcode, SYMBOLOGIES, type Symbology } from './barcodeEncode';
+import { desktop, type LabelPrinterConfig, type PrinterResult } from './desktop';
 
 export interface LabelItem {
   key: string;
@@ -189,9 +190,30 @@ export function labelPreviewHtml(p: LabelProfile, sample: LabelItem = SAMPLE_LAB
 </style></head><body><div class="zoom">${labelBody(items, p)}</div></body></html>`;
 }
 
-/** เปิดหน้าพิมพ์ป้ายบาร์โค้ด (ต้องเรียกจากการกดปุ่มโดยตรง ไม่งั้นเบราว์เซอร์บล็อกหน้าต่างใหม่) */
-export function printLabels(labels: LabelItem[], p: LabelProfile) {
+/** ขนาดกระดาษ 1 หน้า (มม.) ตามโปรไฟล์ — ม้วน: 1 แถวต่อหน้า · A4: 210×297 */
+export function labelPageSize(p: LabelProfile) {
+  if (p.paper === 'a4') return { width: 210, height: 297 };
+  return { width: p.marginLeft + p.cols * p.width + (p.cols - 1) * p.gapX, height: p.height };
+}
+
+/** เอกสารสำหรับส่งเข้าเครื่องพิมพ์บาร์โค้ดโดยตรง (ไม่มีแถบคำแนะนำ / ไม่สั่งพิมพ์เอง) */
+function labelPrintDoc(labels: LabelItem[], p: LabelProfile) {
+  return `<!doctype html><html lang="th"><head><meta charset="utf-8"><title>ป้ายบาร์โค้ด</title><style>${labelCss(p)}</style></head><body>${labelBody(labels, p)}</body></html>`;
+}
+
+/**
+ * พิมพ์ป้ายบาร์โค้ด
+ * - แอป Clothing POS ที่รองรับ: ส่งตรงเข้า "เครื่องพิมพ์บาร์โค้ด" ที่ตั้งไว้ (ตั้งค่า → ตั้งค่าเครื่องพิมพ์บาร์โค้ด) แยกจากเครื่องพิมพ์ใบเสร็จ
+ * - เบราว์เซอร์ / แอปรุ่นเก่า: เปิดหน้าพิมพ์ให้เลือกเครื่องพิมพ์ป้ายเอง (ต้องเรียกจากการกดปุ่มโดยตรง ไม่งั้นเบราว์เซอร์บล็อกหน้าต่างใหม่)
+ * cfg = ค่าเครื่องพิมพ์บาร์โค้ดที่ยังไม่บันทึก (ปุ่มทดสอบพิมพ์ในหน้าตั้งค่า)
+ */
+export function printLabels(labels: LabelItem[], p: LabelProfile, cfg?: Partial<LabelPrinterConfig>, onResult?: (r: PrinterResult) => void) {
   if (Platform.OS !== 'web' || typeof window === 'undefined' || !labels.length) return false;
+  const direct = desktop()?.labels;
+  if (direct) {
+    direct.print(labelPrintDoc(labels, p), labelPageSize(p), cfg).then((r) => onResult?.(r), (e) => onResult?.({ ok: false, error: String(e) }));
+    return true;
+  }
   const w = window.open('', '_blank', 'width=760,height=900');
   if (!w) return false;
   const doc = `<!doctype html><html lang="th"><head><meta charset="utf-8"><title>พิมพ์บาร์โค้ด ${labels.length} ดวง</title>
@@ -206,7 +228,7 @@ export function printLabels(labels: LabelItem[], p: LabelProfile) {
   }
   @media print { .bar { display: none } }
 </style></head><body>
-<div class="bar">ป้ายบาร์โค้ด ${labels.length} ดวง · ${esc(p.name)} (${esc(profileSummary(p))}) — ในหน้าต่างพิมพ์ เลือก<b>เครื่องพิมพ์ป้าย</b> ขนาดกระดาษให้ตรง และระยะขอบ: ไม่มี<button onclick="window.print()">พิมพ์</button></div>
+<div class="bar">ป้ายบาร์โค้ด ${labels.length} ดวง · ${esc(p.name)} (${esc(profileSummary(p))}) — ในหน้าต่างพิมพ์ เลือก<b>เครื่องพิมพ์บาร์โค้ด</b> ขนาดกระดาษให้ตรง และระยะขอบ: ไม่มี<button onclick="window.print()">พิมพ์</button></div>
 ${labelBody(labels, p)}
 <script>window.onload = () => setTimeout(() => window.print(), 250)</script>
 </body></html>`;
