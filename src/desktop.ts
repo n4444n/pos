@@ -40,6 +40,14 @@ export type PrinterConfig = {
 };
 export type PrinterResult = { ok: boolean; error?: string; image?: string; dots?: number };
 
+/** เครื่องพิมพ์บาร์โค้ด (ป้ายติดสินค้า) ของเครื่องนี้ — แยกจากเครื่องพิมพ์ใบเสร็จ */
+export type LabelPrinterConfig = {
+  /** ชื่อเครื่องพิมพ์ใน Windows ('' = ถามทุกครั้ง) */
+  labelPrinter: string;
+  /** พิมพ์ทันทีไม่ถาม (เมื่อเลือกเครื่องไว้แล้ว) */
+  labelSilent: boolean;
+};
+
 export type DesktopBridge = {
   version: string;
   paperWidth: () => 58 | 80 | null;
@@ -57,6 +65,14 @@ export type DesktopBridge = {
     preview: (c: Partial<PrinterConfig>) => Promise<PrinterResult>;
     testDrawer: (c: Partial<PrinterConfig>) => Promise<PrinterResult>;
     save: (c: Partial<PrinterConfig>) => Promise<(PrinterConfig & { version: string }) | null>;
+  };
+  /** เครื่องพิมพ์บาร์โค้ด (ป้ายติดสินค้า) — ไม่มีในแอปรุ่นเก่า (ใช้หน้าต่างพิมพ์ของเบราว์เซอร์แทน) */
+  labels?: {
+    get: () => Promise<(LabelPrinterConfig & { version: string }) | null>;
+    save: (c: Partial<LabelPrinterConfig>) => Promise<(LabelPrinterConfig & { version: string }) | null>;
+    list: () => Promise<{ name: string; displayName: string; isDefault: boolean }[]>;
+    /** page = ขนาดกระดาษ 1 หน้า (มม.) · c = ค่าที่ยังไม่บันทึก (ทดสอบพิมพ์) */
+    print: (html: string, page: { width: number; height: number }, c?: Partial<LabelPrinterConfig>) => Promise<PrinterResult>;
   };
   /** ชื่อร้าน/สาขาบนหัวหน้าต่างโปรแกรม — มีตั้งแต่แอปเวอร์ชัน 1.0.3 */
   setTitleInfo?: (info: { shop: string; branch: string }) => void;

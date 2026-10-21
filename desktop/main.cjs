@@ -38,6 +38,9 @@ const DEFAULTS = {
   drawer: 'off', //        เปิดลิ้นชัก: 'off' · 'cash' = ขายด้วยเงินสด · 'sale' = ทุกการขาย
   drawerPin: 0, //         0 = ขา 2 (ทั่วไป) · 1 = ขา 5
   silent: true, //         โหมดไดรเวอร์: true = พิมพ์ทันที · false = แสดงกล่องเลือกเครื่องพิมพ์
+  // ---- เครื่องพิมพ์บาร์โค้ด (ป้ายติดสินค้า) — แยกจากเครื่องพิมพ์ใบเสร็จ
+  labelPrinter: '', //     ชื่อเครื่องพิมพ์ป้ายใน Windows ('' = ถามทุกครั้ง)
+  labelSilent: true, //    true = พิมพ์ทันทีไม่ถาม (เมื่อเลือกเครื่องไว้แล้ว)
 };
 let config = loadConfig();
 
@@ -77,6 +80,8 @@ function sanitize(c) {
     drawer: c.drawer === 'cash' || c.drawer === 'sale' ? c.drawer : 'off',
     drawerPin: c.drawerPin === 1 ? 1 : 0,
     silent: c.silent !== false,
+    labelPrinter: String(c.labelPrinter || '').slice(0, 200),
+    labelSilent: c.labelSilent !== false,
   };
 }
 function saveConfig(next) {
@@ -235,6 +240,48 @@ async function printHtml(html, paperWidthFromShop, opts = config, { notify = tru
       dialog.showMessageBox(win, { type: 'warning', title: 'พิมพ์ไม่สำเร็จ', message: 'พิมพ์ไม่สำเร็จ', detail: `${error}\n\nตั้งค่าเครื่องพิมพ์ได้ที่เมนู ระบบ → ตั้งค่าเครื่องนี้` });
     }
     return { ok: false, error };
+  } finally {
+    pwin.destroy();
+  }
+}
+
+// ---------------------------------------------------------------- พิมพ์ป้ายบาร์โค้ด
+/**
+ * พิมพ์ป้ายบาร์โค้ดเข้า "เครื่องพิมพ์บาร์โค้ด" (แยกจากเครื่องพิมพ์ใบเสร็จ) ผ่านไดรเวอร์ Windows
+ * page = ขนาดกระดาษ 1 หน้า (มม.) ตามโปรไฟล์ป้าย — ม้วน: 1 แถวต่อหน้า · A4: 210×297
+ * ยังไม่ได้เลือกเครื่อง / ปิด "พิมพ์ทันที" → แสดงกล่องเลือกเครื่องพิมพ์ของ Windows
+ */
+async function printLabelDoc(html, page, opts = config) {
+  const w = Math.max(10, Math.min(400, Number(page?.width) || 50));
+  const h = Math.max(10, Math.min(400, Number(page?.height) || 30));
+  const pwin = new BrowserWindow({ show: false, width: 800, height: 800, webPreferences: { sandbox: true, contextIsolation: true, javascript: true } });
+  try {
+    await pwin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    await pwin.webContents.executeJavaScript(`(async () => {
+      try { await document.fonts.ready } catch {}
+      await Promise.all([...document.images].map((i) => i.complete ? 0 : new Promise((r) => { i.onload = i.onerror = r })));
+      return true;
+    })()`);
+    const devices = await pwin.webContents.getPrintersAsync();
+    const deviceName = opts.labelPrinter && devices.some((d) => d.name === opts.labelPrinter) ? opts.labelPrinter : undefined;
+    if (opts.labelPrinter && !deviceName) throw new Error(`ไม่พบเครื่องพิมพ์บาร์โค้ด "${opts.labelPrinter}" — ตรวจว่าเปิดเครื่องและต่อสายอยู่ หรือเลือกเครื่องใหม่ที่ ตั้งค่า → ตั้งค่าเครื่องพิมพ์บาร์โค้ด`);
+    await new Promise((resolve, reject) => {
+      pwin.webContents.print(
+        {
+          silent: !!deviceName && opts.labelSilent,
+          deviceName,
+          printBackground: true,
+          color: false,
+          landscape: false,
+          margins: { marginType: 'none' }, // ระยะขอบอยู่ในโปรไฟล์ป้ายแล้ว
+          pageSize: { width: Math.round(w * 1000), height: Math.round(h * 1000) }, // ไมครอน
+        },
+        (ok, reason) => (ok || reason === 'cancelled' ? resolve() : reject(new Error(reason || 'พิมพ์ไม่สำเร็จ'))),
+      );
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
   } finally {
     pwin.destroy();
   }
@@ -490,6 +537,26 @@ ipcMain.handle('pos:printer-save', (e, c) => {
   saveConfig(pickPrinter(c));
   return printerConfig();
 });
+// ---- เครื่องพิมพ์บาร์โค้ด (หน้า ตั้งค่า → ตั้งค่าเครื่องพิมพ์บาร์โค้ด) — เก็บแยกจากเครื่องพิมพ์ใบเสร็จ
+const LABEL_KEYS = ['labelPrinter', 'labelSilent'];
+const pickLabel = (c) => Object.fromEntries(LABEL_KEYS.filter((k) => c && k in c).map((k) => [k, c[k]]));
+const labelConfig = () => ({ ...pickLabel(config), version: app.getVersion() });
+ipcMain.handle('pos:label-get', (e) => (fromServer(e) ? labelConfig() : null));
+ipcMain.handle('pos:label-save', (e, c) => {
+  if (!fromServer(e)) return null;
+  saveConfig(pickLabel(c));
+  return labelConfig();
+});
+// พิมพ์ป้าย · c = ค่าที่ยังไม่บันทึก (ทดสอบพิมพ์จากหน้าตั้งค่า) — ไม่ส่งมา = ใช้ค่าที่บันทึกไว้
+ipcMain.handle('pos:label-print', async (e, html, page, c) => {
+  if (!fromServer(e)) return deny;
+  const r = await printLabelDoc(String(html), page, c ? sanitize({ ...config, ...pickLabel(c) }) : config);
+  if (!r.ok && !c && win && !win.isDestroyed()) {
+    dialog.showMessageBox(win, { type: 'warning', title: 'พิมพ์ป้ายไม่สำเร็จ', message: 'พิมพ์ป้ายบาร์โค้ดไม่สำเร็จ', detail: r.error });
+  }
+  return r;
+});
+
 ipcMain.handle('shell:save-config', (e, c) => {
   if (!fromShell(e)) return null;
   const before = config.serverUrl;

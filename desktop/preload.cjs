@@ -38,6 +38,14 @@ if (location.protocol === 'file:') {
         return saved;
       },
     },
+    // เครื่องพิมพ์บาร์โค้ด (ป้ายติดสินค้า) แยกจากเครื่องพิมพ์ใบเสร็จ — หน้า ตั้งค่า → ตั้งค่าเครื่องพิมพ์บาร์โค้ด
+    labels: {
+      get: () => ipcRenderer.invoke('pos:label-get'),
+      save: (c) => ipcRenderer.invoke('pos:label-save', c),
+      list: () => ipcRenderer.invoke('pos:printer-list'),
+      print: (html, page, c) =>
+        ipcRenderer.invoke('pos:label-print', String(html), { width: Number(page && page.width) || 0, height: Number(page && page.height) || 0 }, c || null),
+    },
     // ชื่อร้าน/สาขาบนหัวหน้าต่างโปรแกรม (มีตั้งแต่ 1.0.3)
     setTitleInfo: (info) => ipcRenderer.send('pos:title-info', { shop: String(info?.shop ?? ''), branch: String(info?.branch ?? '') }),
     print: (html, opts) =>
