@@ -5,7 +5,7 @@ import { api, type SalesReport, type SalesReportRow } from '../api';
 import { Icon } from '../components/Icon';
 import type { Route } from '../components/NavMenu';
 import {
-  BranchControl, DataTable, ExcelButton, k, Pager, PeriodControl, ReportPage, useBranchScope, usePeriod, type Column,
+  BranchControl, DataTable, ExcelButton, k, Pager, PeriodControl, ReportPage, setReportHandoff, useBranchScope, usePeriod, type Column,
 } from '../components/report/ReportKit';
 import { n0, n2 } from '../format';
 import { colors } from '../theme';
@@ -66,7 +66,13 @@ export function SalesReportScreen({ onNavigate }: { onNavigate: (r: Route) => vo
   const cols: Column<SalesReportRow>[] = [
     {
       id: 'key', label: group === 'day' ? 'วันที่' : group === 'week' ? 'สัปดาห์' : 'เดือน', width: 190, sortable: true,
-      render: (r) => <Text style={[k.tdText, { color: colors.primary }]}>{r.label}</Text>, total: 'รวม (฿)',
+      render: (r) => (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Text style={[k.tdText, { color: colors.primary, textDecorationLine: r.bills ? 'underline' : 'none' }]}>{r.label}</Text>
+          {r.bills ? <Icon name="chevron-forward" size={12} color={colors.primary} /> : null}
+        </View>
+      ),
+      total: 'รวม (฿)',
     },
     { id: 'bills', label: 'บิล', width: 70, align: 'center', sortable: true, render: (r) => dim(r.bills, n0(r.bills)), total: t && n0(t.bills) },
     { id: 'units', label: 'ชิ้น', width: 70, align: 'center', sortable: true, render: (r) => dim(r.units, n0(r.units)), total: t && n0(t.units) },
@@ -118,13 +124,19 @@ export function SalesReportScreen({ onNavigate }: { onNavigate: (r: Route) => vo
             cols={cols}
             rows={shown}
             keyOf={(r) => r.key}
+            // คลิกวัน (หรือสัปดาห์ / เดือน) → ดูบิลทั้งหมดของช่วงนั้นในรายงานรายบิล
+            onRowPress={(r) => {
+              setReportHandoff({ from: r.from, to: r.to, branch: b.scope });
+              onNavigate('billReport');
+            }}
+            rowHint={(r) => `ดูบิลทั้งหมดของ ${r.label}`}
             sort={sort}
             onSort={(id) => setSort((s) => ({ id, dir: s.id === id && s.dir === 'desc' ? 'asc' : 'desc' }))}
             empty={loading ? 'กำลังโหลด…' : 'ไม่มีข้อมูลในช่วงนี้'}
           />
         </View>
         <Text style={k.note}>
-          ยอดขาย = ก่อนส่วนลดท้ายบิล · ยอดสุทธิ = ยอดที่เก็บจริง (หลังแก้ไขบิล รวม VAT) · คืนเงิน = เงินที่คืนลูกค้าจากการเปลี่ยน/คืนสินค้า (หักในยอดแล้ว) · กำไร = ยอดสุทธิ − VAT − ต้นทุน · ไม่รวมบิลที่ยกเลิก
+          คลิกวันที่เพื่อดูบิลทั้งหมดของวันนั้น · ยอดขาย = ก่อนส่วนลดท้ายบิล · ยอดสุทธิ = ยอดที่เก็บจริง (หลังแก้ไขบิล รวม VAT) · คืนเงิน = เงินที่คืนลูกค้าจากการเปลี่ยน/คืนสินค้า (หักในยอดแล้ว) · กำไร = ยอดสุทธิ − VAT − ต้นทุน · ไม่รวมบิลที่ยกเลิก
         </Text>
       </ScrollView>
     </ReportPage>

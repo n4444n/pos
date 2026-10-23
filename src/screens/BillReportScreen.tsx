@@ -9,7 +9,7 @@ import { OrderDetailModal } from '../components/history/OrderDetailModal';
 import { Icon } from '../components/Icon';
 import type { Route } from '../components/NavMenu';
 import {
-  BranchControl, DataTable, ExcelButton, k, Pager, PeriodControl, ReportPage, useBranchScope, usePeriod, type Column,
+  BranchControl, clearReportHandoff, DataTable, ExcelButton, k, Pager, peekReportHandoff, PeriodControl, ReportPage, useBranchScope, usePeriod, type Column,
 } from '../components/report/ReportKit';
 import { ToastView } from '../components/ToastView';
 import { n0, n2 } from '../format';
@@ -25,8 +25,11 @@ const STATUSES: { id: string; label: string }[] = [
 ];
 
 export function BillReportScreen({ onNavigate }: { onNavigate: (r: Route) => void }) {
-  const p = usePeriod('today');
-  const b = useBranchScope();
+  // มาจากการคลิกวันในรายงานยอดขาย → เริ่มที่ช่วงวันที่ / สาขานั้น
+  const [from] = useState(peekReportHandoff);
+  useEffect(() => clearReportHandoff(), []);
+  const p = usePeriod('today', from);
+  const b = useBranchScope(from?.branch ?? '');
   const settings = useAppSettings();
   const [query, setQuery] = useState('');
   const [q, setQ] = useState('');

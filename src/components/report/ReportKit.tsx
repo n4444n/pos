@@ -45,9 +45,25 @@ export const dayText = (s: string) => {
 };
 export const rangeText = (r: { from: string; to: string }) => (r.from === r.to ? dayText(r.from) : `${dayText(r.from)} – ${dayText(r.to)}`);
 
-export function usePeriod(initial: PeriodId = 'month') {
-  const [period, setPeriod] = useState<PeriodId>(initial);
-  const [custom, setCustom] = useState(() => rangeOf(initial));
+// ---------- ส่งตัวกรองข้ามหน้ารายงาน ----------
+// เช่น คลิกวันในรายงานยอดขาย → เปิดรายงานรายบิลของวันนั้น (หน้าใหม่อ่านค่าตอนเปิด แล้วล้างทิ้ง)
+export interface ReportHandoff { from: string; to: string; branch: string }
+let handoff: ReportHandoff | null = null;
+export function setReportHandoff(h: ReportHandoff) {
+  handoff = h;
+}
+/** อ่านค่าที่ส่งมา (ครั้งเดียว) — เรียกตอนสร้าง state เริ่มต้นของหน้า แล้ว clearReportHandoff() หลัง mount */
+export function peekReportHandoff() {
+  return handoff;
+}
+export function clearReportHandoff() {
+  handoff = null;
+}
+
+export function usePeriod(initial: PeriodId = 'month', preset?: { from: string; to: string } | null) {
+  // preset = ช่วงวันที่ที่ส่งมาจากหน้าอื่น → เริ่มที่ "กำหนดเอง"
+  const [period, setPeriod] = useState<PeriodId>(preset ? 'custom' : initial);
+  const [custom, setCustom] = useState(() => preset ?? rangeOf(initial));
   const range = period === 'custom' ? custom : rangeOf(period);
   return { period, setPeriod, custom, setCustom, range };
 }
@@ -91,8 +107,8 @@ export function PeriodControl({ p }: { p: ReturnType<typeof usePeriod> }) {
 
 // ---------- สาขา ----------
 /** '' = สาขาปัจจุบัน · 'all' = รวมทุกสาขา · '<id>' = สาขาที่เลือก */
-export function useBranchScope() {
-  const [scope, setScope] = useState('');
+export function useBranchScope(initial = '') {
+  const [scope, setScope] = useState(initial);
   const [branches, setBranches] = useState<Branch[]>([]);
   const appBranch = useAppSettings().branch;
   useEffect(() => {
@@ -196,7 +212,7 @@ export interface Column<T> {
   sortable?: boolean;
 }
 
-export function DataTable<T>({ cols, rows, keyOf, sort, onSort, empty, renderAfter, rowStyle }: {
+export function DataTable<T>({ cols, rows, keyOf, sort, onSort, empty, renderAfter, rowStyle, onRowPress, rowHint }: {
   cols: Column<T>[];
   rows: T[];
   keyOf: (r: T) => string;
@@ -206,6 +222,10 @@ export function DataTable<T>({ cols, rows, keyOf, sort, onSort, empty, renderAft
   /** แถวเพิ่มเติมใต้แถว (เช่น รายการ SKU ที่กางออก) */
   renderAfter?: (r: T) => ReactNode;
   rowStyle?: (r: T) => object | undefined;
+  /** กดทั้งแถวได้ (เช่น เปิดรายละเอียด) */
+  onRowPress?: (r: T) => void;
+  /** คำอธิบายปุ่มแถว (accessibility) */
+  rowHint?: (r: T) => string;
 }) {
   const base = cols.reduce((a, c) => a + c.width, 0);
   // จอกว้างกว่าตาราง → ขยายทุกคอลัมน์ตามสัดส่วนให้เต็มพื้นที่ · จอแคบ → เลื่อนซ้าย-ขวา
@@ -252,7 +272,18 @@ export function DataTable<T>({ cols, rows, keyOf, sort, onSort, empty, renderAft
         {rows.length === 0 ? <Text style={k.empty}>{empty ?? 'ไม่มีข้อมูล'}</Text> : null}
         {rows.map((r) => (
           <View key={keyOf(r)}>
-            <View style={[k.tr, rowStyle?.(r)]}>{cols.map((c) => cell(c, c.render(r)))}</View>
+            {onRowPress ? (
+              <Pressable
+                onPress={() => onRowPress(r)}
+                style={({ hovered }: { hovered?: boolean }) => [k.tr, rowStyle?.(r), hovered && { backgroundColor: colors.primarySoft }]}
+                accessibilityRole="button"
+                accessibilityLabel={rowHint?.(r)}
+              >
+                {cols.map((c) => cell(c, c.render(r)))}
+              </Pressable>
+            ) : (
+              <View style={[k.tr, rowStyle?.(r)]}>{cols.map((c) => cell(c, c.render(r)))}</View>
+            )}
             {renderAfter?.(r)}
           </View>
         ))}
