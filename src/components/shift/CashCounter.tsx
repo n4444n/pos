@@ -21,10 +21,10 @@ const COINS: { d: number; bg: string; fg: string }[] = [
 const ALL = [...NOTES, ...COINS];
 const label = (d: number) => d.toLocaleString();
 
-/** ช่องแคบสุดที่ยังกด +/− และอ่านตัวเลขได้สบาย */
-const TILE_MIN = 168;
+/** ช่องแคบสุดที่ยังกด +/− และอ่านตัวเลขได้สบาย (ช่องแบบ 2 ชั้น: ชนิดเงิน+ยอด / ปุ่ม −จำนวน+) */
+const TILE_MIN = 118;
 const GAP = 6;
-/** 3 คอลัมน์ถ้ากว้างพอ → 2 → 1 (วัดจากความกว้างจริงของกล่อง ไม่ใช่ความกว้างจอ เพราะอยู่ในหน้าต่างป๊อปอัป) */
+/** 3×3 (9 ชนิด) ถ้ากว้างพอ → 2 → 1 (วัดจากความกว้างจริงของกล่อง ไม่ใช่ความกว้างจอ เพราะอยู่ในหน้าต่างป๊อปอัป) */
 const colsFor = (w: number) => (w >= TILE_MIN * 3 + GAP * 2 ? 3 : w >= TILE_MIN * 2 + GAP ? 2 : 1);
 
 interface Props {
@@ -66,10 +66,13 @@ export function CashCounter({ total, onChange, initialMode = 'count', autoFocus 
     const n = Number(counts[x.d]) || 0;
     return (
       <View key={x.d} style={[s.tile, tileW ? { width: tileW } : s.tileFallback, n > 0 && { borderColor: x.fg + '66', backgroundColor: x.bg + '66' }]}>
-        <View style={[s.denom, { backgroundColor: x.bg }, coin && s.coin]}>
-          <Text style={[s.denomText, { color: x.fg }]}>{label(x.d)}</Text>
+        <View style={s.tileTop}>
+          <View style={[s.denom, { backgroundColor: x.bg }, coin && s.coin]}>
+            <Text style={[s.denomText, { color: x.fg }]}>{label(x.d)}</Text>
+          </View>
+          <Text style={[s.sub, n === 0 && { color: colors.faint }]} numberOfLines={1}>= {baht(x.d * n)}</Text>
         </View>
-        <View style={{ flex: 1, minWidth: 0 }}>
+        <View>
           <View style={s.stepper}>
             <Pressable style={s.stepBtn} onPress={() => step(x.d, -1)} accessibilityLabel={`ลด ${label(x.d)}`}>
               <Icon name="remove" size={13} color={colors.sub} />
@@ -89,7 +92,6 @@ export function CashCounter({ total, onChange, initialMode = 'count', autoFocus 
               <Icon name="add" size={13} color={colors.sub} />
             </Pressable>
           </View>
-          <Text style={[s.sub, n === 0 && { color: colors.faint }]} numberOfLines={1}>= {baht(x.d * n)}</Text>
         </View>
       </View>
     );
@@ -115,7 +117,7 @@ export function CashCounter({ total, onChange, initialMode = 'count', autoFocus 
             </View>
             <Text style={s.totalValue}>{baht(sum)}</Text>
           </View>
-          {/* 9 ชนิดในกริดเดียว: 3 คอลัมน์ = 3 แถวพอดี */}
+          {/* 9 ชนิดในกริดเดียว: 3 × 3 */}
           <View style={s.grid} onLayout={(e) => setGridW(e.nativeEvent.layout.width)}>
             {NOTES.map((x, i) => tile(x, false, i))}
             {COINS.map((x, i) => tile(x, true, NOTES.length + i))}
@@ -155,14 +157,15 @@ const s = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
   /** ก่อนวัดขนาดได้ (เฟรมแรก) */
   tileFallback: { flexGrow: 1, flexBasis: '31%', maxWidth: '33%', minWidth: TILE_MIN },
-  tile: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 6, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: '#fff' },
-  denom: { width: 52, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  coin: { width: 40, height: 40, borderRadius: 20, marginHorizontal: 6 },
+  tile: { gap: 6, padding: 8, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: '#fff' },
+  tileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
+  denom: { minWidth: 52, height: 30, paddingHorizontal: 6, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  coin: { minWidth: 30, width: 30, height: 30, borderRadius: 15, paddingHorizontal: 0 },
   denomText: { fontFamily: font, fontSize: 14, fontWeight: '700' },
   stepper: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.pill, padding: 2 },
   stepBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   countInput: { flex: 1, minWidth: 0, textAlign: 'center', fontFamily: font, fontSize: 15, fontWeight: '600', color: colors.text, outlineStyle: 'none' } as object,
-  sub: { fontFamily: font, fontSize: 11, color: colors.sub, textAlign: 'right', marginTop: 2, paddingRight: 4 },
+  sub: { fontFamily: font, fontSize: 11, color: colors.sub, textAlign: 'right', flexShrink: 1 },
   bigInput: {
     fontFamily: font, fontSize: 28, fontWeight: '600', color: colors.text, height: 64, borderRadius: radius.md,
     backgroundColor: colors.surface, paddingHorizontal: 16, textAlign: 'right',
