@@ -20,7 +20,7 @@ import type { Toast } from '../store/usePos';
 import { colors, font, radius } from '../theme';
 import { desktop, type LabelPrinterConfig, type PrinterConfig } from '../desktop';
 import { DEFAULT_LABEL_PROFILE, type LabelProfile } from '../appSettings';
-import { LABEL_PRESETS, printLabels, profileSummary, resolveSymbology, SAMPLE_LABEL, symbologyLabel } from '../labels';
+import { LABEL_PRESETS, labelPageSize, printLabels, profileSummary, resolveSymbology, SAMPLE_LABEL, symbologyLabel } from '../labels';
 import { SYMBOLOGIES, type Symbology } from '../barcodeEncode';
 import { LabelPreview } from '../components/stock/LabelPreview';
 import { useDragScroll } from '../dragScroll';
@@ -35,8 +35,8 @@ const SECTIONS: { id: SectionId; label: string; icon: IconName; desc: string; su
   { id: 'stock', label: 'สต็อก', icon: 'cube-outline', desc: 'จุดแจ้งเตือนสินค้าเหลือน้อย · รูปแบบรหัส SKU' },
   { id: 'payments', label: 'วิธีชำระเงิน & ค่าธรรมเนียม', icon: 'wallet-outline', desc: 'เปิด/ปิดวิธีชำระ ตั้งชื่อ ค่าธรรมเนียม % / บาท' },
   { id: 'barcode', label: 'บาร์โค้ด', icon: 'barcode-outline', desc: 'ประเภทบาร์โค้ด · สร้างบาร์โค้ดอัตโนมัติ' },
-  { id: 'labels', label: 'กระดาษบาร์โค้ด', icon: 'pricetags-outline', desc: 'โปรไฟล์ป้าย · ขนาดสติ๊กเกอร์/ดวงต่อแถว · ขนาดบาร์โค้ด · ข้อมูลและตัวอักษรบนป้าย' },
-  { id: 'labelPrinter', label: 'ตั้งค่าเครื่องพิมพ์บาร์โค้ด', icon: 'print-outline', desc: 'เครื่องพิมพ์ป้ายบาร์โค้ดของคอมพิวเตอร์เครื่องนี้ (แยกจากเครื่องพิมพ์ใบเสร็จ) · พิมพ์ทันทีไม่ถาม · ทดสอบพิมพ์ป้าย', local: true },
+  { id: 'labels', label: 'กระดาษบาร์โค้ด', icon: 'pricetags-outline', desc: 'หน้าตาป้าย: โปรไฟล์ · ขนาดสติ๊กเกอร์/ดวงต่อแถว · ขนาดบาร์โค้ด · ข้อมูลและตัวอักษรบนป้าย · รูปแบบป้าย' },
+  { id: 'labelPrinter', label: 'ตั้งค่าเครื่องพิมพ์บาร์โค้ด', icon: 'print-outline', desc: 'เครื่องพิมพ์ป้ายบาร์โค้ดของคอมพิวเตอร์เครื่องนี้ (แยกจากเครื่องพิมพ์ใบเสร็จ) · พิมพ์ทันทีไม่ถาม · ขนาดกระดาษในไดรเวอร์ · ทดสอบพิมพ์ป้าย', local: true },
   { id: 'receipt', label: 'ใบเสร็จ', icon: 'receipt-outline', desc: 'ภาษา (ไทย / English) · แก้คำในบิล · ขนาดกระดาษ · ข้อความหัว/ท้าย' },
   { id: 'printer', label: 'ตั้งค่าเครื่องพิมพ์ใบเสร็จ', icon: 'print-outline', desc: 'เครื่องพิมพ์ของคอมพิวเตอร์เครื่องนี้ · USB / LAN / Bluetooth · ขนาดกระดาษ · ตัดกระดาษ · ลิ้นชักเงิน', local: true },
   { id: 'notify', label: 'การแจ้งเตือน & API', icon: 'notifications-outline', desc: 'LINE (การ์ดปรับแต่งได้) · WhatsApp · Webhook · เหตุการณ์ที่ต้องการแจ้ง · API key' },
@@ -1377,6 +1377,11 @@ function AutoImage({ uri, width, maxHeight }: { uri: string; width: number; maxH
  * กระดาษบาร์โค้ด — โปรไฟล์ป้ายติดสินค้า (ขนาดกระดาษ ดวงต่อแถว บาร์โค้ด ข้อความ) ใช้ตอนพิมพ์ป้ายในหน้าสต็อก
  * บันทึกในตั้งค่าร้าน (ทุกเครื่อง/ทุกสาขาใช้ร่วมกัน)
  */
+// ตัวอย่างป้ายใช้รหัสที่เข้ากับประเภทบาร์โค้ด (EAN/UPC ต้องเป็นตัวเลข)
+const SAMPLE_CODES: Partial<Record<Symbology, string>> = { ean13: '8850001234568', ean8: '96385074', upca: '036000291452', code39: 'AC-004-90' };
+const sampleFor = (p: LabelProfile) => ({ ...SAMPLE_LABEL, code: SAMPLE_CODES[resolveSymbology(p.symbology)] ?? SAMPLE_LABEL.code });
+
+/** กระดาษบาร์โค้ด — หน้าตา/layout ของป้ายเท่านั้น (เครื่องพิมพ์ + ทดสอบพิมพ์ อยู่ที่ "ตั้งค่าเครื่องพิมพ์บาร์โค้ด") */
 function LabelsSection({ v, set, goLabelPrinter }: { v: AdminSettings['barcode']; set: Upd<AdminSettings['barcode']>; goLabelPrinter: () => void }) {
   const profiles = v.labelProfiles?.length ? v.labelProfiles : [DEFAULT_LABEL_PROFILE];
   const [selId, setSelId] = useState(v.labelProfile || profiles[0].id);
@@ -1398,10 +1403,7 @@ function LabelsSection({ v, set, goLabelPrinter }: { v: AdminSettings['barcode']
     setSelId(rest[0].id);
   };
   const isDefault = (v.labelProfile || profiles[0].id) === p.id;
-  const [testBlocked, setTestBlocked] = useState(false);
-  // ตัวอย่างใช้รหัสที่เข้ากับประเภทบาร์โค้ด (EAN/UPC ต้องเป็นตัวเลข)
-  const SAMPLE_CODES: Partial<Record<Symbology, string>> = { ean13: '8850001234568', ean8: '96385074', upca: '036000291452', code39: 'AC-004-90' };
-  const sample = { ...SAMPLE_LABEL, code: SAMPLE_CODES[resolveSymbology(p.symbology)] ?? SAMPLE_LABEL.code };
+  const sample = sampleFor(p);
   const rollWidth = p.marginLeft + p.cols * p.width + (p.cols - 1) * p.gapX;
   const a4 = p.paper === 'a4';
 
@@ -1443,7 +1445,7 @@ function LabelsSection({ v, set, goLabelPrinter }: { v: AdminSettings['barcode']
           </View>
         </Field>
         <Field label="ชนิดกระดาษ">
-          <Seg value={p.paper} options={[['roll', 'สติ๊กเกอร์ม้วน (เครื่องพิมพ์ป้าย)'], ['a4', 'กระดาษสติ๊กเกอร์ A4']]} onChange={(x) => upd({ paper: x as LabelProfile['paper'], cols: x === 'a4' ? Math.max(p.cols, 2) : Math.min(p.cols, 4), rows: x === 'a4' ? Math.max(p.rows, 5) : 1 })} />
+          <Seg value={p.paper} options={[['roll', 'สติ๊กเกอร์ม้วน'], ['a4', 'กระดาษสติ๊กเกอร์ A4']]} onChange={(x) => upd({ paper: x as LabelProfile['paper'], cols: x === 'a4' ? Math.max(p.cols, 2) : Math.min(p.cols, 4), rows: x === 'a4' ? Math.max(p.rows, 5) : 1 })} />
         </Field>
         <Grid max={4}>
           <Field label="กว้างต่อดวง (มม.)"><NumStep value={p.width} min={10} max={210} step={1} onChange={(n) => upd({ width: n })} /></Field>
@@ -1461,7 +1463,7 @@ function LabelsSection({ v, set, goLabelPrinter }: { v: AdminSettings['barcode']
         <Text style={s.hint}>
           {a4
             ? `แผ่น A4 · ${p.cols} × ${p.rows} = ${p.cols * p.rows} ดวง/แผ่น`
-            : `ความกว้างม้วนรวม ${Math.round(rollWidth * 10) / 10} มม. · ตั้งขนาดกระดาษในเครื่องพิมพ์ป้ายเป็น ${Math.round(rollWidth * 10) / 10} × ${p.height} มม.`}
+            : `สติ๊กเกอร์ม้วน · ${p.cols} ดวง/แถว · ความกว้างม้วนรวม ${Math.round(rollWidth * 10) / 10} มม. × สูง ${p.height} มม.`}
         </Text>
       </Card>
 
@@ -1481,7 +1483,7 @@ function LabelsSection({ v, set, goLabelPrinter }: { v: AdminSettings['barcode']
         </Field>
         <Grid max={4}>
           <Field label="ความสูงบาร์โค้ด (มม.)"><NumStep value={p.barHeight} min={3} max={60} step={0.5} onChange={(n) => upd({ barHeight: n })} /></Field>
-          <Field label="ความหนาแท่ง (มม.)" hint="0 = ยืดตามความกว้าง % · เครื่องพิมพ์ 203 dpi แนะนำ 0.25 ขึ้นไป">
+          <Field label="ความหนาแท่ง (มม.)" hint="0 = ยืดตามความกว้าง % · แนะนำ 0.25 ขึ้นไป (ดูความละเอียดเครื่องพิมพ์ในเมนู ตั้งค่าเครื่องพิมพ์บาร์โค้ด)">
             <NumStep value={p.barModule ?? 0} min={0} max={1} step={0.05} onChange={(n) => upd({ barModule: n })} />
           </Field>
           <Field label="ความกว้างบาร์โค้ด (% ของดวง)" hint={(p.barModule ?? 0) > 0 ? 'ไม่ใช้ เมื่อตั้งความหนาแท่ง' : undefined}><NumStep value={p.barWidth} min={30} max={100} step={5} onChange={(n) => upd({ barWidth: n })} /></Field>
@@ -1514,31 +1516,14 @@ function LabelsSection({ v, set, goLabelPrinter }: { v: AdminSettings['barcode']
 
   const side = (
     <View style={[{ gap: 12 }, wide ? [{ width: 380 }, STICKY] : { width: '100%' }]}>
-      <Pressable style={({ hovered }: { hovered?: boolean }) => [s.linkCard, hovered && { backgroundColor: '#E3EBFF' }]} onPress={goLabelPrinter} accessibilityRole="link">
-        <Icon name="print-outline" size={20} color={colors.primary} />
-        <View style={{ flex: 1 }}>
-          <Text style={s.linkTitle}>ตั้งค่าเครื่องพิมพ์บาร์โค้ด</Text>
-          <Text style={s.hint}>เลือกเครื่องพิมพ์ป้ายของคอมพิวเตอร์เครื่องนี้ (แยกจากเครื่องพิมพ์ใบเสร็จ)</Text>
-        </View>
-        <Icon name="chevron-forward" size={18} color={colors.primary} />
-      </Pressable>
       <Card title="ตัวอย่างป้าย">
         <View style={s.previewBox}>
           <LabelPreview profile={p} sample={sample} maxWidth={wide ? 340 : 520} />
         </View>
         <Text style={s.hint}>{p.name} · {profileSummary(p)} · {symbologyLabel(resolveSymbology(p.symbology))}</Text>
-        {/* ทดสอบพิมพ์ด้วยค่าที่ตั้งอยู่ตอนนี้ (ยังไม่ต้องบันทึก) — 1 แถว (ไม่เปลืองสติ๊กเกอร์) */}
-        <View style={[s.row, { flexWrap: 'wrap' }]}>
-          <SmallBtn
-            label="ทดสอบพิมพ์"
-            icon="print-outline"
-            onPress={() => setTestBlocked(!printLabels(Array.from({ length: p.cols }, () => sample), p))}
-          />
-        </View>
-        {testBlocked ? <Text style={[s.hint, { color: colors.danger }]}>เปิดหน้าต่างพิมพ์ไม่ได้ — อนุญาต pop-up ของหน้านี้ แล้วกดอีกครั้ง</Text> : null}
         <Text style={s.hint}>
-          ตัวอย่างใช้รูปแบบเดียวกับตอนพิมพ์จริง · ทดสอบพิมพ์ใช้ค่าที่ตั้งอยู่ตอนนี้ได้เลย (ยังไม่ต้องบันทึก) ·
-          {desktop()?.labels ? ' พิมพ์เข้าเครื่องพิมพ์บาร์โค้ดที่ตั้งไว้' : ' ในหน้าต่างพิมพ์ เลือกเครื่องพิมพ์บาร์โค้ด ขนาดกระดาษให้ตรง และระยะขอบ: ไม่มี'}
+          ตัวอย่างใช้รูปแบบเดียวกับตอนพิมพ์จริง · การเลือกเครื่องพิมพ์ ขนาดกระดาษในไดรเวอร์ และทดสอบพิมพ์ อยู่ที่เมนู{' '}
+          <Text style={s.link} onPress={goLabelPrinter}>ตั้งค่าเครื่องพิมพ์บาร์โค้ด</Text>
         </Text>
       </Card>
       <Card title="รูปแบบป้าย">
@@ -1630,40 +1615,38 @@ function LabelPrinterSection({ barcode, notify, goLabels }: { barcode: AdminSett
     app?.printer?.get().then((r) => setReceiptPrinter(r?.printMode === 'driver' || r?.connection === 'usb' ? r?.printer ?? '' : '')).catch(() => {});
   }, [bridge, app, loadPrinters]);
 
-  if (!bridge) {
-    return (
-      <Card title={app ? 'อัปเดตแอป Clothing POS ก่อน' : 'ใช้ได้ในแอป Clothing POS เท่านั้น'}>
-        <Text style={s.hint}>
-          {app
-            ? `แอปเวอร์ชัน ${app.version} ที่ติดตั้งอยู่ยังไม่รองรับการตั้งค่าเครื่องพิมพ์บาร์โค้ดแยก — กดปุ่ม "อัปเดต" ในโปรแกรมเมื่อมีเวอร์ชันใหม่ ·
-              ระหว่างนี้การพิมพ์ป้ายจะเปิดหน้าต่างพิมพ์ให้เลือกเครื่องพิมพ์บาร์โค้ดเอง`
-            : 'เครื่องพิมพ์บาร์โค้ดตั้งค่าแยกในคอมพิวเตอร์แต่ละเครื่อง — เปิดหน้านี้จากแอป Clothing POS บนเครื่องที่ต่อเครื่องพิมพ์บาร์โค้ด · เมื่อเปิดผ่านเบราว์เซอร์ การพิมพ์ป้ายจะเปิดหน้าต่างพิมพ์ให้เลือกเครื่องเอง'}
-        </Text>
-        <SmallBtn label="ไปที่ กระดาษบาร์โค้ด" icon="pricetags-outline" onPress={goLabels} />
-      </Card>
-    );
-  }
-  if (!c) return <ActivityIndicator style={{ marginTop: 30 }} color={colors.primary} />;
+  if (bridge && !c) return <ActivityIndicator style={{ marginTop: 30 }} color={colors.primary} />;
 
   const set = (x: Partial<LabelPrinterConfig>) => {
-    setC({ ...c, ...x });
+    if (c) setC({ ...c, ...x });
     setMsg(null);
   };
-  const dirty = JSON.stringify(c) !== saved;
+  const dirty = !!c && JSON.stringify(c) !== saved;
   const chip = (on: boolean) => [s.segItem, on && s.segOn];
-  const missing = !!c.labelPrinter && printers.length > 0 && !printers.some((p) => p.name === c.labelPrinter);
-  const sameAsReceipt = !!c.labelPrinter && c.labelPrinter === receiptPrinter;
+  const missing = !!c?.labelPrinter && printers.length > 0 && !printers.some((p) => p.name === c.labelPrinter);
+  const sameAsReceipt = !!c?.labelPrinter && c.labelPrinter === receiptPrinter;
+  const sample = sampleFor(profile);
+  const page = labelPageSize(profile);
+  const mm = (n: number) => Math.round(n * 10) / 10;
 
+  // ทดสอบพิมพ์ 1 แถว ด้วยโปรไฟล์ที่เลือก (ใช้ค่าล่าสุดจากเมนู กระดาษบาร์โค้ด แม้ยังไม่บันทึก)
   const test = () => {
-    setBusy('test');
     setMsg(null);
-    const ok = printLabels(Array.from({ length: profile.cols }, () => SAMPLE_LABEL), profile, c, (r) => {
+    if (!bridge) {
+      // เบราว์เซอร์ / แอปรุ่นเก่า → เปิดหน้าต่างพิมพ์ให้เลือกเครื่องเอง
+      const ok = printLabels(Array.from({ length: profile.cols }, () => sample), profile);
+      setMsg(ok ? { ok: true, text: 'เปิดหน้าต่างพิมพ์แล้ว — เลือกเครื่องพิมพ์บาร์โค้ด' } : { ok: false, text: 'เปิดหน้าต่างพิมพ์ไม่ได้ — อนุญาต pop-up ของหน้านี้ แล้วกดอีกครั้ง' });
+      return;
+    }
+    setBusy('test');
+    const ok = printLabels(Array.from({ length: profile.cols }, () => sample), profile, c ?? undefined, (r) => {
       setBusy('');
-      setMsg(r.ok ? { ok: true, text: c.labelPrinter && c.labelSilent ? `ส่งป้ายทดสอบเข้า "${c.labelPrinter}" แล้ว` : 'เปิดกล่องพิมพ์แล้ว' } : { ok: false, text: r.error ?? 'พิมพ์ไม่สำเร็จ' });
+      setMsg(r.ok ? { ok: true, text: c?.labelPrinter && c.labelSilent ? `ส่งป้ายทดสอบเข้า "${c.labelPrinter}" แล้ว` : 'เปิดกล่องพิมพ์แล้ว' } : { ok: false, text: r.error ?? 'พิมพ์ไม่สำเร็จ' });
     });
     if (!ok) setBusy('');
   };
   const save = async () => {
+    if (!bridge || !c) return;
     setBusy('save');
     try {
       const x = await bridge.save(c);
@@ -1678,8 +1661,8 @@ function LabelPrinterSection({ barcode, notify, goLabels }: { barcode: AdminSett
     }
   };
 
-  const settings = (
-    <View style={{ flex: 1, minWidth: 0, gap: 12 }}>
+  const printerCard =
+    bridge && c ? (
       <Card title="เครื่องพิมพ์บาร์โค้ด (ป้ายติดสินค้า)">
         <Text style={s.hint}>
           แยกจากเครื่องพิมพ์ใบเสร็จ — ใบเสร็จออกเครื่องที่ตั้งใน "ตั้งค่าเครื่องพิมพ์ใบเสร็จ" ส่วนป้ายบาร์โค้ดออกเครื่องที่เลือกตรงนี้ ·
@@ -1710,11 +1693,41 @@ function LabelPrinterSection({ barcode, notify, goLabels }: { barcode: AdminSett
           onChange={(x) => set({ labelSilent: x })}
         />
       </Card>
-      <Card title="ขนาดกระดาษ">
+    ) : (
+      <Card title={app ? 'อัปเดตแอป Clothing POS เพื่อเลือกเครื่องพิมพ์' : 'เลือกเครื่องพิมพ์ได้ในแอป Clothing POS'}>
         <Text style={s.hint}>
-          ขนาดสติ๊กเกอร์ ดวงต่อแถว และระยะขอบ ใช้ตามโปรไฟล์ป้ายในเมนู{' '}
-          <Text style={s.link} onPress={goLabels}>กระดาษบาร์โค้ด</Text> — ระบบส่งขนาดหน้ากระดาษให้เครื่องพิมพ์ตามโปรไฟล์อัตโนมัติ ·
-          ถ้าพิมพ์เลื่อน/ขาด ให้ตั้งขนาดกระดาษในไดรเวอร์ของเครื่องพิมพ์ให้ตรงกับสติ๊กเกอร์ด้วย
+          {app
+            ? `แอปเวอร์ชัน ${app.version} ที่ติดตั้งอยู่ยังไม่รองรับการตั้งเครื่องพิมพ์บาร์โค้ดแยก — กดปุ่ม "อัปเดต" ในโปรแกรมเมื่อมีเวอร์ชันใหม่ · ระหว่างนี้การพิมพ์ป้ายจะเปิดหน้าต่างพิมพ์ให้เลือกเครื่องพิมพ์บาร์โค้ดเอง`
+            : 'เครื่องพิมพ์บาร์โค้ดตั้งค่าแยกในคอมพิวเตอร์แต่ละเครื่อง — เปิดหน้านี้จากแอป Clothing POS บนเครื่องที่ต่อเครื่องพิมพ์บาร์โค้ด เพื่อเลือกเครื่องและพิมพ์ทันทีโดยไม่ถาม · เมื่อเปิดผ่านเบราว์เซอร์ การพิมพ์ป้ายจะเปิดหน้าต่างพิมพ์ให้เลือกเครื่องเอง (ทดสอบพิมพ์ได้ด้านข้าง)'}
+        </Text>
+      </Card>
+    );
+
+  const settings = (
+    <View style={{ flex: 1, minWidth: 0, gap: 12 }}>
+      {printerCard}
+      <Card title="ขนาดกระดาษ & ความละเอียดในไดรเวอร์เครื่องพิมพ์">
+        <Text style={s.hint}>
+          ระบบส่งขนาดหน้ากระดาษให้เครื่องพิมพ์ตามโปรไฟล์ป้ายอัตโนมัติ — ถ้าพิมพ์เลื่อน/ขาด/เว้นดวง ให้ตั้งขนาดกระดาษใน Printing Preferences ของไดรเวอร์ให้ตรงตามนี้
+        </Text>
+        <View style={{ gap: 6 }}>
+          {profiles.map((q) => {
+            const pg = labelPageSize(q);
+            return (
+              <View key={q.id} style={[s.row, { justifyContent: 'space-between' }]}>
+                <Text style={[s.sub, { flex: 1 }]} numberOfLines={1}>{q.name}</Text>
+                <Text style={[s.sub, { fontWeight: '700', color: colors.text }]}>
+                  {q.paper === 'a4' ? 'A4 (210 × 297 มม.)' : `${mm(pg.width)} × ${mm(pg.height)} มม.`}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+        <Text style={s.hint}>
+          {Platform.OS === 'web' && !bridge ? 'ในหน้าต่างพิมพ์ของเบราว์เซอร์: เลือกเครื่องพิมพ์บาร์โค้ด · ขนาดกระดาษให้ตรง · ระยะขอบ: ไม่มี · ' : ''}
+          ความละเอียดเครื่องพิมพ์: เครื่องพิมพ์ป้ายทั่วไป 203 dpi → ตั้ง "ความหนาแท่ง" ของบาร์โค้ด 0.25 มม. ขึ้นไป · 300 dpi → 0.17 มม. ขึ้นไป เพื่อให้แท่งคมและสแกนติดง่าย ·{' '}
+          ปรับขนาดดวง จำนวนดวงต่อแถว ระยะขอบ ความหนาแท่ง และหน้าตาป้าย ได้ที่เมนู{' '}
+          <Text style={s.link} onPress={goLabels}>กระดาษบาร์โค้ด</Text>
         </Text>
       </Card>
     </View>
@@ -1722,8 +1735,11 @@ function LabelPrinterSection({ barcode, notify, goLabels }: { barcode: AdminSett
 
   const side = (
     <View style={[{ gap: 12 }, wide ? [{ width: 380 }, STICKY] : { width: '100%' }]}>
-      <Card title="บันทึก & ทดสอบ">
-        <Text style={s.hint}>ค่าในหน้านี้ใช้เฉพาะคอมพิวเตอร์เครื่องนี้ · ทดสอบพิมพ์ใช้ค่าที่เลือกอยู่ได้ก่อนบันทึก (พิมพ์ 1 แถว)</Text>
+      <Card title={bridge ? 'ทดสอบ & บันทึก' : 'ทดสอบพิมพ์ป้าย'}>
+        <Text style={s.hint}>
+          ทดสอบพิมพ์ 1 แถว (ไม่เปลืองสติ๊กเกอร์) ด้วยหน้าตาป้ายล่าสุดจากเมนู กระดาษบาร์โค้ด ได้เลยแม้ยังไม่บันทึก
+          {bridge ? ' · ค่าเครื่องพิมพ์ในหน้านี้ใช้เฉพาะคอมพิวเตอร์เครื่องนี้' : ''}
+        </Text>
         <Field label="โปรไฟล์ป้ายที่ใช้ทดสอบ">
           <View style={[s.row, { flexWrap: 'wrap' }]}>
             {profiles.map((p) => (
@@ -1732,29 +1748,31 @@ function LabelPrinterSection({ barcode, notify, goLabels }: { barcode: AdminSett
               </Pressable>
             ))}
           </View>
-          <Text style={s.hint}>{profileSummary(profile)}</Text>
+          <Text style={s.hint}>{profileSummary(profile)} · หน้ากระดาษ {profile.paper === 'a4' ? 'A4' : `${mm(page.width)} × ${mm(page.height)} มม.`}</Text>
         </Field>
         <View style={s.previewBox}>
-          <LabelPreview profile={profile} sample={SAMPLE_LABEL} maxWidth={wide ? 340 : 520} />
+          <LabelPreview profile={profile} sample={sample} maxWidth={wide ? 340 : 520} />
         </View>
         <View style={[s.row, { flexWrap: 'wrap' }]}>
           <SmallBtn label="ทดสอบพิมพ์ป้าย" icon="print-outline" onPress={test} busy={busy === 'test'} />
         </View>
         {msg ? <Text style={[s.hint, { color: msg.ok ? colors.success : colors.danger }]}>{msg.ok ? '✓ ' : ''}{msg.text}</Text> : null}
-        <View style={[s.row, { borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 12 }]}>
-          <Text style={[s.sub, { flex: 1 }]}>{dirty ? 'มีการแก้ไขที่ยังไม่บันทึก' : 'บันทึกแล้ว'}</Text>
-          <Pressable style={[s.ghostBtn, !dirty && { opacity: 0.4 }]} disabled={!dirty || busy === 'save'} onPress={() => setC(JSON.parse(saved) as LabelPrinterConfig)}>
-            <Text style={s.ghostText}>ยกเลิก</Text>
-          </Pressable>
-          <Pressable style={[s.primaryBtn, (!dirty || busy === 'save') && { opacity: 0.45 }]} disabled={!dirty || busy === 'save'} onPress={save}>
-            {busy === 'save' ? <ActivityIndicator color="#fff" /> : (
-              <>
-                <Icon name="save-outline" size={16} color="#fff" />
-                <Text style={s.primaryText}>บันทึก</Text>
-              </>
-            )}
-          </Pressable>
-        </View>
+        {bridge && c ? (
+          <View style={[s.row, { borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 12 }]}>
+            <Text style={[s.sub, { flex: 1 }]}>{dirty ? 'มีการแก้ไขที่ยังไม่บันทึก' : 'บันทึกแล้ว'}</Text>
+            <Pressable style={[s.ghostBtn, !dirty && { opacity: 0.4 }]} disabled={!dirty || busy === 'save'} onPress={() => setC(JSON.parse(saved) as LabelPrinterConfig)}>
+              <Text style={s.ghostText}>ยกเลิก</Text>
+            </Pressable>
+            <Pressable style={[s.primaryBtn, (!dirty || busy === 'save') && { opacity: 0.45 }]} disabled={!dirty || busy === 'save'} onPress={save}>
+              {busy === 'save' ? <ActivityIndicator color="#fff" /> : (
+                <>
+                  <Icon name="save-outline" size={16} color="#fff" />
+                  <Text style={s.primaryText}>บันทึก</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+        ) : null}
       </Card>
     </View>
   );
