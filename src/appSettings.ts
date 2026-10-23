@@ -76,7 +76,11 @@ export interface PublicSettings {
     /** ขนาดวงกลมสี / ปุ่มไซซ์ บนการ์ดสินค้า */
     swatchSize: ControlSize; optionSize: ControlSize;
   };
-  payments: { methods: PayMethod[]; promptpayId: string; vat: { enabled: boolean; rate: number }; feePayer: 'customer' | 'shop' };
+  payments: {
+    methods: PayMethod[]; promptpayId: string; vat: { enabled: boolean; rate: number }; feePayer: 'customer' | 'shop';
+    /** เปิด/ปิดกะ: ต้องนับเงินในลิ้นชักเป็นธนบัตร/เหรียญ */
+    requireDenominations?: boolean;
+  };
   receipt: {
     paperWidth: 58 | 80; fontSize: 'small' | 'medium' | 'large'; title: string; header: string; footer: string;
     showSku: boolean; showSalesperson: boolean; showCustomer: boolean; showVat: boolean; showOrderBarcode: boolean; autoPrint: boolean; copies: number;
@@ -106,6 +110,7 @@ export const DEFAULT_SETTINGS: PublicSettings = {
     promptpayId: '',
     vat: { enabled: true, rate: 7 },
     feePayer: 'customer',
+    requireDenominations: false,
   },
   receipt: {
     paperWidth: 80, fontSize: 'medium', title: 'ใบเสร็จรับเงิน / ใบกำกับภาษีอย่างย่อ', header: '', footer: 'ขอบคุณที่ใช้บริการ',

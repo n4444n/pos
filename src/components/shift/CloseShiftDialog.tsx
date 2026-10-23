@@ -237,7 +237,7 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
   const cashPanel = (
     <View>
       {/* CashCounter ต้องคงอยู่ตอนสลับแท็บ (ไม่ให้ยอดที่แจงหาย) → ซ่อนด้วย display แทนการ unmount */}
-      <CashCounter key={key} total="" onChange={(t, d) => { setCounted(t); setDenoms(d); }} />
+      <CashCounter key={key} total="" forceCount={!!settings.payments.requireDenominations} onChange={(t, d) => { setCounted(t); setDenoms(d); }} />
       <View style={[s.live, { backgroundColor: v?.bg ?? colors.surface }]}>
         {v ? <Icon name={v.icon} size={26} color={v.fg} /> : <Icon name="calculator-outline" size={24} color={colors.sub} />}
         <View style={{ flex: 1 }}>
