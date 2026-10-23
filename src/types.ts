@@ -231,9 +231,9 @@ export interface Shift {
   byMethod: Record<PaymentMethod, number>;
   /** จำนวนบิลต่อช่องทางในกะนี้ */
   countByMethod?: Record<PaymentMethod, number>;
-  /** ยอดจริงบัตร / QR / โอน ที่กรอกตอนปิดกะ (null = กะก่อนมีฟีเจอร์นี้ / ยังไม่ปิด) */
-  tenders?: Partial<Record<PaymentMethod, ShiftTender>> | null;
-  /** ส่วนต่างรวมของบัตร / QR / โอน (ยอดจริง − ยอดระบบ) */
+  /** ยอดจริงที่กรอกตอนปิดกะ แยกช่อง card (บัตรเครดิต + เดบิต) / scan (สแกนจ่าย: QR + โอน) · null = กะก่อนมีฟีเจอร์นี้ / ยังไม่ปิด */
+  tenders?: Record<string, ShiftTender> | null;
+  /** ส่วนต่างรวมของบัตร / สแกนจ่าย (ยอดจริง − ยอดระบบ) */
   tenderDiff?: number | null;
   editCount: number;
   voidCount: number;
@@ -243,6 +243,7 @@ export interface Shift {
 }
 
 export interface ShiftTender {
+  label?: string;
   system: number;
   count: number;
   actual: number;

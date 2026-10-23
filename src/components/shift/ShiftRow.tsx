@@ -67,7 +67,7 @@ function ShiftRowImpl({ shift: s, layout, onPress }: Props) {
       {s.diff ? <Text style={[s_.statusSub, { color: v.fg }]}>{s.diff > 0 ? '+' : '−'}{baht(Math.abs(s.diff))}</Text> : null}
       {s.tenderDiff ? (
         <Text style={[s_.statusSub, { color: s.tenderDiff > 0 ? '#B26A00' : colors.danger }]}>
-          บัตร/QR/โอน {s.tenderDiff > 0 ? '+' : '−'}{baht(Math.abs(s.tenderDiff))}
+          บัตร/สแกนจ่าย {s.tenderDiff > 0 ? '+' : '−'}{baht(Math.abs(s.tenderDiff))}
         </Text>
       ) : null}
     </View>
