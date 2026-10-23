@@ -68,12 +68,27 @@ export function ShiftDetailModal({ shiftId, onClose }: { shiftId: number | null;
             </View>
             <View style={s_.card}>
               <Text style={s_.cardTitle}>ยอดขายตามช่องทาง</Text>
-              {(['cash', 'promptpay', 'card', 'transfer'] as PaymentMethod[]).map((m) => (
-                <Line key={m} l={PAYMENT_LABEL[m]} r={baht(s.byMethod[m] ?? 0)} />
-              ))}
+              {(['cash', 'promptpay', 'card', 'transfer'] as PaymentMethod[]).map((m) => {
+                const t = s.tenders?.[m];
+                return (
+                  <View key={m}>
+                    <Line l={PAYMENT_LABEL[m]} r={baht(s.byMethod[m] ?? 0)} />
+                    {t ? (
+                      <Text style={[s_.small, { textAlign: 'right', marginTop: 0, color: t.diff === 0 ? colors.success : t.diff > 0 ? '#B26A00' : colors.danger }]}>
+                        ยอดจริง {baht(t.actual)}{t.diff === 0 ? ' ✓ ตรง' : ` (${t.diff > 0 ? '+' : '−'}${baht(Math.abs(t.diff))})`}
+                      </Text>
+                    ) : null}
+                  </View>
+                );
+              })}
               <View style={s_.sep} />
               <Line l={`รวม (${s.billCount} บิล)`} r={baht(s.totalSales)} bold />
               <Text style={s_.small}>แก้ไขบิล {s.editCount} ครั้ง · ยกเลิกบิล {s.voidCount} ครั้ง</Text>
+              {s.tenders ? (
+                <Text style={s_.small}>
+                  ตรวจยอดบัตร / QR / โอน ตอนปิดกะ: {s.tenderDiff ? `ส่วนต่าง ${s.tenderDiff > 0 ? '+' : '−'}${baht(Math.abs(s.tenderDiff))}` : 'ตรงกับระบบ'}
+                </Text>
+              ) : null}
             </View>
           </View>
 

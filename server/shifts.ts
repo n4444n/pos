@@ -1,12 +1,13 @@
 // กะการขาย: เปิดกะ / นำเงินเข้า-ออก / ปิดกะ + กระทบยอดเงินสดในลิ้นชัก
 import { db, tx, countChanges } from './db.ts';
 import { HttpError, PAYMENT_METHODS, round2 } from './common.ts';
+import { getSettings } from './settings.ts';
 
 const SHIFT_COLS = `id, shift_no AS shiftNo, business_date AS businessDate, status, opened_at AS openedAt,
   opened_by AS openedBy, opening_cash AS openingCash, opening_note AS openingNote, closed_at AS closedAt,
   closed_by AS closedBy, counted_cash AS countedCash, expected_cash AS expectedCash, diff,
   denominations, close_note AS closeNote, cash_sales AS cashSales, cash_in AS cashIn, cash_out AS cashOut,
-  total_sales AS totalSales, bill_count AS billCount`;
+  total_sales AS totalSales, bill_count AS billCount, tenders`;
 
 const q = {
   current: db.prepare(`SELECT ${SHIFT_COLS} FROM shifts WHERE status = 'open' LIMIT 1`),
@@ -18,10 +19,10 @@ const q = {
   closeShift: db.prepare(
     `UPDATE shifts SET status = 'closed', closed_at = datetime('now', 'localtime'), closed_by = ?, counted_cash = ?,
             expected_cash = ?, diff = ?, denominations = ?, close_note = ?, cash_sales = ?, cash_in = ?, cash_out = ?,
-            total_sales = ?, bill_count = ?
+            total_sales = ?, bill_count = ?, tenders = ?
       WHERE id = ? AND status = 'open'`,
   ),
-  payByMethod: db.prepare('SELECT method, COALESCE(SUM(amount), 0) AS amount FROM payments WHERE shift_id = ? GROUP BY method'),
+  payByMethod: db.prepare('SELECT method, COALESCE(SUM(amount), 0) AS amount, COUNT(DISTINCT order_id) AS n FROM payments WHERE shift_id = ? GROUP BY method'),
   moveSums: db.prepare("SELECT kind, COALESCE(SUM(amount), 0) AS amount FROM cash_movements WHERE shift_id = ? GROUP BY kind"),
   moves: db.prepare(
     'SELECT id, kind, amount, reason, staff, created_at AS createdAt FROM cash_movements WHERE shift_id = ? ORDER BY id DESC',
@@ -42,13 +43,21 @@ export interface ShiftRow {
   openingCash: number; openingNote: string | null; closedAt: string | null; closedBy: string | null;
   countedCash: number | null; expectedCash: number | null; diff: number | null; denominations: string | null;
   closeNote: string | null; cashSales: number | null; cashIn: number | null; cashOut: number | null;
-  totalSales: number | null; billCount: number | null;
+  totalSales: number | null; billCount: number | null; tenders: string | null;
 }
+
+/** ช่องทางที่ไม่ใช่เงินสด — เงินไม่เข้าลิ้นชัก ตรวจยอดกับสลิปสรุปเครื่อง EDC / รายการเงินเข้าบัญชีแทน */
+export const NON_CASH = PAYMENT_METHODS.filter((m) => m !== 'cash');
+export type Tender = { system: number; count: number; actual: number; diff: number };
 
 /** ตัวเลขสดของกะ (คำนวณจากสมุดรับจ่าย) */
 function live(shiftId: number, openingCash: number) {
   const byMethod: Record<string, number> = { cash: 0, promptpay: 0, card: 0, transfer: 0 };
-  for (const r of q.payByMethod.all(shiftId) as { method: string; amount: number }[]) byMethod[r.method] = round2(r.amount);
+  const countByMethod: Record<string, number> = { cash: 0, promptpay: 0, card: 0, transfer: 0 };
+  for (const r of q.payByMethod.all(shiftId) as { method: string; amount: number; n: number }[]) {
+    byMethod[r.method] = round2(r.amount);
+    countByMethod[r.method] = r.n;
+  }
   const moves = { in: 0, out: 0 };
   for (const r of q.moveSums.all(shiftId) as { kind: 'in' | 'out'; amount: number }[]) moves[r.kind] = round2(r.amount);
   const cashSales = byMethod.cash;
@@ -56,6 +65,7 @@ function live(shiftId: number, openingCash: number) {
   const netCash = round2(cashSales + moves.in - moves.out); // "สรุปยอด" = เงินสดที่เพิ่มขึ้นในลิ้นชัก
   return {
     byMethod,
+    countByMethod,
     cashSales,
     cashIn: moves.in,
     cashOut: moves.out,
@@ -94,6 +104,14 @@ function present(s: ShiftRow) {
   const cashIn = closed ? s.cashIn ?? l.cashIn : l.cashIn;
   const cashOut = closed ? s.cashOut ?? l.cashOut : l.cashOut;
   const expectedCash = closed ? s.expectedCash ?? l.expectedCash : l.expectedCash;
+  // ยอดจริงบัตร / QR / โอน (กะที่ปิดก่อนมีฟีเจอร์นี้ = null → แสดงยอดระบบอย่างเดียว)
+  let tenders: Record<string, Tender> | null = null;
+  try {
+    tenders = s.tenders ? JSON.parse(s.tenders) : null;
+  } catch {
+    tenders = null;
+  }
+  const tenderDiff = tenders ? round2(Object.values(tenders).reduce((a, t) => a + (t.diff || 0), 0)) : null;
   return {
     ...s,
     denominations: s.denominations ? JSON.parse(s.denominations) : null,
@@ -105,6 +123,9 @@ function present(s: ShiftRow) {
     totalSales: closed ? s.totalSales ?? l.totalSales : l.totalSales,
     billCount: closed ? s.billCount ?? l.billCount : l.billCount,
     byMethod: l.byMethod,
+    countByMethod: l.countByMethod,
+    tenders,
+    tenderDiff,
     editCount: l.editCount,
     voidCount: l.voidCount,
     cashRefunds: l.cashRefunds,
@@ -196,7 +217,7 @@ export function cashMove(body: { kind?: string; amount?: number; reason?: string
   return currentShift();
 }
 
-export function closeShift(body: { staff?: string; countedCash?: number; denominations?: unknown; note?: string }) {
+export function closeShift(body: { staff?: string; countedCash?: number; denominations?: unknown; note?: string; tenders?: unknown }) {
   const s = requireShift();
   const staff = body.staff?.trim();
   const counted = round2(Number(body.countedCash));
@@ -204,14 +225,31 @@ export function closeShift(body: { staff?: string; countedCash?: number; denomin
   if (!Number.isFinite(counted) || counted < 0) throw new HttpError(422, 'กรุณากรอกจำนวนเงินที่นับได้');
   const l = live(s.id, s.openingCash);
   const diff = round2(counted - l.expectedCash);
+  // ช่องที่ 2: บัตร / QR / โอน — กรอกยอดจริงจากสลิปสรุปเครื่อง EDC / ยอดเงินเข้าบัญชี (ไม่นับรวมกับลิ้นชัก)
+  const raw = body.tenders && typeof body.tenders === 'object' ? (body.tenders as Record<string, unknown>) : {};
+  const label = (m: string) => getSettings().payments.methods.find((x) => x.id === m)?.label ?? m;
+  const tenders: Record<string, Tender> = {};
+  for (const m of NON_CASH) {
+    const system = l.byMethod[m] ?? 0;
+    const given = raw[m];
+    if (given == null || given === '') {
+      if (system !== 0) throw new HttpError(422, `กรุณากรอกยอดจริงของ ${label(m)}`);
+      continue; // ไม่มีรายการและไม่ได้กรอก → ไม่ต้องบันทึก
+    }
+    const actual = round2(Number(given));
+    if (!Number.isFinite(actual) || actual < 0) throw new HttpError(422, `ยอดจริงของ ${label(m)} ไม่ถูกต้อง`);
+    tenders[m] = { system, count: l.countByMethod[m] ?? 0, actual, diff: round2(actual - system) };
+  }
+  const tenderMismatch = Object.values(tenders).some((t) => t.diff !== 0);
   const note = body.note?.trim() || null;
-  if (diff !== 0 && !note) throw new HttpError(422, 'ยอดเงินไม่ตรง กรุณาระบุหมายเหตุ');
+  if ((diff !== 0 || tenderMismatch) && !note)
+    throw new HttpError(422, diff !== 0 ? 'ยอดเงินสดไม่ตรง กรุณาระบุหมายเหตุ' : 'ยอดบัตร / QR / โอน ไม่ตรง กรุณาระบุหมายเหตุ');
   const clean = cleanDenoms(body.denominations);
   const denoms = clean ? JSON.stringify(clean) : null;
   const n = countChanges(() =>
     q.closeShift.run(
       staff.slice(0, 80), counted, l.expectedCash, diff, denoms, note?.slice(0, 300) ?? null,
-      l.cashSales, l.cashIn, l.cashOut, l.totalSales, l.billCount, s.id,
+      l.cashSales, l.cashIn, l.cashOut, l.totalSales, l.billCount, JSON.stringify(tenders), s.id,
     ),
   );
   if (n !== 1) throw new HttpError(409, 'กะนี้ถูกปิดไปแล้ว');
