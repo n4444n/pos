@@ -346,7 +346,7 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
       visible={visible}
       onClose={onClose}
       title={`ปิดกะ #${shift.shiftNo} · ${duration(shift.minutes)}`}
-      width={twoCol ? 900 : 520}
+      width={twoCol ? Math.min(980, width - 40) : 520}
       footer={
         <Pressable
           style={[s.btn, { backgroundColor: colors.primary }, !ready && { opacity: 0.45 }]}
@@ -372,9 +372,10 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
       }
     >
       {twoCol ? (
+        // ซ้าย 40% (สรุปยอด) · ขวา 60% (ตรวจยอด / แจงเงิน 3×3)
         <View style={{ flexDirection: 'row', gap: 20 }}>
-          <ScrollView style={{ flex: 1, maxHeight: 580 }}>{breakdown}</ScrollView>
-          <ScrollView style={{ flex: 1, maxHeight: 580 }}>{counter}</ScrollView>
+          <ScrollView style={{ flex: 2, minWidth: 0, maxHeight: 580 }}>{breakdown}</ScrollView>
+          <ScrollView style={{ flex: 3, minWidth: 0, maxHeight: 580 }}>{counter}</ScrollView>
         </View>
       ) : (
         <ScrollView style={{ maxHeight: 560 }}>
