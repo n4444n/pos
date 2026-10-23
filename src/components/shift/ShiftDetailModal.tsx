@@ -4,7 +4,7 @@ import { api } from '../../api';
 import { baht, duration, PAYMENT_LABEL, thaiDateTime, VERDICT } from '../../format';
 import { printShiftReport } from '../../print';
 import { colors, font, radius } from '../../theme';
-import type { PaymentMethod } from '../../types';
+import type { PaymentMethod, ShiftTender } from '../../types';
 import { Icon } from '../Icon';
 import { Sheet } from '../Sheet';
 
@@ -68,29 +68,28 @@ export function ShiftDetailModal({ shiftId, onClose }: { shiftId: number | null;
             </View>
             <View style={s_.card}>
               <Text style={s_.cardTitle}>ยอดขายตามช่องทาง</Text>
-              {(['cash', 'promptpay', 'card', 'transfer'] as PaymentMethod[]).map((m) => {
-                const t = s.tenders?.[m];
-                return (
-                  <View key={m}>
-                    <Line l={PAYMENT_LABEL[m]} r={baht(s.byMethod[m] ?? 0)} />
-                    {t ? (
-                      <Text style={[s_.small, { textAlign: 'right', marginTop: 0, color: t.diff === 0 ? colors.success : t.diff > 0 ? '#B26A00' : colors.danger }]}>
-                        ยอดจริง {baht(t.actual)}{t.diff === 0 ? ' ✓ ตรง' : ` (${t.diff > 0 ? '+' : '−'}${baht(Math.abs(t.diff))})`}
-                      </Text>
-                    ) : null}
-                  </View>
-                );
-              })}
+              {(['cash', 'promptpay', 'card', 'transfer'] as PaymentMethod[]).map((m) => (
+                <Line key={m} l={PAYMENT_LABEL[m]} r={baht(s.byMethod[m] ?? 0)} />
+              ))}
               <View style={s_.sep} />
               <Line l={`รวม (${s.billCount} บิล)`} r={baht(s.totalSales)} bold />
               <Text style={s_.small}>แก้ไขบิล {s.editCount} ครั้ง · ยกเลิกบิล {s.voidCount} ครั้ง</Text>
-              {s.tenders ? (
-                <Text style={s_.small}>
-                  ตรวจยอดบัตร / QR / โอน ตอนปิดกะ: {s.tenderDiff ? `ส่วนต่าง ${s.tenderDiff > 0 ? '+' : '−'}${baht(Math.abs(s.tenderDiff))}` : 'ตรงกับระบบ'}
-                </Text>
-              ) : null}
             </View>
           </View>
+
+          {s.tenders && Object.keys(s.tenders).length ? (
+            <View style={[s_.card, { marginTop: 10 }]}>
+              <Text style={s_.cardTitle}>ตรวจยอดบัตร / สแกนจ่าย ตอนปิดกะ</Text>
+              {Object.entries(s.tenders as Record<string, ShiftTender>).map(([id, t]) => (
+                <View key={id}>
+                  <Line l={t.label ?? (id === 'card' ? 'บัตรเครดิต + บัตรเดบิต' : id === 'scan' ? 'สแกนจ่าย' : PAYMENT_LABEL[id] ?? id)} r={`ยอดจริง ${baht(t.actual)}`} />
+                  <Text style={[s_.small, { textAlign: 'right', marginTop: 0, color: t.diff === 0 ? colors.success : t.diff > 0 ? '#B26A00' : colors.danger }]}>
+                    ระบบ {baht(t.system)}{t.diff === 0 ? ' · ✓ ตรง' : ` · ${t.diff > 0 ? 'เกิน +' : 'ขาด −'}${baht(Math.abs(t.diff))}`}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
 
           {s.closeNote || s.openingNote ? (
             <View style={s_.note}>

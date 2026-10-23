@@ -1,7 +1,6 @@
 // กะการขาย: เปิดกะ / นำเงินเข้า-ออก / ปิดกะ + กระทบยอดเงินสดในลิ้นชัก
 import { db, tx, countChanges } from './db.ts';
 import { HttpError, PAYMENT_METHODS, round2 } from './common.ts';
-import { getSettings } from './settings.ts';
 
 const SHIFT_COLS = `id, shift_no AS shiftNo, business_date AS businessDate, status, opened_at AS openedAt,
   opened_by AS openedBy, opening_cash AS openingCash, opening_note AS openingNote, closed_at AS closedAt,
@@ -47,8 +46,16 @@ export interface ShiftRow {
 }
 
 /** ช่องทางที่ไม่ใช่เงินสด — เงินไม่เข้าลิ้นชัก ตรวจยอดกับสลิปสรุปเครื่อง EDC / รายการเงินเข้าบัญชีแทน */
-export const NON_CASH = PAYMENT_METHODS.filter((m) => m !== 'cash');
-export type Tender = { system: number; count: number; actual: number; diff: number };
+/**
+ * ช่องตรวจยอดตอนปิดกะ (ไม่ใช่เงินสด) — รวมช่องทางที่ตรวจจากแหล่งเดียวกัน
+ *  - บัตรเครดิต + บัตรเดบิต: สลิปสรุปยอด (Settlement) ของเครื่อง EDC
+ *  - สแกนจ่าย (QR พร้อมเพย์ + โอน): ยอดเงินเข้าบัญชีร้าน
+ */
+export const TENDER_GROUPS = [
+  { id: 'card', label: 'บัตรเครดิต + บัตรเดบิต', methods: ['card'] },
+  { id: 'scan', label: 'สแกนจ่าย', methods: ['promptpay', 'transfer'] },
+] as const;
+export type Tender = { label?: string; system: number; count: number; actual: number; diff: number };
 
 /** ตัวเลขสดของกะ (คำนวณจากสมุดรับจ่าย) */
 function live(shiftId: number, openingCash: number) {
@@ -225,25 +232,25 @@ export function closeShift(body: { staff?: string; countedCash?: number; denomin
   if (!Number.isFinite(counted) || counted < 0) throw new HttpError(422, 'กรุณากรอกจำนวนเงินที่นับได้');
   const l = live(s.id, s.openingCash);
   const diff = round2(counted - l.expectedCash);
-  // ช่องที่ 2: บัตร / QR / โอน — กรอกยอดจริงจากสลิปสรุปเครื่อง EDC / ยอดเงินเข้าบัญชี (ไม่นับรวมกับลิ้นชัก)
+  // ช่องที่ 2: บัตร / สแกนจ่าย — กรอกยอดจริงจากสลิปสรุปเครื่อง EDC / ยอดเงินเข้าบัญชี (ไม่นับรวมกับลิ้นชัก)
   const raw = body.tenders && typeof body.tenders === 'object' ? (body.tenders as Record<string, unknown>) : {};
-  const label = (m: string) => getSettings().payments.methods.find((x) => x.id === m)?.label ?? m;
   const tenders: Record<string, Tender> = {};
-  for (const m of NON_CASH) {
-    const system = l.byMethod[m] ?? 0;
-    const given = raw[m];
+  for (const g of TENDER_GROUPS) {
+    const system = round2(g.methods.reduce((a, m) => a + (l.byMethod[m] ?? 0), 0));
+    const count = g.methods.reduce((a, m) => a + (l.countByMethod[m] ?? 0), 0);
+    const given = raw[g.id];
     if (given == null || given === '') {
-      if (system !== 0) throw new HttpError(422, `กรุณากรอกยอดจริงของ ${label(m)}`);
+      if (system !== 0) throw new HttpError(422, `กรุณากรอกยอดจริงของ ${g.label}`);
       continue; // ไม่มีรายการและไม่ได้กรอก → ไม่ต้องบันทึก
     }
     const actual = round2(Number(given));
-    if (!Number.isFinite(actual) || actual < 0) throw new HttpError(422, `ยอดจริงของ ${label(m)} ไม่ถูกต้อง`);
-    tenders[m] = { system, count: l.countByMethod[m] ?? 0, actual, diff: round2(actual - system) };
+    if (!Number.isFinite(actual) || actual < 0) throw new HttpError(422, `ยอดจริงของ ${g.label} ไม่ถูกต้อง`);
+    tenders[g.id] = { label: g.label, system, count, actual, diff: round2(actual - system) };
   }
   const tenderMismatch = Object.values(tenders).some((t) => t.diff !== 0);
   const note = body.note?.trim() || null;
   if ((diff !== 0 || tenderMismatch) && !note)
-    throw new HttpError(422, diff !== 0 ? 'ยอดเงินสดไม่ตรง กรุณาระบุหมายเหตุ' : 'ยอดบัตร / QR / โอน ไม่ตรง กรุณาระบุหมายเหตุ');
+    throw new HttpError(422, diff !== 0 ? 'ยอดเงินสดไม่ตรง กรุณาระบุหมายเหตุ' : 'ยอดบัตร / สแกนจ่าย ไม่ตรง กรุณาระบุหมายเหตุ');
   const clean = cleanDenoms(body.denominations);
   const denoms = clean ? JSON.stringify(clean) : null;
   const n = countChanges(() =>

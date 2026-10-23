@@ -21,14 +21,18 @@ interface Props {
   onLogout?: () => void;
 }
 
-const METHOD_ICON: Record<string, IconName> = { promptpay: 'qr-code-outline', card: 'card-outline', transfer: 'swap-horizontal-outline' };
+/** ช่องตรวจยอดที่ไม่ใช่เงินสด (ต้องตรงกับ TENDER_GROUPS ใน server/shifts.ts) */
+const GROUPS: { id: string; label: string; icon: IconName; methods: PaymentMethod[]; placeholder: string }[] = [
+  { id: 'card', label: 'บัตรเครดิต + บัตรเดบิต', icon: 'card-outline', methods: ['card'], placeholder: 'ยอดจากสลิป EDC' },
+  { id: 'scan', label: 'สแกนจ่าย', icon: 'qr-code-outline', methods: ['promptpay', 'transfer'], placeholder: 'ยอดเงินเข้าบัญชี' },
+];
 const verdictOf = (d: number) => VERDICT[d === 0 ? 'match' : d > 0 ? 'over' : 'short'];
 const signed = (d: number) => `${d > 0 ? '+' : '−'}${baht(Math.abs(d))}`;
 
 /**
  * ปิดกะ — ตรวจยอด 2 ช่องแยกกัน
  *  1) เงินสดในลิ้นชัก: นับแบงก์/เหรียญ เทียบกับยอดที่ควรมี
- *  2) บัตร / QR / โอน: เงินไม่เข้าลิ้นชัก → กรอกยอดจากสลิปสรุปเครื่อง EDC / ยอดเงินเข้าบัญชี เทียบกับยอดระบบ
+ *  2) บัตร / สแกนจ่าย: เงินไม่เข้าลิ้นชัก → กรอกยอดจากสลิปสรุปเครื่อง EDC / ยอดเงินเข้าบัญชี เทียบกับยอดระบบ
  */
 export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }: Props) {
   const { me } = useSession();
@@ -63,16 +67,18 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
   const diff = counted == null ? null : Math.round((counted - shift.expectedCash) * 100) / 100;
   const v = diff == null ? null : verdictOf(diff);
 
-  // ---------- ช่องที่ 2: บัตร / QR / โอน ----------
-  // แสดงช่องทางที่เปิดใช้ หรือมียอดในกะนี้ (ตามลำดับในตั้งค่า)
-  const others = settings.payments.methods
-    .filter((m) => m.id !== 'cash' && (m.enabled || (shift.byMethod[m.id] ?? 0) !== 0))
-    .map((m) => {
-      const system = shift.byMethod[m.id] ?? 0;
-      const txt = tend[m.id] ?? '';
-      const actual = txt !== '' && txt !== '.' && MONEY_RE.test(txt) ? Number(txt) : null;
-      return { id: m.id, label: m.label || PAYMENT_LABEL[m.id], system, count: shift.countByMethod?.[m.id] ?? 0, actual, need: system !== 0 };
-    });
+  // ---------- ช่องที่ 2: บัตร / สแกนจ่าย ----------
+  // แสดงกลุ่มที่มีช่องทางเปิดใช้ หรือมียอดในกะนี้
+  const on = (m: PaymentMethod) => settings.payments.methods.some((x) => x.id === m && x.enabled) || (shift.byMethod[m] ?? 0) !== 0;
+  const others = GROUPS.filter((g) => g.methods.some(on)).map((g) => {
+    const system = Math.round(g.methods.reduce((a, m) => a + (shift.byMethod[m] ?? 0), 0) * 100) / 100;
+    const count = g.methods.reduce((a, m) => a + (shift.countByMethod?.[m] ?? 0), 0);
+    // สแกนจ่าย: แยกให้เห็นว่ามาจาก QR / โอน เท่าไร
+    const parts = g.methods.length > 1 ? g.methods.filter((m) => (shift.byMethod[m] ?? 0) !== 0).map((m) => `${m === 'promptpay' ? 'QR' : 'โอน'} ${baht(shift.byMethod[m])}`) : [];
+    const txt = tend[g.id] ?? '';
+    const actual = txt !== '' && txt !== '.' && MONEY_RE.test(txt) ? Number(txt) : null;
+    return { ...g, system, count, parts, actual, need: system !== 0 };
+  });
   const missing = others.filter((o) => o.need && o.actual == null);
   const otherSystem = Math.round(others.reduce((a, o) => a + o.system, 0) * 100) / 100;
   const otherActual = Math.round(others.reduce((a, o) => a + (o.actual ?? 0), 0) * 100) / 100;
@@ -121,7 +127,7 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
         <View style={{ gap: 12 }}>
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <Tile icon="cash-outline" title="เงินสดในลิ้นชัก" v={v} d={diff ?? 0} sub={`นับได้ ${baht(counted)} · ควรมี ${baht(shift.expectedCash)}`} />
-            <Tile icon="card-outline" title="บัตร / QR / โอน" v={ov} d={otherDiff} sub={`ยอดจริง ${baht(otherActual)} · ระบบ ${baht(otherSystem)}`} />
+            <Tile icon="card-outline" title="บัตร / สแกนจ่าย" v={ov} d={otherDiff} sub={`ยอดจริง ${baht(otherActual)} · ระบบ ${baht(otherSystem)}`} />
           </View>
           <View style={s.ask}>
             <View style={s.askIcon}><Icon name="print-outline" size={24} color={colors.primary} /></View>
@@ -188,7 +194,7 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
           <Tile icon="cash-outline" title="เงินสดในลิ้นชัก" v={rv} d={result.diff ?? 0} sub={`นับได้ ${baht(result.countedCash ?? 0)} · ควรมี ${baht(result.expectedCash)}`} />
           {result.tenderDiff != null ? (
-            <Tile icon="card-outline" title="บัตร / QR / โอน" v={verdictOf(result.tenderDiff)} d={result.tenderDiff} sub={`ยอดจริง ${baht(tAct)} · ระบบ ${baht(tSys)}`} />
+            <Tile icon="card-outline" title="บัตร / สแกนจ่าย" v={verdictOf(result.tenderDiff)} d={result.tenderDiff} sub={`ยอดจริง ${baht(tAct)} · ระบบ ${baht(tSys)}`} />
           ) : null}
         </View>
         <View style={{ gap: 6, marginTop: 14 }}>
@@ -248,7 +254,7 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
       <View style={s.hintBox}>
         <Icon name="information-circle-outline" size={18} color={colors.primary} />
         <Text style={s.hintText}>
-          เงินช่องทางนี้ไม่เข้าลิ้นชัก — กรอกยอดจากสลิปสรุปยอด (Settlement) ของเครื่อง EDC สำหรับบัตร / QR และยอดเงินเข้าบัญชีสำหรับเงินโอน
+          เงินช่องทางนี้ไม่เข้าลิ้นชัก — บัตรเครดิต / เดบิต: กรอกยอดจากสลิปสรุปยอด (Settlement) ของเครื่อง EDC · สแกนจ่าย (QR พร้อมเพย์ / โอน): กรอกยอดเงินเข้าบัญชีร้าน
         </Text>
       </View>
       {others.length === 0 ? <Text style={s.resultSub}>ไม่มีช่องทางอื่นที่เปิดใช้</Text> : null}
@@ -258,23 +264,26 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
           <Text style={s.fillAllText}>ยอดตรงกับระบบทั้งหมด</Text>
         </Pressable>
       ) : null}
+      <View style={s.tGrid}>
       {others.map((o) => {
         const d = o.actual == null ? null : Math.round((o.actual - o.system) * 100) / 100;
         const dv = d == null ? null : verdictOf(d);
         return (
           <View key={o.id} style={[s.tRow, o.need && o.actual == null && { borderColor: '#F5C2C4' }]}>
             <View style={s.tHead}>
-              <Icon name={METHOD_ICON[o.id] ?? 'wallet-outline'} size={18} color={colors.text} />
-              <Text style={s.tLabel}>{o.label}</Text>
-              <Text style={s.tSys}>ระบบ {baht(o.system)}{o.count ? ` · ${o.count} บิล` : ''}</Text>
+              <Icon name={o.icon} size={18} color={colors.text} />
+              <Text style={s.tLabel} numberOfLines={1}>{o.label}</Text>
             </View>
+            <Text style={s.tSys} numberOfLines={2}>
+              ระบบ {baht(o.system)}{o.count ? ` · ${o.count} บิล` : ''}{o.parts.length ? ` (${o.parts.join(' · ')})` : ''}
+            </Text>
             <View style={s.tInputRow}>
               <View style={s.tInputWrap}>
                 <Text style={s.tBaht}>฿</Text>
                 <TextInput
                   value={tend[o.id] ?? ''}
                   onChangeText={(t) => setTend((x) => ({ ...x, [o.id]: moneyInput(t, x[o.id] ?? '') }))}
-                  placeholder={o.id === 'transfer' ? 'ยอดเงินเข้าบัญชี' : 'ยอดจากสลิป EDC'}
+                  placeholder={o.placeholder}
                   placeholderTextColor={colors.faint}
                   keyboardType="decimal-pad"
                   style={s.tInput}
@@ -291,11 +300,12 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
           </View>
         );
       })}
+      </View>
       {others.length ? (
         <View style={[s.live, { backgroundColor: ov?.bg ?? colors.surface, marginTop: 2 }]}>
           {ov ? <Icon name={ov.icon} size={26} color={ov.fg} /> : <Icon name="card-outline" size={24} color={colors.sub} />}
           <View style={{ flex: 1 }}>
-            <Text style={[s.liveLabel, { color: ov?.fg ?? colors.sub }]}>{ov ? `บัตร / QR / โอน: ${ov.label.replace('เงิน', 'ยอด')}` : `กรอกยอดจริงอีก ${missing.length} ช่องทาง`}</Text>
+            <Text style={[s.liveLabel, { color: ov?.fg ?? colors.sub }]}>{ov ? `บัตร / สแกนจ่าย: ${ov.label.replace('เงิน', 'ยอด')}` : `กรอกยอดจริงอีก ${missing.length} ช่องทาง`}</Text>
             <Text style={s.liveSub}>ยอดจริง {baht(otherActual)} · ระบบ {baht(otherSystem)}</Text>
           </View>
           {otherDiff ? <Text style={[s.liveDiff, { color: ov!.fg }]}>{signed(otherDiff)}</Text> : null}
@@ -319,7 +329,7 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
         <TabCard
           on={tab === 'other'}
           icon="card-outline"
-          title="② บัตร / QR / โอน"
+          title="② บัตร / สแกนจ่าย"
           sub={missing.length ? `ยังไม่กรอก ${missing.length} ช่องทาง` : `ยอดจริง ${baht(otherActual)}`}
           v={ov}
           onPress={() => setTab('other')}
@@ -362,7 +372,7 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
             {counted == null
               ? 'แจงเงินสดในลิ้นชักก่อน'
               : missing.length
-                ? 'กรอกยอดบัตร / QR / โอน ก่อน'
+                ? 'กรอกยอดบัตร / สแกนจ่าย ก่อน'
                 : mismatch && !note.trim()
                   ? 'ยอดไม่ตรง — ระบุหมายเหตุก่อน'
                   : `ถัดไป · เงินสด ${baht(counted)} · บัตร/QR/โอน ${baht(otherActual)}`}
@@ -465,7 +475,8 @@ const s = StyleSheet.create({
   hintText: { flex: 1, fontFamily: font, fontSize: 12, color: colors.text, lineHeight: 18 },
   fillAll: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 12, height: 34, borderRadius: 17, borderWidth: 1, borderColor: colors.primary },
   fillAllText: { fontFamily: font, fontSize: 13, color: colors.primary, fontWeight: '600' },
-  tRow: { borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, padding: 12, gap: 8 },
+  tGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  tRow: { flexGrow: 1, flexBasis: 220, minWidth: 0, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, padding: 12, gap: 8 },
   tHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   tLabel: { fontFamily: font, fontSize: 14, fontWeight: '600', color: colors.text, flex: 1 },
   tSys: { fontFamily: font, fontSize: 12, color: colors.sub },
