@@ -431,41 +431,67 @@ function PaymentsSection({ v, set }: { v: AdminSettings['payments']; set: Upd<Ad
         <Field label="ผู้จ่ายค่าธรรมเนียม" hint={v.feePayer === 'customer' ? 'บวกเพิ่มในยอดบิล เช่น สินค้า ฿1,000 + ค่าธรรมเนียมบัตร 2% = ลูกค้าจ่าย ฿1,020 (แสดงในตะกร้า/ใบเสร็จ)' : 'ลูกค้าจ่ายเท่าราคาสินค้า ร้านรับภาระค่าธรรมเนียมเอง (บันทึกไว้ดูในรายงาน ไม่พิมพ์บนใบเสร็จ)'}>
           <Seg value={v.feePayer} options={[['customer', 'ลูกค้าจ่าย (บวกเพิ่มในยอด)'], ['shop', 'ร้านจ่ายเอง']]} onChange={(x) => set({ feePayer: x as 'customer' | 'shop' })} />
         </Field>
-        {v.methods.map((m, i) => (
-          <View key={m.id} style={[s.payRow, !m.enabled && { opacity: 0.55 }]}>
-            <View style={[s.row, { gap: 10 }]}>
-              <Icon name={ICON[m.id]} size={22} color={colors.primary} />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Input value={m.label} onChange={(t) => upd(m.id, { label: t })} max={40} />
+        {/* 2 × 2: แต่ละวิธีชำระเป็นการ์ด — ชื่อ + เปิด/ปิด · ค่าธรรมเนียม · ตัวอย่าง · ลำดับ */}
+        <View style={s.payGrid}>
+          {v.methods.map((m, i) => {
+            const fee = (1000 * m.feePercent) / 100 + m.feeFixed;
+            return (
+              <View key={m.id} style={[s.payCard, m.enabled ? s.payCardOn : { opacity: 0.6 }]}>
+                <View style={[s.row, { gap: 8 }]}>
+                  <View style={[s.payIcon, m.enabled && { backgroundColor: colors.primarySoft }]}>
+                    <Icon name={ICON[m.id]} size={20} color={m.enabled ? colors.primary : colors.sub} />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Input value={m.label} onChange={(t) => upd(m.id, { label: t })} max={40} />
+                  </View>
+                  <Switch value={m.enabled} onChange={(x) => upd(m.id, { enabled: x })} label={`เปิดใช้ ${m.label}`} />
+                </View>
+                <View style={[s.row, { gap: 6, flexWrap: 'wrap' }]}>
+                  <Text style={[s.sub, { width: 74 }]}>ค่าธรรมเนียม</Text>
+                  <View style={s.unitBox}>
+                    <Input value={String(m.feePercent)} onChange={(t) => upd(m.id, { feePercent: Number(t.replace(/[^0-9.]/g, '')) || 0 })} keyboard="decimal-pad" max={5} compact />
+                    <Text style={s.unit}>%</Text>
+                  </View>
+                  <Text style={s.sub}>+</Text>
+                  <View style={s.unitBox}>
+                    <Input value={String(m.feeFixed)} onChange={(t) => upd(m.id, { feeFixed: Number(t.replace(/[^0-9.]/g, '')) || 0 })} keyboard="decimal-pad" max={6} compact />
+                    <Text style={s.unit}>บาท/บิล</Text>
+                  </View>
+                </View>
+                <View style={[s.row, { gap: 8 }]}>
+                  <Text style={[s.sub, { flex: 1, fontSize: 11 }]} numberOfLines={2}>
+                    {!m.enabled
+                      ? 'ปิดใช้งาน — ไม่แสดงในหน้าชำระเงิน'
+                      : fee
+                        ? `เช่น ฿1,000 → ค่าธรรมเนียม ${baht(fee)}${v.feePayer === 'customer' ? ` · ลูกค้าจ่าย ${baht(1000 + fee)}` : ' (ร้านจ่าย)'}`
+                        : 'ไม่มีค่าธรรมเนียม'}
+                  </Text>
+                  <Text style={[s.sub, { fontSize: 11 }]}>ลำดับ {i + 1}</Text>
+                  <Pressable onPress={() => move(i, -1)} disabled={i === 0} style={s.arrow} accessibilityLabel={`เลื่อน ${m.label} ไปก่อน`}>
+                    <Icon name="chevron-back" size={16} color={i === 0 ? colors.line : colors.text} />
+                  </Pressable>
+                  <Pressable onPress={() => move(i, 1)} disabled={i === v.methods.length - 1} style={s.arrow} accessibilityLabel={`เลื่อน ${m.label} ไปหลัง`}>
+                    <Icon name="chevron-forward" size={16} color={i === v.methods.length - 1 ? colors.line : colors.text} />
+                  </Pressable>
+                </View>
               </View>
-              <Pressable onPress={() => move(i, -1)} disabled={i === 0} style={s.arrow} accessibilityLabel={`เลื่อน ${m.label} ขึ้น`}>
-                <Icon name="chevron-up" size={16} color={i === 0 ? colors.line : colors.text} />
-              </Pressable>
-              <Pressable onPress={() => move(i, 1)} disabled={i === v.methods.length - 1} style={s.arrow} accessibilityLabel={`เลื่อน ${m.label} ลง`}>
-                <Icon name="chevron-down" size={16} color={i === v.methods.length - 1 ? colors.line : colors.text} />
-              </Pressable>
-              <Switch value={m.enabled} onChange={(x) => upd(m.id, { enabled: x })} label={`เปิดใช้ ${m.label}`} />
-            </View>
-            <View style={[s.row, { gap: 10, flexWrap: 'wrap', marginTop: 8 }]}>
-              <Text style={s.sub}>ค่าธรรมเนียม</Text>
-              <View style={s.unitBox}>
-                <Input value={String(m.feePercent)} onChange={(t) => upd(m.id, { feePercent: Number(t.replace(/[^0-9.]/g, '')) || 0 })} keyboard="decimal-pad" max={5} compact />
-                <Text style={s.unit}>%</Text>
-              </View>
-              <Text style={s.sub}>+</Text>
-              <View style={s.unitBox}>
-                <Input value={String(m.feeFixed)} onChange={(t) => upd(m.id, { feeFixed: Number(t.replace(/[^0-9.]/g, '')) || 0 })} keyboard="decimal-pad" max={6} compact />
-                <Text style={s.unit}>บาท/บิล</Text>
-              </View>
-              {m.feePercent || m.feeFixed ? (
-                <Text style={s.sub}>
-                  เช่น สินค้า ฿1,000 → ค่าธรรมเนียม {baht((1000 * m.feePercent) / 100 + m.feeFixed)}
-                  {v.feePayer === 'customer' ? ` · ลูกค้าจ่าย ${baht(1000 + (1000 * m.feePercent) / 100 + m.feeFixed)}` : ' (ร้านจ่าย)'}
-                </Text>
-              ) : null}
-            </View>
+            );
+          })}
+        </View>
+      </Card>
+      <Card title="ลิ้นชักเงินสด (เปิด / ปิดกะ)">
+        <View style={s.optRow}>
+          <Icon name="cash-outline" size={22} color={colors.text} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={s.optTitle}>บังคับแจกแจงจำนวนเงิน</Text>
+            <Text style={s.sub}>
+              {v.requireDenominations
+                ? 'เปิดอยู่ — ตอนเปิดกะ / ปิดกะ พนักงานต้องนับธนบัตร / เหรียญทีละชนิด กรอกยอดรวมเองไม่ได้ และใช้ยอดจากปิดกะล่าสุดไม่ได้'
+                : 'ปิดอยู่ — ตอนเปิดกะ / ปิดกะ เลือกได้ว่าจะนับธนบัตร / เหรียญ หรือกรอกยอดรวมเอง'}
+            </Text>
           </View>
-        ))}
+          <Switch value={!!v.requireDenominations} onChange={(x) => set({ requireDenominations: x })} label="บังคับแจกแจงจำนวนเงิน" />
+        </View>
       </Card>
       <Card title="ภาษีมูลค่าเพิ่ม (VAT)">
         <Text style={s.sub}>เปิด/ปิด VAT ตั้งแยกแต่ละสาขา (เมนู สาขา → “จดทะเบียนภาษีมูลค่าเพิ่มหรือไม่?”) · อัตรา VAT ใช้ร่วมกันทุกสาขา</Text>
@@ -2305,7 +2331,12 @@ const s = StyleSheet.create({
   link: { color: colors.primary, textDecorationLine: 'underline' },
   code: { fontFamily: Platform.select({ web: 'ui-monospace, Menlo, Consolas, monospace', default: undefined }), fontSize: 12, color: colors.text },
   infoBox: { backgroundColor: colors.surface, borderRadius: radius.md, padding: 12, gap: 4 },
-  payRow: { borderTopWidth: 1, borderTopColor: '#F2F4F7', paddingTop: 12 },
+  payGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  optRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6 },
+  optTitle: { fontFamily: font, fontSize: 14, fontWeight: '600', color: colors.text },
+  payCard: { flexGrow: 1, flexBasis: 320, minWidth: 0, gap: 10, padding: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: '#fff' },
+  payCardOn: { borderColor: '#D6E2FF' },
+  payIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   arrow: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   unitBox: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   unit: { fontFamily: font, fontSize: 12, color: colors.sub },

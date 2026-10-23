@@ -33,13 +33,18 @@ interface Props {
   onChange: (total: number | null, denominations: Record<string, number> | null) => void;
   initialMode?: 'count' | 'total';
   autoFocus?: boolean;
+  /** ตั้งค่า "บังคับแจกแจงจำนวนเงิน" → นับธนบัตร/เหรียญเท่านั้น (ไม่มีแท็บกรอกยอดรวม) */
+  forceCount?: boolean;
 }
 
 /**
  * แจงเงินในลิ้นชัก: นับธนบัตร/เหรียญทีละชนิด (ระบบรวมให้) หรือกรอกยอดรวมเอง
  */
-export function CashCounter({ total, onChange, initialMode = 'count', autoFocus }: Props) {
-  const [mode, setMode] = useState<'count' | 'total'>(initialMode);
+export function CashCounter({ total, onChange, initialMode = 'count', autoFocus, forceCount }: Props) {
+  const [picked, setMode] = useState<'count' | 'total'>(initialMode);
+  const mode = forceCount ? 'count' : picked;
+  /** บังคับแจกแจง + ลิ้นชักไม่มีเงิน → ยืนยันยอด ฿0 ได้ */
+  const [empty, setEmpty] = useState(false);
   const [counts, setCounts] = useState<Record<string, string>>({});
   const [typed, setTyped] = useState(total);
   const [gridW, setGridW] = useState(0);
@@ -53,13 +58,17 @@ export function CashCounter({ total, onChange, initialMode = 'count', autoFocus 
     if (mode === 'count') {
       const den: Record<string, number> = {};
       for (const [k, v] of Object.entries(counts)) if (Number(v) > 0) den[k] = Number(v);
-      onChange(Object.keys(den).length ? sum : null, Object.keys(den).length ? den : null);
+      const has = Object.keys(den).length > 0;
+      onChange(has ? sum : empty ? 0 : null, has ? den : null);
     } else {
       onChange(typed === '' || typed === '.' ? null : Number(typed), null);
     }
-  }, [mode, counts, typed]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mode, counts, typed, empty]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const setCount = (d: number, v: string) => setCounts((c) => ({ ...c, [d]: v.replace(/[^0-9]/g, '').slice(0, 5) }));
+  const setCount = (d: number, v: string) => {
+    setEmpty(false);
+    setCounts((c) => ({ ...c, [d]: v.replace(/[^0-9]/g, '').slice(0, 5) }));
+  };
   const step = (d: number, by: number) => setCount(d, String(Math.max(0, (Number(counts[d]) || 0) + by)));
 
   const tile = (x: { d: number; bg: string; fg: string }, coin: boolean, i: number) => {
@@ -99,6 +108,12 @@ export function CashCounter({ total, onChange, initialMode = 'count', autoFocus 
 
   return (
     <View style={{ gap: 8 }}>
+      {forceCount ? (
+        <View style={s.forced}>
+          <Icon name="lock-closed-outline" size={14} color={colors.primary} />
+          <Text style={s.forcedText}>ร้านตั้งค่าให้บังคับแจกแจงจำนวนเงิน — นับธนบัตร / เหรียญทีละชนิด</Text>
+        </View>
+      ) : (
       <View style={s.tabs}>
         {(['count', 'total'] as const).map((m) => (
           <Pressable key={m} style={[s.tab, mode === m && s.tabOn]} onPress={() => setMode(m)} accessibilityRole="tab" accessibilityState={{ selected: mode === m }}>
@@ -107,6 +122,7 @@ export function CashCounter({ total, onChange, initialMode = 'count', autoFocus 
           </Pressable>
         ))}
       </View>
+      )}
 
       {mode === 'count' ? (
         <>
@@ -125,6 +141,11 @@ export function CashCounter({ total, onChange, initialMode = 'count', autoFocus 
           {pieces ? (
             <Pressable onPress={() => setCounts({})} style={{ alignSelf: 'flex-end' }} accessibilityLabel="ล้างจำนวนทั้งหมด">
               <Text style={[s.hint, { color: colors.danger }]}>ล้างทั้งหมด</Text>
+            </Pressable>
+          ) : forceCount ? (
+            <Pressable onPress={() => setEmpty((x) => !x)} style={s.emptyRow} accessibilityRole="checkbox" accessibilityState={{ checked: empty }}>
+              <Icon name={empty ? 'checkbox' : 'square-outline'} size={18} color={empty ? colors.primary : colors.sub} />
+              <Text style={s.hint}>ลิ้นชักว่าง ไม่มีเงิน (฿0)</Text>
             </Pressable>
           ) : null}
         </>
@@ -149,6 +170,9 @@ const s = StyleSheet.create({
   tab: { flex: 1, height: 34, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
   tabOn: { backgroundColor: '#fff' },
   tabText: { fontFamily: font, fontSize: 12, color: colors.sub },
+  forced: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 9, borderRadius: radius.md, backgroundColor: colors.primarySoft },
+  forcedText: { flex: 1, fontFamily: font, fontSize: 12, color: colors.primary, fontWeight: '600' },
+  emptyRow: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 4 },
   tabTextOn: { color: colors.text, fontWeight: '600' },
   totalBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, backgroundColor: colors.surface, borderRadius: radius.md, paddingVertical: 12, paddingHorizontal: 14 },
   totalLabel: { fontFamily: font, fontSize: 13, fontWeight: '600', color: colors.text },

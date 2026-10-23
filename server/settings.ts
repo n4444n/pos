@@ -54,7 +54,11 @@ export interface Settings {
     skuSeparator: '-' | '' | '.' | '_';
     sync: { role: 'off' | 'master' | 'branch'; masterUrl: string; apiKey: string; intervalMin: number; syncPrice: boolean; syncCost: boolean; syncImages: boolean };
   };
-  payments: { methods: PayMethod[]; promptpayId: string; vat: { enabled: boolean; rate: number }; feePayer: 'customer' | 'shop' };
+  payments: {
+    methods: PayMethod[]; promptpayId: string; vat: { enabled: boolean; rate: number }; feePayer: 'customer' | 'shop';
+    /** เปิด/ปิดกะ: ต้องนับเงินในลิ้นชักเป็นธนบัตร/เหรียญทีละชนิด (กรอกยอดรวมเองไม่ได้) */
+    requireDenominations: boolean;
+  };
   barcode: {
     symbology: 'code128' | 'ean13'; autoAssign: 'none' | 'sku' | 'ean13'; ean13Prefix: string; labelWidth: number; labelHeight: number; labelShowPrice: boolean; labelShowName: boolean;
     /** โปรไฟล์กระดาษ/หน้าตาป้ายบาร์โค้ด (ตั้งค่า → กระดาษบาร์โค้ด) · labelProfile = โปรไฟล์เริ่มต้น */
@@ -192,6 +196,7 @@ export const DEFAULTS: Settings = {
     promptpayId: '',
     vat: { enabled: true, rate: 7 },
     feePayer: 'customer',
+    requireDenominations: false,
   },
   barcode: {
     symbology: 'code128', autoAssign: 'none', ean13Prefix: '2', labelWidth: 40, labelHeight: 30, labelShowPrice: true, labelShowName: true,
@@ -340,7 +345,7 @@ function clean(section: keyof Settings, v: Record<string, any>, old: Settings): 
       const pp = str(v.promptpayId, 20).replace(/[^0-9]/g, '');
       if (pp && ![10, 13, 15].includes(pp.length)) throw new HttpError(422, 'พร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก หรือเลขบัตร/เลขผู้เสียภาษี 13 หลัก');
       const vat = { enabled: bool(v.vat?.enabled, true), rate: Math.round(num(v.vat?.rate, 0, 30, 7) * 100) / 100 };
-      return { methods, promptpayId: pp, vat, feePayer: pick(v.feePayer, ['customer', 'shop'] as const, 'customer') };
+      return { methods, promptpayId: pp, vat, feePayer: pick(v.feePayer, ['customer', 'shop'] as const, 'customer'), requireDenominations: bool(v.requireDenominations, false) };
     }
     case 'barcode': {
       const prefix = str(v.ean13Prefix, 6).replace(/[^0-9]/g, '') || '2';

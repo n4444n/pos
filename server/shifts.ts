@@ -1,6 +1,7 @@
 // กะการขาย: เปิดกะ / นำเงินเข้า-ออก / ปิดกะ + กระทบยอดเงินสดในลิ้นชัก
 import { db, tx, countChanges } from './db.ts';
 import { HttpError, PAYMENT_METHODS, round2 } from './common.ts';
+import { getSettings } from './settings.ts';
 
 const SHIFT_COLS = `id, shift_no AS shiftNo, business_date AS businessDate, status, opened_at AS openedAt,
   opened_by AS openedBy, opening_cash AS openingCash, opening_note AS openingNote, closed_at AS closedAt,
@@ -192,12 +193,21 @@ db.exec(`UPDATE shifts_all SET denominations = NULLIF(json_remove(denominations,
           WHERE denominations IS NOT NULL AND json_valid(denominations)
             AND (json_type(denominations, '$."0.5"') IS NOT NULL OR json_type(denominations, '$."0.25"') IS NOT NULL)`);
 
+/** ตั้งค่า "บังคับแจกแจงจำนวนเงิน": ยอดต้องมาจากการนับธนบัตร/เหรียญ และตรงกับผลรวม (ยอด 0 = ลิ้นชักว่าง ไม่ต้องแจกแจง) */
+function requireCounted(amount: number, denoms: Record<string, number> | null) {
+  if (!getSettings().payments.requireDenominations || amount === 0) return;
+  const sum = denoms ? round2(Object.entries(denoms).reduce((a, [d, n]) => a + Number(d) * n, 0)) : null;
+  if (sum == null) throw new HttpError(422, 'ร้านตั้งค่าให้บังคับแจกแจงจำนวนเงิน — กรุณานับธนบัตร/เหรียญทีละชนิด', 'DENOMINATIONS_REQUIRED');
+  if (sum !== amount) throw new HttpError(422, `ยอดรวม ฿${amount.toLocaleString()} ไม่ตรงกับการแจกแจงธนบัตร/เหรียญ (฿${sum.toLocaleString()})`, 'DENOMINATIONS_REQUIRED');
+}
+
 export function openShift(body: { staff?: string; openingCash?: number; note?: string; denominations?: unknown }) {
   const staff = body.staff?.trim();
   const cash = round2(Number(body.openingCash));
   if (!staff) throw new HttpError(422, 'กรุณาเลือกพนักงานผู้เปิดกะ');
   if (!Number.isFinite(cash) || cash < 0) throw new HttpError(422, 'จำนวนเงินเปิดกะไม่ถูกต้อง');
   if (currentShiftRow()) throw new HttpError(409, 'มีกะที่เปิดอยู่แล้ว กรุณาปิดกะเดิมก่อน');
+  requireCounted(cash, cleanDenoms(body.denominations));
   const date = nowLocal().slice(0, 10);
   const id = tx(() => {
     const { n } = q.countOnDate.get(date) as { n: number };
@@ -252,6 +262,7 @@ export function closeShift(body: { staff?: string; countedCash?: number; denomin
   if ((diff !== 0 || tenderMismatch) && !note)
     throw new HttpError(422, diff !== 0 ? 'ยอดเงินสดไม่ตรง กรุณาระบุหมายเหตุ' : 'ยอดบัตร / สแกนจ่าย ไม่ตรง กรุณาระบุหมายเหตุ');
   const clean = cleanDenoms(body.denominations);
+  requireCounted(counted, clean);
   const denoms = clean ? JSON.stringify(clean) : null;
   const n = countChanges(() =>
     q.closeShift.run(

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { api } from '../../api';
+import { useAppSettings } from '../../appSettings';
 import { baht } from '../../format';
 import { useSession } from '../../session';
 import { colors, font, radius } from '../../theme';
@@ -22,6 +23,8 @@ interface Props {
 
 export function OpenShiftDialog({ visible, onClose, onOpened, hint, onSkip }: Props) {
   const { me } = useSession();
+  // ตั้งค่า "บังคับแจกแจงจำนวนเงิน" → ต้องนับเงินจริง (ไม่ใช้ยอดจากปิดกะล่าสุด)
+  const forced = !!useAppSettings().payments.requireDenominations;
   const [cash, setCash] = useState<number | null>(null);
   const [denoms, setDenoms] = useState<Record<string, number> | null>(null);
   const [note, setNote] = useState('');
@@ -104,7 +107,7 @@ export function OpenShiftDialog({ visible, onClose, onOpened, hint, onSkip }: Pr
           </View>
         )}
 
-        {suggest != null && suggest > 0 ? (
+        {suggest != null && suggest > 0 && !forced ? (
           <Pressable style={[s.suggest, useSuggest && s.suggestOn]} onPress={() => setUseSuggest((v) => !v)}>
             <Icon name={useSuggest ? 'checkbox' : 'square-outline'} size={18} color={useSuggest ? colors.primary : colors.sub} />
             <Text style={s.suggestText}>ใช้ยอดที่นับได้ตอนปิดกะล่าสุด</Text>
@@ -116,6 +119,7 @@ export function OpenShiftDialog({ visible, onClose, onOpened, hint, onSkip }: Pr
             key={key}
             total=""
             autoFocus
+            forceCount={forced}
             onChange={(t, d) => {
               setCash(t);
               setDenoms(d);
