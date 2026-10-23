@@ -229,11 +229,24 @@ export interface Shift {
   totalSales: number;
   billCount: number;
   byMethod: Record<PaymentMethod, number>;
+  /** จำนวนบิลต่อช่องทางในกะนี้ */
+  countByMethod?: Record<PaymentMethod, number>;
+  /** ยอดจริงบัตร / QR / โอน ที่กรอกตอนปิดกะ (null = กะก่อนมีฟีเจอร์นี้ / ยังไม่ปิด) */
+  tenders?: Partial<Record<PaymentMethod, ShiftTender>> | null;
+  /** ส่วนต่างรวมของบัตร / QR / โอน (ยอดจริง − ยอดระบบ) */
+  tenderDiff?: number | null;
   editCount: number;
   voidCount: number;
   cashRefunds: number;
   minutes: number;
   verdict: ShiftVerdict;
+}
+
+export interface ShiftTender {
+  system: number;
+  count: number;
+  actual: number;
+  diff: number;
 }
 
 export interface CashMove {

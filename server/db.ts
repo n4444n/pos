@@ -459,6 +459,10 @@ db.prepare('INSERT INTO temp.ctx (k, branch_id, main_id) VALUES (1, ?, ?)').run(
 const colsOf = (t: string) => (db.prepare(`PRAGMA main.table_info(${t})`).all() as { name: string }[]).map((c) => c.name);
 const CTX = '(SELECT branch_id FROM temp.ctx)';
 
+// ปิดกะ: ยอดจริงของช่องทางที่ไม่ใช่เงินสด (บัตร / QR / โอน) — JSON { method: { system, count, actual, diff } }
+// ต้องเพิ่มก่อนสร้าง view ด้านล่าง (trigger UPDATE ของ view อ้างชื่อคอลัมน์ตอนสร้าง)
+if (!colsOf('shifts_all').includes('tenders')) db.exec('ALTER TABLE shifts_all ADD COLUMN tenders TEXT');
+
 for (const t of SCOPED) {
   const cols = colsOf(`${t}_all`).filter((c) => c !== 'id' && c !== 'branch_id');
   db.exec(`

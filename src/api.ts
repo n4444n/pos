@@ -128,7 +128,7 @@ export const api = {
     request<Shift>('/api/shifts/open', { method: 'POST', body: JSON.stringify(body) }),
   cashMove: (body: { kind: 'in' | 'out'; amount: number; reason: string; staff: string }) =>
     request<{ shift: Shift; moves: CashMove[] }>('/api/shifts/current/cash', { method: 'POST', body: JSON.stringify(body) }),
-  closeShift: (body: { staff: string; countedCash: number; note?: string; denominations?: Record<string, number> }) =>
+  closeShift: (body: { staff: string; countedCash: number; note?: string; denominations?: Record<string, number>; tenders?: Partial<Record<PaymentMethod, number>> }) =>
     request<Shift>('/api/shifts/current/close', { method: 'POST', body: JSON.stringify(body) }),
   shifts: (f: { from?: string; to?: string; limit?: number; offset?: number }) =>
     request<{ rows: Shift[]; summary: ShiftSummary }>(`/api/shifts${qs(f)}`),
