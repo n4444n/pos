@@ -28,7 +28,7 @@ import { dashboard, dashboardCsv } from './dashboard.ts';
 import { importProducts } from './productImport.ts';
 import { reportXlsx } from './reportExport.ts';
 import { shipmentXlsx } from './shipmentExport.ts';
-import { productReport, productReportXlsx, salesReport, salesReportXlsx } from './reports.ts';
+import { billReport, billReportXlsx, productReport, productReportXlsx, salesReport, salesReportXlsx } from './reports.ts';
 import { stockXlsx } from './stockExport.ts';
 import { XLSX_TYPE } from './xlsx.ts';
 import { cancelShipment, createShipment, holdShipment, listShipments, restoreShipment, resumeShipment, scanShipment, setShipmentItem, shipmentDetail, shipShipment, updateShipment } from './shipments.ts';
@@ -546,7 +546,7 @@ const server = createServer(async (req, res) => {
 
       // ----- รายงานย่อย: ยอดขาย / สินค้า (ผู้จัดการ) -----
       {
-        const rm = /^\/api\/reports\/(sales|products)(\.xlsx)?$/.exec(path);
+        const rm = /^\/api\/reports\/(sales|products|bills)(\.xlsx)?$/.exec(path);
         if (rm && req.method === 'GET') {
           requireManager(me);
           const sp = url.searchParams;
@@ -554,9 +554,14 @@ const server = createServer(async (req, res) => {
           if (bq === 'all') setBranch(0);
           else if (bq && me.branchIds.includes(Number(bq))) setBranch(Number(bq));
           const f = Object.fromEntries(sp.entries()) as Record<string, string>;
-          if (!rm[2]) return json(req, res, 200, rm[1] === 'sales' ? salesReport(f) : productReport(f));
+          if (!rm[2]) return json(req, res, 200, rm[1] === 'sales' ? salesReport(f) : rm[1] === 'bills' ? billReport(f) : productReport(f));
           const bName = currentBranchInfo().name;
           const scope = currentBranch() === 0 ? 'รวมทุกสาขา' : bName.startsWith('สาขา') ? bName : `สาขา ${bName}`;
+          if (rm[1] === 'bills') {
+            const r = billReport({ ...f, limit: 1 }).range;
+            res.setHeader('Content-Disposition', `attachment; filename="bills-report-${r.from}-to-${r.to}.xlsx"`);
+            return send(req, res, 200, billReportXlsx(f, scope, currentBranch() === 0), XLSX_TYPE);
+          }
           const r = rm[1] === 'sales' ? salesReport(f).range : { from: f.from ?? '', to: f.to ?? '' };
           res.setHeader('Content-Disposition', `attachment; filename="${rm[1]}-report-${r.from}-to-${r.to}.xlsx"`);
           return send(req, res, 200, rm[1] === 'sales' ? salesReportXlsx(f, scope) : productReportXlsx(f, scope), XLSX_TYPE);

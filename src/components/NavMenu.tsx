@@ -9,10 +9,10 @@ import { Icon, type IconName } from './Icon';
 import { AppVersionChip, UpdateButton } from './UpdateButton';
 
 export type Route =
-  | 'sales' | 'dashboard' | 'salesReport' | 'productReport' | 'history' | 'shifts' | 'expenses' | 'staff' | 'stock' | 'skus' | 'shipments' | 'branches' | 'settings';
+  | 'sales' | 'dashboard' | 'salesReport' | 'billReport' | 'productReport' | 'history' | 'shifts' | 'expenses' | 'staff' | 'stock' | 'skus' | 'shipments' | 'branches' | 'settings';
 
 /** หน้าที่อยู่ใต้เมนู "รายงาน" (เฉพาะผู้จัดการ) */
-export const REPORT_ROUTES: Route[] = ['dashboard', 'salesReport', 'productReport'];
+export const REPORT_ROUTES: Route[] = ['dashboard', 'salesReport', 'billReport', 'productReport'];
 // เปิด/ปิดกลุ่มเมนู (รายงาน / สต็อกสินค้า) — จำไว้ระหว่างเปลี่ยนหน้า (แต่ละหน้ามี sidebar ของตัวเอง)
 const groupOpen: Partial<Record<string, boolean>> = {};
 
@@ -51,6 +51,7 @@ const ITEMS: Item[] = [
     children: [
       { id: 'dashboard', label: 'รายงานรวม', icon: 'grid-outline' },
       { id: 'salesReport', label: 'ยอดขาย', icon: 'cash-outline' },
+      { id: 'billReport', label: 'ยอดขายรายบิล', icon: 'receipt-outline' },
       { id: 'productReport', label: 'สินค้า', icon: 'pricetags-outline' },
     ],
   },

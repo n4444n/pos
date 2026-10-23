@@ -1,9 +1,11 @@
 // รายงานย่อย (เมนู รายงาน → ยอดขาย / สินค้า) + ส่งออก Excel
 // - ยอดขาย: แยกรายวัน / รายสัปดาห์ / รายเดือน — ยอดขาย ส่วนลด คืนเงิน ยอดสุทธิ ต้นทุน กำไร
 // - สินค้า: ขายได้กี่ชิ้น ยอดขาย ต้นทุน/ราคาขายเฉลี่ย กำไร คงเหลือ — ดูรายสินค้า หรือแยกตาม SKU
+// - รายบิล: ทุกบิลในช่วงวันที่ — ยอดขาย ส่วนลด ยอดสุทธิ VAT ต้นทุน กำไร วิธีชำระ สถานะ (ค้นหา / กรองวิธีชำระ / สถานะ)
 // ตัวเลขยอดขายตรงกับหน้า "รายงานรวม" (ไม่รวมบิลที่ยกเลิก · ยอดหลังแก้ไขบิลแล้ว) · ข้อมูลตามสาขาที่เลือก (หรือรวมทุกสาขา)
 import { db } from './db.ts';
-import { HttpError, round2 } from './common.ts';
+import { HttpError, PAYMENT_METHODS, round2 } from './common.ts';
+import { getSettings } from './settings.ts';
 import { buildXlsx, type Col } from './xlsx.ts';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -377,5 +379,169 @@ export function productReportXlsx(f: ProductQuery, scope: string): Buffer {
   return buildXlsx([
     { name: 'สินค้าตาม SKU', intro: intro('รายงานสินค้า (แยกตาม SKU)'), cols: skuCols, rows: bySku.rows, totals: totalsOf(bySku.total, bySku.rows.length), freezeCols: 2 },
     { name: 'สรุปตามสินค้า', intro: intro('รายงานสินค้า (รวมต่อสินค้า)'), cols: prodCols, rows: byProduct.rows, totals: totalsOf(byProduct.total, bySku.rows.length), freezeCols: 2 },
+  ]);
+}
+
+// =====================================================================
+// รายบิล
+// =====================================================================
+export interface BillQuery {
+  from?: string; to?: string; q?: string; payment?: string; status?: string;
+  sort?: string; dir?: string; page?: string | number; limit?: string | number;
+}
+export interface BillRow {
+  id: number; orderNo: string; createdAt: string; branch: string | null; salesperson: string | null; customer: string | null;
+  orderType: string | null; payment: string; paymentLabel: string; lines: number; units: number;
+  gross: number; discount: number; fee: number; net: number; vat: number; cost: number; profit: number;
+  status: 'paid' | 'edited' | 'void'; editCount: number; voidReason: string | null;
+}
+
+const BILL_SORT: Record<string, string> = {
+  time: 'o.id', no: 'o.order_no', staff: "COALESCE(o.salesperson, '')", customer: "COALESCE(o.customer_name, '')",
+  payment: 'o.payment_method', units: 'COALESCE(it.units, 0)', gross: 'o.subtotal', discount: 'o.discount', net: 'o.total', vat: 'o.vat',
+  cost: 'COALESCE(it.cost, 0)', profit: "(CASE WHEN o.status = 'void' THEN 0 ELSE o.total - o.vat - COALESCE(it.cost, 0) END)", status: 'o.status',
+};
+
+function billWhere(f: BillQuery) {
+  const { from, to } = range(f);
+  const conds = ['date(o.created_at) BETWEEN ? AND ?'];
+  const args: (string | number)[] = [from, to];
+  const q = (f.q ?? '').trim().slice(0, 60);
+  if (q) {
+    conds.push("(o.order_no LIKE ? OR COALESCE(o.customer_name, '') LIKE ? OR COALESCE(o.salesperson, '') LIKE ?)");
+    const like = `%${q.replace(/[%_]/g, '')}%`;
+    args.push(like, like, like);
+  }
+  if (f.payment && PAYMENT_METHODS.includes(f.payment)) { conds.push('o.payment_method = ?'); args.push(f.payment); }
+  if (f.status && ['paid', 'edited', 'void'].includes(f.status)) { conds.push('o.status = ?'); args.push(f.status); }
+  return { from, to, where: conds.join(' AND '), args };
+}
+
+// จำนวนชิ้น / รายการ / ต้นทุน ต่อบิล
+const BILL_FROM = `FROM orders o
+  LEFT JOIN branches b ON b.id = o.branch_id
+  LEFT JOIN (
+    SELECT oi.order_id, COUNT(*) AS lines, SUM(oi.qty) AS units, SUM(oi.qty * COALESCE(v.cost, p.cost, 0)) AS cost
+      FROM order_items oi LEFT JOIN variants_all v ON v.id = oi.variant_id LEFT JOIN products p ON p.id = v.product_id
+     GROUP BY oi.order_id
+  ) it ON it.order_id = o.id`;
+const BILL_COLS = `o.id, o.order_no AS orderNo, o.created_at AS createdAt, b.name AS branch, o.salesperson, o.customer_name AS customer,
+  o.order_type AS orderType, o.payment_method AS payment, COALESCE(it.lines, 0) AS lines, COALESCE(it.units, 0) AS units,
+  o.subtotal AS gross, o.discount, COALESCE(o.fee, 0) AS fee, o.total AS net, o.vat, COALESCE(it.cost, 0) AS cost,
+  o.status, o.edit_count AS editCount, o.void_reason AS voidReason`;
+
+function billRows(f: BillQuery, limit: number, offset: number) {
+  const w = billWhere(f);
+  const col = BILL_SORT[f.sort ?? ''] ?? 'o.id';
+  const dir = f.dir === 'asc' ? 'ASC' : 'DESC';
+  const labels = new Map(getSettings().payments.methods.map((m) => [m.id as string, m.label]));
+  const rows = (db
+    .prepare(`SELECT ${BILL_COLS} ${BILL_FROM} WHERE ${w.where} ORDER BY ${col} ${dir}, o.id ${dir} LIMIT ? OFFSET ?`)
+    .all(...w.args, limit, offset) as Omit<BillRow, 'profit' | 'paymentLabel'>[]).map((r) => ({
+    ...r,
+    paymentLabel: labels.get(r.payment) ?? r.payment,
+    gross: round2(r.gross), discount: round2(r.discount), fee: round2(r.fee), net: round2(r.net), vat: round2(r.vat), cost: round2(r.cost),
+    // บิลที่ยกเลิก: ไม่มีกำไร (ไม่นับในยอดรวม)
+    profit: r.status === 'void' ? 0 : round2(r.net - r.vat - r.cost),
+  })) as BillRow[];
+  return { w, rows };
+}
+
+function billTotals(f: BillQuery) {
+  const w = billWhere(f);
+  const t = db
+    .prepare(
+      `SELECT COUNT(*) AS all_, SUM(CASE WHEN o.status = 'void' THEN 1 ELSE 0 END) AS voided,
+              SUM(CASE WHEN o.status = 'edited' THEN 1 ELSE 0 END) AS edited,
+              ${['units', 'gross', 'discount', 'fee', 'net', 'vat', 'cost']
+                .map((k) => {
+                  const e = k === 'units' ? 'COALESCE(it.units, 0)' : k === 'cost' ? 'COALESCE(it.cost, 0)' : k === 'fee' ? 'COALESCE(o.fee, 0)' : k === 'gross' ? 'o.subtotal' : k === 'net' ? 'o.total' : `o.${k}`;
+                  return `COALESCE(SUM(CASE WHEN o.status != 'void' THEN ${e} END), 0) AS ${k}`;
+                })
+                .join(', ')}
+         ${BILL_FROM} WHERE ${w.where}`,
+    )
+    .get(...w.args) as Record<string, number>;
+  const total = {
+    rows: t.all_, bills: t.all_ - (t.voided ?? 0), voided: t.voided ?? 0, edited: t.edited ?? 0,
+    units: t.units, gross: round2(t.gross), discount: round2(t.discount), fee: round2(t.fee), net: round2(t.net), vat: round2(t.vat), cost: round2(t.cost),
+    profit: round2(t.net - t.vat - t.cost),
+  };
+  // แยกตามวิธีชำระ (ไม่รวมบิลที่ยกเลิก) — ผลรวม = ยอดสุทธิรวม
+  const labels = new Map(getSettings().payments.methods.map((m) => [m.id as string, m.label]));
+  const byPayment = (db
+    .prepare(`SELECT o.payment_method AS payment, COUNT(*) AS bills, COALESCE(SUM(o.total), 0) AS net ${BILL_FROM} WHERE ${w.where} AND o.status != 'void' GROUP BY o.payment_method ORDER BY net DESC`)
+    .all(...w.args) as { payment: string; bills: number; net: number }[]).map((r) => ({ ...r, label: labels.get(r.payment) ?? r.payment, net: round2(r.net) }));
+  return { range: { from: w.from, to: w.to }, total, byPayment };
+}
+
+export function billReport(f: BillQuery) {
+  const limit = Math.min(Math.max(Number(f.limit) || 50, 1), 200);
+  const t = billTotals(f);
+  const pages = Math.max(1, Math.ceil(t.total.rows / limit));
+  const page = Math.min(Math.max(Number(f.page) || 1, 1), pages);
+  const { rows } = billRows(f, limit, (page - 1) * limit);
+  return { ...t, rows, page, pages, limit };
+}
+
+const BILL_STATUS: Record<string, string> = { paid: 'ชำระแล้ว', edited: 'แก้ไขแล้ว', void: 'ยกเลิก' };
+
+export function billReportXlsx(f: BillQuery, scope: string, allBranches: boolean): Buffer {
+  const t = billTotals(f);
+  const { rows } = billRows(f, 50000, 0);
+  const cols: Col<BillRow>[] = [
+    { header: 'เลขที่บิล', value: (r) => r.orderNo },
+    { header: 'วันที่-เวลา', value: (r) => r.createdAt, type: 'datetime' },
+    ...(allBranches ? [{ header: 'สาขา', value: (r: BillRow) => r.branch ?? '' }] : []),
+    { header: 'พนักงานขาย', value: (r) => r.salesperson ?? '' },
+    { header: 'ลูกค้า', value: (r) => r.customer ?? '' },
+    { header: 'ประเภทการขาย', value: (r) => r.orderType ?? '' },
+    { header: 'วิธีชำระเงิน', value: (r) => r.paymentLabel },
+    { header: 'จำนวนรายการ', value: (r) => r.lines, type: 'int' },
+    { header: 'จำนวนชิ้น', value: (r) => r.units, type: 'int' },
+    { header: 'ยอดขาย', value: (r) => r.gross, type: 'money' },
+    { header: 'ส่วนลด', value: (r) => r.discount, type: 'money' },
+    { header: 'ค่าธรรมเนียม', value: (r) => r.fee, type: 'money' },
+    { header: 'ยอดสุทธิ', value: (r) => r.net, type: 'money' },
+    { header: 'VAT', value: (r) => r.vat, type: 'money' },
+    { header: 'ต้นทุน', value: (r) => r.cost, type: 'money' },
+    { header: 'กำไร', value: (r) => r.profit, type: 'money' },
+    { header: 'สถานะ', value: (r) => BILL_STATUS[r.status] ?? r.status },
+    { header: 'แก้ไข (ครั้ง)', value: (r) => r.editCount || '', type: 'int' },
+    { header: 'เหตุผลยกเลิก', value: (r) => r.voidReason ?? '' },
+  ];
+  const x = t.total;
+  const totals = {
+    orderNo: `รวม ${x.bills} บิล`, createdAt: '', lines: null, units: x.units, gross: x.gross, discount: x.discount, fee: x.fee,
+    net: x.net, vat: x.vat, cost: x.cost, profit: x.profit, paymentLabel: '', status: '', editCount: 0,
+  } as unknown as BillRow;
+  const filters = [
+    f.q ? `ค้นหา "${f.q}"` : '',
+    f.payment && PAYMENT_METHODS.includes(f.payment) ? `ชำระด้วย ${getSettings().payments.methods.find((m) => m.id === f.payment)?.label ?? f.payment}` : '',
+    f.status && BILL_STATUS[f.status] ? `สถานะ ${BILL_STATUS[f.status]}` : '',
+  ].filter(Boolean).join(' · ');
+  return buildXlsx([
+    {
+      name: 'ยอดขายรายบิล',
+      intro: [
+        'รายงานยอดขายรายบิล',
+        `${dayText(t.range.from)} – ${dayText(t.range.to)} · ${scope}${filters ? ` · ${filters}` : ''}`,
+        `ยอดสุทธิ = ยอดที่เก็บจริง (หลังแก้ไขบิล รวม VAT) · กำไร = ยอดสุทธิ − VAT − ต้นทุน · บิลที่ยกเลิกแสดงไว้แต่ไม่นับในยอดรวม (ยกเลิก ${x.voided} บิล)`,
+      ],
+      cols,
+      rows,
+      totals,
+    },
+    {
+      name: 'แยกตามวิธีชำระ',
+      intro: ['ยอดขายรายบิล แยกตามวิธีชำระเงิน', `${dayText(t.range.from)} – ${dayText(t.range.to)} · ${scope} · ไม่รวมบิลที่ยกเลิก`],
+      cols: [
+        { header: 'วิธีชำระเงิน', value: (r: (typeof t.byPayment)[number]) => r.label },
+        { header: 'จำนวนบิล', value: (r: (typeof t.byPayment)[number]) => r.bills, type: 'int' },
+        { header: 'ยอดสุทธิ', value: (r: (typeof t.byPayment)[number]) => r.net, type: 'money' },
+      ],
+      rows: t.byPayment,
+      totals: { label: 'รวม', bills: x.bills, net: x.net, payment: '' },
+    },
   ]);
 }

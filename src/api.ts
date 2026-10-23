@@ -233,6 +233,8 @@ export const api = {
   salesReportXlsxUrl: (f: SalesReportFilter) => `${BASE}/api/reports/sales.xlsx${qs({ ...f, token: auth.get() ?? '' })}`,
   productReport: (f: ProductReportFilter) => request<ProductReport>(`/api/reports/products${qs(f)}`),
   productReportXlsxUrl: (f: ProductReportFilter) => `${BASE}/api/reports/products.xlsx${qs({ ...f, token: auth.get() ?? '' })}`,
+  billReport: (f: BillReportFilter) => request<BillReport>(`/api/reports/bills${qs(f)}`),
+  billReportXlsxUrl: (f: BillReportFilter) => `${BASE}/api/reports/bills.xlsx${qs({ ...f, token: auth.get() ?? '' })}`,
 
   // ----- พนักงาน / เข้าสู่ระบบ -----
   login: (pin: string) => request<{ token: string; staff: Me }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ pin }) }),
@@ -437,6 +439,21 @@ export interface SalesReportRow {
 export interface SalesReport {
   range: { from: string; to: string }; group: 'day' | 'week' | 'month'; rows: SalesReportRow[];
   total: Omit<SalesReportRow, 'key' | 'label' | 'from' | 'to'>;
+}
+export interface BillReportFilter {
+  from: string; to: string; branch?: string; q?: string; payment?: string; status?: string;
+  sort?: string; dir?: 'asc' | 'desc'; page?: number; limit?: number;
+}
+export interface BillReportRow {
+  id: number; orderNo: string; createdAt: string; branch: string | null; salesperson: string | null; customer: string | null;
+  orderType: string | null; payment: string; paymentLabel: string; lines: number; units: number;
+  gross: number; discount: number; fee: number; net: number; vat: number; cost: number; profit: number;
+  status: 'paid' | 'edited' | 'void'; editCount: number; voidReason: string | null;
+}
+export interface BillReport {
+  range: { from: string; to: string }; page: number; pages: number; limit: number; rows: BillReportRow[];
+  total: { rows: number; bills: number; voided: number; edited: number; units: number; gross: number; discount: number; fee: number; net: number; vat: number; cost: number; profit: number };
+  byPayment: { payment: string; label: string; bills: number; net: number }[];
 }
 export interface ProductReportFilter {
   from: string; to: string; branch?: string; q?: string; category?: string; mode?: 'product' | 'sku'; sold?: '0' | '1';
