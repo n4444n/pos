@@ -1,3 +1,4 @@
+// ปุ่ม "อัปเดต vX.Y.Z" ของแอปเดสก์ท็อป + ป้ายเวอร์ชันท้ายเมนู
 import { useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 import { desktop, useDesktopUpdate } from '../desktop';

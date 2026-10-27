@@ -1,8 +1,10 @@
+// เรียก API ของเซิร์ฟเวอร์ POS (ทุก endpoint อยู่ใน object `api`) + ชนิดข้อมูลของคำขอ/คำตอบ
 import { Platform } from 'react-native';
 import { auth, type Me } from './session';
+import { getDeviceTerminal } from './terminal';
 import type { PublicSettings } from './appSettings';
 import type {
-  Bootstrap, CashMove, Dashboard, EditPreview, HistoryFilter, HistoryRow, HistorySummary, Order, OrderDetail, PaymentMethod, Promo,
+  Bootstrap, CashMove, CreditNoteDoc, Dashboard, TaxInvoiceDoc, EditPreview, HistoryFilter, HistoryRow, HistorySummary, Order, OrderDetail, PaymentMethod, Promo,
   ProductFull, Shift, ShiftSummary, SkuPage, SkuProduct, StockCmdMode, StockCmdResult, StockRow, StockSummary, Variant, EditVariant, Attr,
 } from './types';
 
@@ -51,9 +53,9 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, timeoutMs = 15000): Promise<T> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 15000);
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(BASE + path, {
       ...init,
@@ -61,6 +63,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       headers: {
         'Content-Type': 'application/json',
         ...(auth.get() ? { Authorization: `Bearer ${auth.get()}` } : {}),
+        // เครื่อง POS ของเครื่องนี้ → บิลบันทึกเครื่องที่ออก · เลขที่บิลรันต่อเครื่อง
+        ...(getDeviceTerminal() ? { 'X-POS-Terminal': String(getDeviceTerminal()) } : {}),
         ...(init?.headers ?? {}),
       },
     });
@@ -78,6 +82,39 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } finally {
     clearTimeout(timer);
   }
+}
+
+// ---------- สำรอง / กู้คืนข้อมูล ----------
+export interface BackupBranchInfo {
+  id: number; name: string; code: string; isMain: boolean;
+  bills: number; lastBillAt: string | null; openShift: boolean;
+}
+export interface BackupPreview {
+  id: string;
+  shop: string;
+  createdAt: string | null;
+  /** 'all' = ไฟล์ทั้งร้าน · ตัวเลข = ไฟล์ของสาขาเดียว */
+  scope: 'all' | number;
+  sameShop: boolean;
+  branches: (BackupBranchInfo & { hasData: boolean; current: BackupBranchInfo | null; lostBills: number; shipmentsAfter: number })[];
+}
+export interface RestoreResult { branches: { id: number; name: string; rows: number }[]; safetyBackup: string }
+
+/** อัปโหลดไฟล์ .db (ไฟล์ใหญ่ — ไม่จำกัดเวลา 15 วินาทีแบบคำขออื่น) */
+async function uploadBackup(file: Blob): Promise<BackupPreview> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/backup/upload`, {
+      method: 'POST',
+      body: file,
+      headers: { 'Content-Type': 'application/octet-stream', ...(auth.get() ? { Authorization: `Bearer ${auth.get()}` } : {}) },
+    });
+  } catch {
+    throw new ApiError(0, 'อัปโหลดไม่สำเร็จ — เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, (data as { error?: string }).error ?? `HTTP ${res.status}`);
+  return data as BackupPreview;
 }
 
 export const api = {
@@ -121,6 +158,15 @@ export const api = {
     }),
   voidOrder: (id: number, body: { pin: string; reason: string; refundMethod?: PaymentMethod }) =>
     request<{ order: OrderDetail }>(`/api/orders/${id}/void`, { method: 'POST', body: JSON.stringify(body) }),
+  // ----- ใบกำกับภาษีเต็มรูป / ใบลดหนี้ -----
+  issueTaxInvoice: (orderId: number, body: { buyerName: string; buyerAddress: string; buyerTaxId: string; buyerBranch: string }) =>
+    request<TaxInvoiceDoc>(`/api/orders/${orderId}/tax-invoice`, { method: 'POST', body: JSON.stringify(body) }),
+  taxInvoice: (id: number) => request<TaxInvoiceDoc>(`/api/tax-invoices/${id}`),
+  cancelTaxInvoice: (id: number, reason: string) =>
+    request<TaxInvoiceDoc>(`/api/tax-invoices/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  creditNote: (orderId: number, body: { pin: string; reason: string; refundMethod?: PaymentMethod; items: { itemId: number; qty: number }[] }) =>
+    request<CreditNoteDoc>(`/api/orders/${orderId}/credit-note`, { method: 'POST', body: JSON.stringify(body) }),
+  creditNoteDoc: (id: number) => request<CreditNoteDoc>(`/api/credit-notes/${id}`),
 
   // ----- กะการขาย -----
   currentShift: () => request<{ shift: Shift | null; moves?: CashMove[]; suggestOpening?: number }>('/api/shifts/current'),
@@ -161,7 +207,7 @@ export const api = {
   createKey: (name: string, scope: 'read' | 'write') =>
     request<ApiKeyRow & { key: string }>('/api/settings/keys', { method: 'POST', body: JSON.stringify({ name, scope }) }),
   revokeKey: (id: number) => request<{ ok: boolean }>(`/api/settings/keys/${id}`, { method: 'DELETE' }),
-  bulkProducts: (ids: number[], action: 'activate' | 'deactivate' | 'category' | 'zero' | 'delete', categoryId?: string) =>
+  bulkProducts: (ids: number[], action: 'activate' | 'deactivate' | 'category' | 'zero' | 'delete' | 'vat' | 'exempt', categoryId?: string) =>
     request<{ action: string; done: number; archived: number }>('/api/products/bulk', { method: 'POST', body: JSON.stringify({ ids, action, categoryId }) }),
   stockCommand: (mode: StockCmdMode, lines: { code: string; qty: number; line: number }[], apply = false) =>
     request<StockCmdResult>('/api/stock/command', { method: 'POST', body: JSON.stringify({ mode, lines, apply }) }),
@@ -192,6 +238,28 @@ export const api = {
   cancelShipment: (id: number, reason: string) =>
     request<ShipmentList>(`/api/shipments/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
   restoreShipment: (id: number) => request<ShipmentDetail>(`/api/shipments/${id}/restore`, { method: 'POST' }),
+  // ----- ภาษีมูลค่าเพิ่ม -----
+  tax: () => request<TaxAdmin>('/api/tax'),
+  taxCompany: (b: { legalName?: string; taxId?: string; lockEdit?: boolean }) => request<TaxAdmin>('/api/tax/company', { method: 'PUT', body: JSON.stringify(b) }),
+  taxBranch: (id: number, b: { vatRegistered?: boolean; taxBranchNo?: string }) => request<TaxAdmin>(`/api/tax/branches/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
+  addVatRate: (b: VatRateIn) => request<TaxAdmin>('/api/tax/rates', { method: 'POST', body: JSON.stringify(b) }),
+  updateVatRate: (id: number, b: VatRateIn) => request<TaxAdmin>(`/api/tax/rates/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
+  deleteVatRate: (id: number) => request<TaxAdmin>(`/api/tax/rates/${id}`, { method: 'DELETE' }),
+  addTerminal: (b: TerminalIn & { branchId: number }) => request<TaxAdmin>('/api/tax/terminals', { method: 'POST', body: JSON.stringify(b) }),
+  updateTerminal: (id: number, b: TerminalIn) => request<TaxAdmin>(`/api/tax/terminals/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
+  deleteTerminal: (id: number) => request<TaxAdmin>(`/api/tax/terminals/${id}`, { method: 'DELETE' }),
+  /** เครื่อง POS ที่ใช้งานได้ของสาขาปัจจุบัน (ให้เครื่องนี้เลือก) */
+  branchTerminals: () => request<TaxTerminal[]>('/api/tax/terminals'),
+  taxReport: (f: TaxReportFilter) => request<TaxReport>(`/api/tax/report${qs(f)}`),
+  taxReportXlsxUrl: (f: TaxReportFilter) => `${BASE}/api/tax/report.xlsx${qs({ ...f, token: auth.get() ?? '' })}`,
+  shipmentReport: (f: ShipReportFilter) => request<ShipReport>(`/api/shipments/report${qs(f)}`),
+  shipmentReportXlsxUrl: (f: ShipReportFilter) => `${BASE}/api/shipments/report.xlsx${qs({ ...f, token: auth.get() ?? '' })}`,
+  /** ลิงก์ดาวน์โหลดไฟล์สำรอง · branch = id สาขา (ไม่ระบุ = ทั้งร้าน) */
+  backupUrl: (branch?: number) => `${BASE}/api/backup/download${qs({ branch, token: auth.get() ?? '' })}`,
+  uploadBackup,
+  restoreBackup: (id: string, branchIds: number[], pin: string) =>
+    request<RestoreResult>('/api/backup/restore', { method: 'POST', body: JSON.stringify({ id, branchIds, pin }) }, 300_000),
+  discardBackup: (id: string) => request<{ ok: true }>('/api/backup/discard', { method: 'POST', body: JSON.stringify({ id }) }),
   branches: () => request<{ current: Branch | null; list: (Branch & { current: boolean })[] }>('/api/branches'),
   switchBranch: (id: number) => request<{ branchId: number }>('/api/branches/switch', { method: 'POST', body: JSON.stringify({ id }) }),
   branchManage: () => request<BranchManage>('/api/branches/manage'),
@@ -330,7 +398,6 @@ export interface NotifyEventInfo {
   key: NotifyEventKey; name: string; label: string; desc: string; hasItems: boolean;
   placeholders: [string, string][]; sample: Record<string, string>; sampleItems: NotifyItem[]; defaultTemplate: CardTemplate;
 }
-export interface SyncState { lastSince: string; lastRunAt: string | null; ok: boolean | null; message: string; created: number; updated: number; deleted: number; errors: string[]; master?: string }
 export interface ApiKeyRow { id: number; name: string; prefix: string; scope: 'read' | 'write' | 'sync'; createdAt?: string; createdBy?: string | null; lastUsedAt?: string | null }
 
 // ----- ค่าใช้จ่ายร้าน -----
@@ -418,6 +485,77 @@ export interface ImportResult {
   warnings: { line: number; code: string; text: string }[];
   failed: { code: string; name: string; text: string }[];
 }
+// ---- ภาษีมูลค่าเพิ่ม ----
+export interface VatRate {
+  id: number; rate: number; startDate: string; endDate: string | null; note: string; createdBy: string | null; createdAt: string;
+  /** จำนวนบิลในช่วงอัตรานี้ · current = มีผลวันนี้ */
+  bills: number; current: boolean;
+}
+export interface VatRateIn { rate: number | string; startDate: string; endDate?: string | null; note?: string }
+export interface TaxTerminal {
+  id: number; branchId: number; code: string; rdNo: string; name: string; active: boolean; bills?: number; lastBillAt?: string | null;
+}
+export interface TerminalIn { code: string; rdNo: string; name: string; active?: boolean }
+export interface TaxAdmin {
+  company: { legalName: string; taxId: string; shopName: string; lockEdit: boolean; taxIdValid: boolean };
+  branches: { id: number; name: string; code: string; isMain: boolean; vatRegistered: boolean; taxBranchNo: string }[];
+  rates: VatRate[];
+  rateToday: number | null;
+  today: string;
+  terminals: TaxTerminal[];
+}
+export interface TaxCreditRow {
+  id: number; docNo: string; issuedAt: string; reason: string; refundMethod: string; vatRate: number; vatBase: number; vat: number; exempt: number;
+  total: number; issuedBy: string; approver: string; orderNo: string; orderDate: string; branch: string;
+}
+export interface TaxFullInvoiceRow {
+  id: number; docNo: string; issuedAt: string; buyerName: string; buyerTaxId: string; buyerBranch: string; buyerBranchText: string;
+  vatRate: number; vatBase: number; vat: number; exempt: number; total: number; status: 'active' | 'cancelled'; cancelReason: string | null;
+  issuedBy: string; orderNo: string;
+}
+export interface TaxReportFilter { from: string; to: string; branch?: string; terminal?: string; page?: number; limit?: number }
+export interface TaxDayRow {
+  day: string; branchId: number; branch: string; taxBranch: string; terminalId: number; terminal: string | null; rdNo: string; terminalName: string;
+  firstNo: string; lastNo: string; bills: number; voids: number; voidTotal: number; total: number; vatBase: number; vat: number; exempt: number;
+  gtStart: number; gtEnd: number; continuous: boolean | null;
+}
+export interface TaxBillRow {
+  id: number; orderNo: string; createdAt: string; branch: string; terminal: string | null; rdNo: string; customer: string | null; status: string;
+  vatRate: number | null; vatBase: number; vat: number; exempt: number; total: number; paymentMethod: string;
+  voidReason: string | null; voidedAt: string | null; voidedBy: string | null; voidApprover: string | null;
+}
+export interface TaxReport {
+  range: { from: string; to: string };
+  header: { legalName: string; taxId: string; branches: { id: number; name: string; taxBranch: string; vatRegistered: boolean }[] };
+  total: { bills: number; voids: number; edited: number; noTerminal: number; voidTotal: number; total: number; vatBase: number; vat: number; exempt: number };
+  byRate: {
+    rate: number; bills: number; vatBase: number; vat: number; exempt: number; total: number;
+    /** ใบลดหนี้ในอัตรานี้ + ยอดสุทธิหลังหักใบลดหนี้ */
+    cnCount?: number; cnVatBase?: number; cnVat?: number; cnTotal?: number; netVatBase?: number; netVat?: number; netExempt?: number; netTotal?: number;
+  }[];
+  /** ยอดสุทธิหลังหักใบลดหนี้ของงวด (ใช้ยื่น ภ.พ.30) */
+  net?: { total: number; vatBase: number; vat: number; exempt: number };
+  creditTotal?: { count: number; total: number; vatBase: number; vat: number; exempt: number };
+  creditNotes?: TaxCreditRow[];
+  taxInvoices?: TaxFullInvoiceRow[];
+  days: TaxDayRow[];
+  bills: TaxBillRow[]; page: number; pages: number;
+  voids: TaxBillRow[];
+  terminals: { id: number; code: string; rdNo: string; name: string }[];
+}
+
+/** รายงานการส่ง (ใบส่งของที่ส่งออกแล้ว) */
+export interface ShipReportFilter { from: string; to: string; dest?: string; q?: string; sort?: string; dir?: 'asc' | 'desc'; page?: number; limit?: number }
+export interface ShipReportRow {
+  id: number; docNo: string; shippedAt: string; createdAt: string; destBranchId: number; destBranchName: string | null;
+  sourceBranchId: number | null; sourceBranchName: string | null; bags: number; note: string | null; shippedBy: string | null; createdBy: string | null;
+  units: number; lines: number;
+}
+export interface ShipReport {
+  range: { from: string; to: string }; rows: ShipReportRow[]; page: number; pages: number;
+  total: { docs: number; bags: number; units: number; lines: number };
+  byDest: { destBranchId: number; destBranchName: string | null; docs: number; units: number; bags: number }[];
+}
 export interface ShipmentList { list: Shipment[]; cancelled: Shipment[]; keepDays: number; branches: ShipBranch[] }
 export interface ShipmentItem {
   variantId: number; qty: number; sku: string; barcode: string | null; size: string; color: string; extra: string; name: string; productId: number; productSku?: string; label: string;
@@ -449,10 +587,12 @@ export interface BillReportRow {
   orderType: string | null; payment: string; paymentLabel: string; lines: number; units: number;
   gross: number; discount: number; fee: number; net: number; vat: number; cost: number; profit: number;
   status: 'paid' | 'edited' | 'void'; editCount: number; voidReason: string | null;
+  /** คืนเงินด้วยใบลดหนี้ (หักใน net / vat / units / cost แล้ว) */
+  refund: number;
 }
 export interface BillReport {
   range: { from: string; to: string }; page: number; pages: number; limit: number; rows: BillReportRow[];
-  total: { rows: number; bills: number; voided: number; edited: number; units: number; gross: number; discount: number; fee: number; net: number; vat: number; cost: number; profit: number };
+  total: { rows: number; bills: number; voided: number; edited: number; units: number; gross: number; discount: number; fee: number; net: number; vat: number; cost: number; profit: number; refund: number };
   byPayment: { payment: string; label: string; bills: number; net: number }[];
 }
 export interface ProductReportFilter {

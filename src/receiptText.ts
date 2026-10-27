@@ -61,7 +61,7 @@ export function receiptText(r: ReceiptCfg) {
     lang === 'en'
       ? d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
       : d.toLocaleString('th-TH', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  const vat = (o: { vat: number; total: number }) => vatLabel(o, t('vatIncluded'));
+  const vat = (o: { vat: number; total: number; vatRate?: number | null; vatBase?: number | null }) => vatLabel(o, t('vatIncluded'));
   return { lang, t, pay, date, vat };
 }
 

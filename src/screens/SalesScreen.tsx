@@ -1,3 +1,4 @@
+// หน้าขาย (หน้าหลัก): สินค้า · ตะกร้า · ชำระเงิน · พิมพ์ใบเสร็จ
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,

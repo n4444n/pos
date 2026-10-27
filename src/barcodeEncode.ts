@@ -2,11 +2,12 @@
 // ใช้ร่วมกันทั้งบาร์โค้ดบนจอ ป้ายบาร์โค้ดที่พิมพ์ และตัวอย่างในหน้าตั้งค่า (ไม่มี import ของ React Native)
 
 /** ประเภทบาร์โค้ดบนป้าย · auto = ตามตั้งค่าร้าน (เมนู บาร์โค้ด) */
-export type Symbology = 'auto' | 'code128' | 'code128b' | 'ean13' | 'ean8' | 'upca' | 'code39';
+export type Symbology = 'auto' | 'code128' | 'code128a' | 'code128b' | 'ean13' | 'ean8' | 'upca' | 'code39';
 
 export const SYMBOLOGIES: { id: Exclude<Symbology, 'auto'>; label: string; hint: string }[] = [
-  { id: 'code128', label: 'Code 128 อัตโนมัติ', hint: 'ทุกรหัส · ตัวเลขยาวจะได้บาร์โค้ดสั้นลง (แนะนำ)' },
-  { id: 'code128b', label: 'Code 128-B', hint: 'ทุกรหัส · แบบเดิม' },
+  { id: 'code128a', label: '128 - A', hint: 'A–Z 0–9 สัญลักษณ์ (ไม่มีตัวพิมพ์เล็ก)' },
+  { id: 'code128b', label: '128 - B', hint: 'ตัวอักษร / ตัวเลขทุกแบบ' },
+  { id: 'code128', label: 'Code 128 อัตโนมัติ', hint: 'ทุกรหัส · ตัวเลขยาวจะได้บาร์โค้ดสั้นลง' },
   { id: 'ean13', label: 'EAN-13', hint: 'ตัวเลข 13 หลัก' },
   { id: 'ean8', label: 'EAN-8', hint: 'ตัวเลข 8 หลัก' },
   { id: 'upca', label: 'UPC-A', hint: 'ตัวเลข 12 หลัก' },
@@ -34,6 +35,15 @@ const c128 = (codes: number[]) => {
 export function code128(text: string): number[] | null {
   if (!printable(text)) return null;
   return c128([104, ...[...text].map((c) => c.charCodeAt(0) - 32)]);
+}
+
+/** ประเภทที่ร้านใช้บนป้าย (เลือกได้ในหน้าตั้งค่า) */
+export const LABEL_SYMBOLOGIES = ['code128a', 'code128b', 'code39'] as const;
+
+/** Code 128-A (ASCII 32–95: ตัวใหญ่ ตัวเลข สัญลักษณ์ — ไม่มีตัวพิมพ์เล็ก) */
+export function code128a(text: string): number[] | null {
+  if (!text || [...text].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) > 95)) return null;
+  return c128([103, ...[...text].map((c) => c.charCodeAt(0) - 32)]);
 }
 
 /** Code 128 อัตโนมัติ: ใช้ชุด C (ตัวเลข 2 หลัก/ช่อง) กับตัวเลขที่ยาวต่อกัน ≥ 4 หลัก ที่เหลือใช้ชุด B → บาร์โค้ดสั้นลง */
@@ -158,9 +168,10 @@ export function code39(text: string): number[] | null {
  * @returns widths + ประเภทที่ใช้จริง (ไว้เตือนในหน้าตั้งค่า)
  */
 export function encodeBarcode(code: string, sym: Exclude<Symbology, 'auto'>): { widths: number[]; used: Exclude<Symbology, 'auto'> } | null {
-  const fn = { code128: code128Auto, code128b: code128, ean13, ean8, upca, code39 }[sym] ?? code128Auto;
+  const fn = { code128: code128Auto, code128a, code128b: code128, ean13, ean8, upca, code39 }[sym] ?? code128;
   const w = fn(code);
   if (w) return { widths: w, used: sym };
-  const f = code128Auto(code);
-  return f ? { widths: f, used: 'code128' } : null;
+  // ใช้ประเภทที่เลือกไม่ได้ → 128-B (รับตัวอักษร/ตัวเลขทุกแบบ)
+  const f = code128(code);
+  return f ? { widths: f, used: 'code128b' } : null;
 }

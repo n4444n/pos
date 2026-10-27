@@ -1,3 +1,4 @@
+// หน้าขาย: ตะกร้าสินค้าด้านขวา (จำนวน · ลบ · ยอดรวม · ปุ่มชำระเงิน)
 import { memo, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { baht, bahtShort, PAYMENT_LABEL, variantLabel } from '../format';
@@ -164,6 +165,12 @@ export function CartPanel({ pos, onPayment, onPlace }: Props) {
           <View style={s.tRow}>
             <Text style={s.tSmall}>VAT {settings.payments.vat.rate}% (รวมในราคาแล้ว)</Text>
             <Text style={s.tSmall}>{baht(totals.vat)}</Text>
+          </View>
+        ) : null}
+        {totals.exempt > 0 ? (
+          <View style={s.tRow}>
+            <Text style={s.tSmall}>สินค้ายกเว้น VAT</Text>
+            <Text style={s.tSmall}>{baht(totals.exempt)}</Text>
           </View>
         ) : null}
         {fee ? (

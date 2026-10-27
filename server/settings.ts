@@ -1,6 +1,6 @@
 // การตั้งค่าระบบ: เก็บเป็น JSON แยกตามหมวด ในตาราง settings
 import { db } from './db.ts';
-import { HttpError, ORDER_TYPES, setVatRate } from './common.ts';
+import { getVatRate, HttpError, ORDER_TYPES } from './common.ts';
 import { currentBranchInfo } from './branches.ts';
 import { cleanStyle, cleanTemplate, DEFAULT_STYLE, EVENTS, type CardStyle, type CardTemplate, type EventChannels, type EventKey } from './notify.ts';
 
@@ -63,6 +63,8 @@ export interface Settings {
     symbology: 'code128' | 'ean13'; autoAssign: 'none' | 'sku' | 'ean13'; ean13Prefix: string; labelWidth: number; labelHeight: number; labelShowPrice: boolean; labelShowName: boolean;
     /** โปรไฟล์กระดาษ/หน้าตาป้ายบาร์โค้ด (ตั้งค่า → กระดาษบาร์โค้ด) · labelProfile = โปรไฟล์เริ่มต้น */
     labelProfiles: LabelProfile[]; labelProfile: string;
+    /** แบบสำเร็จรูปขนาดกระดาษที่ร้านบันทึกเอง */
+    labelPresets: LabelPreset[];
   };
   receipt: {
     paperWidth: 58 | 80; fontSize: 'small' | 'medium' | 'large'; title: string; header: string; footer: string;
@@ -97,6 +99,13 @@ export interface Settings {
     templates: Record<EventKey, CardTemplate>;
   };
   api: { enabled: boolean };
+  /** ภาษีมูลค่าเพิ่ม (ตั้งค่า → ภาษี) — อัตรา VAT / เครื่อง POS / สาขาภาษี อยู่ในตารางของ tax.ts */
+  tax: {
+    /** ชื่อผู้ประกอบการตามที่จดทะเบียน (พิมพ์บนใบกำกับภาษี · ว่าง = ใช้ชื่อร้าน) */
+    legalName: string;
+    /** ห้ามแก้ไขบิลที่ออกแล้วในสาขาที่จด VAT — เปลี่ยน/คืนสินค้าต้องยกเลิกบิลแล้วออกใหม่ */
+    lockEdit: boolean;
+  };
 }
 
 
@@ -104,8 +113,14 @@ export interface Settings {
 export interface LabelProfile {
   id: string;
   name: string;
-  /** roll = สติ๊กเกอร์ม้วน (เครื่องพิมพ์ป้าย) · a4 = กระดาษสติ๊กเกอร์ A4 */
+  /** roll = สติ๊กเกอร์ม้วน (เครื่องพิมพ์ป้าย) · a4 = กระดาษแผ่น (A4 / A5 / กำหนดเอง — ชื่อเดิม a4 คงไว้ให้ข้อมูลเก่าใช้ได้) */
   paper: 'roll' | 'a4';
+  /** กระดาษแผ่น: กว้าง × สูง ของแผ่น (มม.) · ม้วน: pageWidth = ความกว้างม้วน (0 = คำนวณจากดวง) */
+  pageWidth: number; pageHeight: number;
+  /** ม้วน: ขอบขวา / ขอบล่างของกระดาษ (มม.) */
+  marginRight: number; marginBottom: number;
+  /** จุดเริ่มพิมพ์ (ดวงที่เท่าไรของแถวแรก) */
+  startAt: number;
   /** ขนาดดวง (มม.) */
   width: number; height: number;
   /** ดวงต่อแถว · a4: จำนวนแถวต่อแผ่น */
@@ -114,7 +129,8 @@ export interface LabelProfile {
   gapX: number; gapY: number; marginTop: number; marginLeft: number;
   /** ระยะขอบในดวง (มม.) */
   padding: number;
-  symbology: 'auto' | 'code128' | 'code128b' | 'ean13' | 'ean8' | 'upca' | 'code39';
+  /** ประเภทบาร์โค้ดบนป้าย — ร้านใช้ 128-A / 128-B / Code 39 (ค่าเก่าอื่น ๆ ถูกเปลี่ยนเป็น 128-B) */
+  symbology: 'code128a' | 'code128b' | 'code39';
   /** ความสูงบาร์โค้ด (มม.) · ความกว้าง % ของดวง */
   barHeight: number; barWidth: number;
   /** ความหนาแท่งแคบสุด (มม.) · 0 = ยืดเต็มความกว้าง % */
@@ -131,8 +147,8 @@ export interface LabelProfile {
   nameGap: number;
 }
 export const DEFAULT_LABEL_PROFILE: LabelProfile = {
-  id: 'p1', name: 'โปรไฟล์ 1', paper: 'roll', width: 50, height: 30, cols: 1, rows: 1, gapX: 2, gapY: 0, marginTop: 0, marginLeft: 0, padding: 1.2,
-  symbology: 'auto', barHeight: 10, barWidth: 90, barModule: 0, layout: 'standard', showCode: true, showName: true, showVariant: true, showPrice: true, showShop: false,
+  id: 'p1', name: 'โปรไฟล์ 1', paper: 'roll', pageWidth: 0, pageHeight: 0, marginRight: 0, marginBottom: 0, startAt: 1, width: 50, height: 30, cols: 1, rows: 1, gapX: 2, gapY: 0, marginTop: 0, marginLeft: 0, padding: 1.2,
+  symbology: 'code128b', barHeight: 10, barWidth: 90, barModule: 0, layout: 'standard', showCode: true, showName: true, showVariant: true, showPrice: true, showShop: false,
   bold: true, italic: false, align: 'center', codeSize: 8, nameSize: 8, priceSize: 8, textGap: 0.5, nameGap: 0.5,
 };
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -145,11 +161,16 @@ export function cleanLabelProfile(v: Record<string, any>, i = 0): LabelProfile {
     id: String(v?.id ?? '').replace(/[^\w-]/g, '').slice(0, 24) || `p${i + 1}`,
     name: String(v?.name ?? '').trim().slice(0, 40) || `โปรไฟล์ ${i + 1}`,
     paper,
-    width: n(v?.width, 10, 210, d.width), height: n(v?.height, 8, 297, d.height),
-    cols: Math.round(n(v?.cols, 1, paper === 'a4' ? 8 : 4, 1)), rows: Math.round(n(v?.rows, 1, 30, 1)),
-    gapX: n(v?.gapX, 0, 20, d.gapX), gapY: n(v?.gapY, 0, 20, d.gapY), marginTop: n(v?.marginTop, 0, 30, 0), marginLeft: n(v?.marginLeft, 0, 30, 0),
-    padding: n(v?.padding, 0, 6, d.padding),
-    symbology: ['auto', 'code128', 'code128b', 'ean13', 'ean8', 'upca', 'code39'].includes(v?.symbology) ? v.symbology : 'auto',
+    // แผ่น: ขนาดแผ่นเอง (ไม่ระบุ = A4) · ม้วน: ความกว้างม้วน (0 = อัตโนมัติ)
+    pageWidth: paper === 'a4' ? n(v?.pageWidth || 210, 40, 420, 210) : n(v?.pageWidth, 0, 300, 0),
+    pageHeight: paper === 'a4' ? n(v?.pageHeight || 297, 40, 600, 297) : n(v?.pageHeight, 0, 420, 0),
+    marginRight: n(v?.marginRight, 0, 100, 0), marginBottom: n(v?.marginBottom, 0, 100, 0),
+    width: n(v?.width, 5, 300, d.width), height: n(v?.height, 5, 420, d.height),
+    cols: Math.round(n(v?.cols, 1, paper === 'a4' ? 20 : 8, 1)), rows: Math.round(n(v?.rows, 1, 60, 1)),
+    startAt: Math.round(n(v?.startAt, 1, paper === 'a4' ? 20 : 8, 1)),
+    gapX: n(v?.gapX, 0, 50, d.gapX), gapY: n(v?.gapY, 0, 50, d.gapY), marginTop: n(v?.marginTop, 0, 100, 0), marginLeft: n(v?.marginLeft, 0, 100, 0),
+    padding: n(v?.padding, 0, 20, d.padding),
+    symbology: ['code128a', 'code128b', 'code39'].includes(v?.symbology) ? v.symbology : 'code128b',
     barHeight: n(v?.barHeight, 3, 60, d.barHeight), barWidth: Math.round(n(v?.barWidth, 30, 100, d.barWidth)),
     barModule: Math.round(Math.min(1, Math.max(0, Number(v?.barModule) || 0)) * 100) / 100,
     layout: ['standard', 'classic', 'compact'].includes(v?.layout) ? v.layout : 'standard',
@@ -170,6 +191,23 @@ export function cleanLabelProfiles(list: unknown): LabelProfile[] {
     seen.add(p.id);
   }
   return arr.length ? arr : [{ ...DEFAULT_LABEL_PROFILE }];
+}
+
+/** แบบสำเร็จรูปที่ร้านบันทึกเอง (ตั้งค่า → กระดาษบาร์โค้ด) — เก็บเฉพาะค่าขนาดกระดาษ */
+export interface LabelPreset { id: string; label: string; apply: Partial<LabelProfile> }
+const PRESET_KEYS = ['paper', 'pageWidth', 'pageHeight', 'marginRight', 'marginBottom', 'width', 'height', 'cols', 'rows', 'gapX', 'gapY', 'marginTop', 'marginLeft', 'padding'] as const;
+export function cleanLabelPresets(list: unknown): LabelPreset[] {
+  const out: LabelPreset[] = [];
+  for (const [i, x] of (Array.isArray(list) ? list : []).slice(0, 24).entries()) {
+    const v = (x ?? {}) as Record<string, any>;
+    const p = cleanLabelProfile({ ...DEFAULT_LABEL_PROFILE, ...(v.apply ?? {}) }, i);
+    const apply: Partial<LabelProfile> = {};
+    for (const k of PRESET_KEYS) (apply as Record<string, unknown>)[k] = p[k];
+    let id = String(v.id ?? '').replace(/[^\w-]/g, '').slice(0, 24) || `u${i + 1}`;
+    while (out.some((o) => o.id === id)) id = `${id}x`;
+    out.push({ id, label: String(v.label ?? '').trim().slice(0, 40) || `${p.width} × ${p.height} มม.`, apply });
+  }
+  return out;
 }
 
 export const DEFAULTS: Settings = {
@@ -194,13 +232,14 @@ export const DEFAULTS: Settings = {
       { id: 'transfer', label: 'โอนผ่านธนาคาร', enabled: true, feePercent: 0, feeFixed: 0 },
     ],
     promptpayId: '',
-    vat: { enabled: true, rate: 7 },
+    // อัตรา VAT อยู่ในตารางอัตรา VAT (ตั้งค่า → ภาษี) — rate ตรงนี้คงไว้ให้ข้อมูลเดิมอ่านได้ ไม่ได้ใช้คิดภาษี
+    vat: { enabled: true, rate: 0 },
     feePayer: 'customer',
     requireDenominations: false,
   },
   barcode: {
     symbology: 'code128', autoAssign: 'none', ean13Prefix: '2', labelWidth: 40, labelHeight: 30, labelShowPrice: true, labelShowName: true,
-    labelProfiles: [{ ...DEFAULT_LABEL_PROFILE }], labelProfile: DEFAULT_LABEL_PROFILE.id,
+    labelProfiles: [{ ...DEFAULT_LABEL_PROFILE }], labelProfile: DEFAULT_LABEL_PROFILE.id, labelPresets: [],
   },
   receipt: {
     paperWidth: 80, fontSize: 'medium', title: 'ใบเสร็จรับเงิน / ใบกำกับภาษีอย่างย่อ', header: '', footer: 'ขอบคุณที่ใช้บริการ',
@@ -217,9 +256,9 @@ export const DEFAULTS: Settings = {
     templates: Object.fromEntries(EVENTS.map((e) => [e.key, structuredClone(e.template)])) as Record<EventKey, CardTemplate>,
   },
   api: { enabled: false },
+  tax: { legalName: '', lockEdit: true },
 };
 export const SECTIONS = Object.keys(DEFAULTS) as (keyof Settings)[];
-export const WEBHOOK_EVENTS = EVENTS.map((e) => e.name);
 
 // ---------- อ่าน/เขียน ----------
 let cache: Settings | null = null;
@@ -282,8 +321,8 @@ export function getSettings(): Settings {
   cache.payments.methods = ms;
   // โปรไฟล์ป้ายบาร์โค้ด (อาร์เรย์ — merge ไม่เติมค่าที่ขาดในแต่ละโปรไฟล์)
   cache.barcode.labelProfiles = cleanLabelProfiles((stored.barcode as { labelProfiles?: unknown } | undefined)?.labelProfiles ?? DEFAULTS.barcode.labelProfiles);
+  cache.barcode.labelPresets = cleanLabelPresets((stored.barcode as { labelPresets?: unknown } | undefined)?.labelPresets ?? []);
   if (!cache.barcode.labelProfiles.some((p) => p.id === cache!.barcode.labelProfile)) cache.barcode.labelProfile = cache.barcode.labelProfiles[0].id;
-  setVatRate(cache.payments.vat.rate / 100); // เปิด/ปิด VAT ตั้งรายสาขา (เมนูสาขา)
   return cache;
 }
 
@@ -344,7 +383,7 @@ function clean(section: keyof Settings, v: Record<string, any>, old: Settings): 
       if (!methods.some((m) => m.enabled)) throw new HttpError(422, 'ต้องเปิดใช้วิธีชำระเงินอย่างน้อย 1 แบบ');
       const pp = str(v.promptpayId, 20).replace(/[^0-9]/g, '');
       if (pp && ![10, 13, 15].includes(pp.length)) throw new HttpError(422, 'พร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก หรือเลขบัตร/เลขผู้เสียภาษี 13 หลัก');
-      const vat = { enabled: bool(v.vat?.enabled, true), rate: Math.round(num(v.vat?.rate, 0, 30, 7) * 100) / 100 };
+      const vat = { enabled: bool(v.vat?.enabled, true), rate: Math.round(num(v.vat?.rate ?? old.payments.vat.rate, 0, 30, 0) * 100) / 100 };
       return { methods, promptpayId: pp, vat, feePayer: pick(v.feePayer, ['customer', 'shop'] as const, 'customer'), requireDenominations: bool(v.requireDenominations, false) };
     }
     case 'barcode': {
@@ -356,7 +395,7 @@ function clean(section: keyof Settings, v: Record<string, any>, old: Settings): 
         ...(() => {
           const labelProfiles = cleanLabelProfiles(v.labelProfiles ?? old.barcode.labelProfiles);
           const labelProfile = labelProfiles.some((p) => p.id === v.labelProfile) ? String(v.labelProfile) : labelProfiles[0].id;
-          return { labelProfiles, labelProfile };
+          return { labelProfiles, labelProfile, labelPresets: cleanLabelPresets(v.labelPresets ?? old.barcode.labelPresets) };
         })(),
       };
     }
@@ -413,6 +452,8 @@ function clean(section: keyof Settings, v: Record<string, any>, old: Settings): 
     }
     case 'api':
       return { enabled: bool(v.enabled, false) };
+    case 'tax':
+      return { legalName: str(v.legalName, 160), lockEdit: bool(v.lockEdit, true) };
   }
 }
 
@@ -434,6 +475,8 @@ export function forAdmin() {
   const mask = (x: string) => (x ? `••••${x.slice(-4)}` : '');
   return {
     ...s,
+    // VAT ที่ใช้จริง (สาขาที่กำลังใช้งาน + อัตราที่มีผลวันนี้จากตารางอัตรา VAT)
+    payments: { ...s.payments, vat: { enabled: currentBranchInfo().vatRegistered, rate: Math.round(getVatRate() * 10000) / 100 } },
     stock: { ...s.stock, sync: { ...s.stock.sync, apiKey: mask(s.stock.sync.apiKey) } },
     notify: {
       ...s.notify, line: { ...s.notify.line, token: mask(s.notify.line.token) }, whatsapp: { ...s.notify.whatsapp, token: mask(s.notify.whatsapp.token) },
@@ -451,10 +494,12 @@ export function publicSettings() {
     ...s.shop, branchName: b.name, branchCode: b.code, address: b.address || s.shop.address, phone: b.phone || s.shop.phone,
     photoUrl: b.photo || s.shop.photoUrl,
   };
-  const payments = { ...s.payments, vat: { ...s.payments.vat, enabled: b.vatRegistered } };
+  // อัตรา VAT = อัตราที่มีผลวันนี้จากตารางอัตรา VAT (ตั้งค่า → ภาษี)
+  const payments = { ...s.payments, vat: { enabled: b.vatRegistered, rate: Math.round(getVatRate() * 10000) / 100 } };
   return {
-    shop, display: s.display, payments, receipt: s.receipt, barcode: { symbology: s.barcode.symbology, labelProfiles: s.barcode.labelProfiles, labelProfile: s.barcode.labelProfile }, stock: { lowStockDefault: s.stock.lowStockDefault, allowNegative: s.stock.allowNegative },
+    shop, display: s.display, payments, receipt: s.receipt, barcode: { symbology: s.barcode.symbology, labelProfiles: s.barcode.labelProfiles, labelProfile: s.barcode.labelProfile, labelPresets: s.barcode.labelPresets ?? [] }, stock: { lowStockDefault: s.stock.lowStockDefault, allowNegative: s.stock.allowNegative },
     branch: { id: b.id, name: b.name, code: b.code, isMain: b.isMain },
+    tax: { legalName: s.tax.legalName, taxId: s.shop.taxId, taxBranchNo: b.taxBranchNo, vatRegistered: b.vatRegistered, lockEdit: s.tax.lockEdit && b.vatRegistered },
   };
 }
 

@@ -1,3 +1,4 @@
+// หน้าขาย: สลับจำนวนคอลัมน์การ์ดสินค้า (5×5 / 4×4 / 3×3)
 import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { ViewMode } from '../layout';

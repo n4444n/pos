@@ -14,12 +14,12 @@
 
 | Type | Name | Value | TTL |
 |---|---|---|---|
-| A | `pos` | `179.197.244.102` | 300 |
+| A | `pos` | `<IP ของ VPS>` | 300 |
 
-ตรวจ: `ping pos.sh0p.tech` ต้องได้ 179.197.244.102 (รอไม่กี่นาทีถึง 1 ชม.)
+ตรวจ: `ping pos.sh0p.tech` ต้องได้ <IP ของ VPS> (รอไม่กี่นาทีถึง 1 ชม.)
 
 ## 2. เข้า VPS
-Windows: เปิด PowerShell แล้ว `ssh root@179.197.244.102` (หรือกด **Web console** ใน hPanel)
+Windows: เปิด PowerShell แล้ว `ssh root@<IP ของ VPS>` (หรือกด **Web console** ใน hPanel)
 
 ## 3. ดึงโค้ดและติดตั้ง
 ```bash
@@ -55,7 +55,7 @@ bash /opt/pos/deploy/setup-vps.sh pos.sh0p.tech
 # บน VPS
 systemctl stop pos
 # บน Windows (PowerShell) — คัดลอก pos.db, uploads, .pin-secret
-scp -r "C:\path\to\data\*" root@179.197.244.102:/var/lib/pos/
+scp -r "C:\path\to\data\*" root@<IP ของ VPS>:/var/lib/pos/
 # บน VPS
 chown -R pos:pos /var/lib/pos && systemctl start pos
 ```
@@ -111,3 +111,72 @@ push ขึ้น main แล้ว GitHub build `.exe` บน Windows ของ
 - เปลี่ยนรหัสหน้าดาวน์โหลด: `bash /opt/pos/deploy/release-setup.sh --password`
 
 ห้ามเก็บไฟล์ .exe ไว้ใน GitHub (repo เป็นสาธารณะ และไฟล์มีกุญแจแอป) — workflow ส่งขึ้น VPS เท่านั้น
+
+## ร้านทดลอง: license + สร้างระบบร้านอัตโนมัติ
+ออก license จากแผงควบคุม → ร้านติดตั้ง `.exe` ชุดทดลอง (ตัวเดียวกันทุกร้าน) → กรอก license → ระบบสร้างร้านให้เอง
+
+```
+คุณ (แผงควบคุม)            ร้านทดลอง (แอป)              VPS (เซิร์ฟเวอร์ license)
+ออก license ร้าน A          ติดตั้ง .exe ชุดทดลอง
+60 วัน · 2 เครื่อง  ──────▶  กรอก POS-XXXX-XXXX  ───────▶  ตรวจ license · ยังไม่มีร้าน?
+                                                         → จองพอร์ต 3101 · /var/lib/pos-trial/a
+                                                         → Caddy a.trial.sh0p.tech · pos-trial@a
+                            ได้ URL + PIN ผู้จัดการ  ◀────  → ลงทะเบียนเครื่องนี้
+                            แอปจำไว้ → เปิดหน้า PIN
+```
+
+| ส่วน | ไฟล์ |
+|---|---|
+| เซิร์ฟเวอร์ license + แผงควบคุม | `license-server/server.ts` (+ `store.ts`, `provision.ts`, `admin.html`) → บริการ `pos-license` พอร์ต 3100 |
+| สร้าง/เปิด/ปิดร้าน (root) | `deploy/pos-trial-ctl.sh` → `/usr/local/bin/pos-trial-ctl` (เรียกผ่าน sudo เฉพาะคำสั่งนี้) |
+| ร้านละ 1 บริการ | `deploy/pos-trial@.service` → `pos-trial@a` ใช้โค้ด `/opt/pos` ชุดเดียวกับร้านหลัก · ข้อมูล `/var/lib/pos-trial/a` |
+| HTTPS | `deploy/license.caddy` → `/etc/caddy/conf.d/` · ร้านละไฟล์ `/etc/caddy/trials/<ร้าน>.caddy` |
+| แอปชุดทดลอง | `desktop/trial.json` + `desktop/activate.html` · build ด้วย `npm run dist:trial` |
+
+### ติดตั้งบน VPS (ครั้งเดียว)
+1. DNS ของ `sh0p.tech`: `A license → <IP ของ VPS>` และ `A *.trial → <IP ของ VPS>`
+2. อัปเดตโค้ด (`pos-update`) แล้วรัน
+   ```bash
+   bash /opt/pos/deploy/license-setup.sh license.sh0p.tech trial.sh0p.tech
+   ```
+   สคริปต์ถามรหัสผ่านแผงควบคุม (เปลี่ยนภายหลัง: `license-setup.sh --password`)
+3. เปิด `https://license.sh0p.tech/admin`
+
+### ตัวติดตั้งชุดทดลอง
+บนเครื่อง build: `cd desktop && npm run dist:trial` → `release-trial\ClothingPOS-Trial-Setup-<เวอร์ชัน>.exe` + `latest.yml`
+อัปโหลดไปที่ VPS `/var/www/pos-trial-updates/` แล้วคัดลอกเป็นชื่อคงที่ `ClothingPOS-Trial-Setup.exe` (ลิงก์ที่ส่งให้ร้าน)
+```powershell
+scp desktop\release-trial\ClothingPOS-Trial-Setup-*.exe desktop\release-trial\latest.yml root@<IP ของ VPS>:/var/www/pos-trial-updates/
+ssh root@<IP ของ VPS> "cd /var/www/pos-trial-updates && cp -f $(ls -t ClothingPOS-Trial-Setup-*.exe | head -1) ClothingPOS-Trial-Setup.exe"
+```
+แอปชุดทดลองอัปเดตตัวเองจาก `https://license.sh0p.tech/updates/` (แยกจากแอปร้านหลัก) · ลงคู่กับแอปหลักในเครื่องเดียวกันได้
+
+### กติกา
+- **อายุนับจากวันที่ร้านกรอก license ครั้งแรก** (ไม่ใช่วันที่ออก) · ครบกำหนด → ระบบปิดร้านให้ภายใน 5 นาที, แอปขึ้นหน้า "หมดอายุ"
+- ต่ออายุ: ยังไม่หมด → ต่อจากวันหมดเดิม · หมดแล้ว → นับใหม่จากวันนี้ · ข้อมูลร้านยังอยู่ กด "เปิดร้าน" หรือให้ร้านเปิดแอปใหม่
+- เครื่องเกินจำนวน → ปฏิเสธ · ลบเครื่องเก่าในแผงควบคุม (✕) แล้วเครื่องใหม่ใช้แทนได้ · รหัสเครื่อง = MachineGuid ของ Windows (ลงโปรแกรมใหม่ก็เป็นเครื่องเดิม)
+- PIN ผู้จัดการเริ่มต้นสุ่มให้ทุกร้าน (แสดงในแอปและแผงควบคุม) · พนักงานตัวอย่างไม่มี PIN เดาง่าย (`POS_NO_DEMO_PINS=1`)
+- ระงับ license → ปิดร้านทันที · คืนสถานะ → เปิดร้านได้อีก
+- `pos-update` รีสตาร์ตร้านทดลองทุกร้านด้วย (ใช้โค้ดเดียวกัน)
+- ร้านทดลองยังไม่ล็อกแบบ "เฉพาะแอป" (X-POS-App) — เปิดผ่านเบราว์เซอร์ได้ แต่ต้องมี PIN
+
+| ต้องการ | คำสั่งบน VPS |
+|---|---|
+| ดู log แผงควบคุม | `journalctl -u pos-license -f` |
+| ดู log ร้าน a | `journalctl -u pos-trial@a -f` |
+| รายชื่อร้านที่รันอยู่ | `pos-trial-ctl list` |
+| สำรองข้อมูลร้านทดลอง | ไฟล์อยู่ `/var/lib/pos-trial/<ร้าน>/pos.db` · ฐานข้อมูล license `/var/lib/pos-license/license.db` |
+
+### ทดลองบนเครื่องตัวเอง (ไม่ต้องมี VPS)
+| คำสั่ง | เปิดที่ |
+|---|---|
+| `license-demo.bat` | `http://localhost:3100/admin` + แอปชุดทดลองบนเครื่องนี้ |
+| `license-demo.bat ngrok` | ลิงก์ ngrok (เช่น `https://<ชื่อ>.ngrok-free.dev/admin`) — ทดสอบจากเครื่องอื่น/มือถือได้ |
+
+- ทุกอย่างอยู่หลังพอร์ต **3100** พอร์ตเดียว (ลิงก์ ngrok ลิงก์เดียวใช้ได้หมด):
+  `/admin` แผงควบคุม · `/api/activate`, `/api/check` แอปชุดทดลอง · `/s/<ชื่อย่อร้าน>` เปิดร้านในเบราว์เซอร์
+- ร้านทดลองรันอยู่หลังบ้านที่พอร์ต 3101, 3102, … — แอปแนบ header `X-POS-Shop` ส่วนเบราว์เซอร์จำร้านใน cookie (`/s/` = ลืมร้าน)
+- รหัสผ่านแผงควบคุม: สุ่มครั้งแรกเก็บใน `license-server\data\admin-password.txt` (แก้ไฟล์แล้วรันใหม่ = เปลี่ยนรหัส) หรือตั้ง `ADMIN_PASSWORD`
+- แอปชุดทดลองบนเครื่องอื่น: `set POS_LICENSE_SERVER=<ลิงก์ ngrok>` แล้ว `cd desktop && npx electron . --trial`
+- บัญชี ngrok ฟรีเปิดได้ทีละตัว — ปิด `run-ngrok.bat` (พอร์ต 3000) ก่อน
+- ข้อมูลทดลองอยู่ `license-server\data` (ลบ = เริ่มใหม่)

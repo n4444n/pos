@@ -1,4 +1,4 @@
-// พิมพ์ป้ายบาร์โค้ดสินค้า (สติ๊กเกอร์ม้วน / กระดาษ A4) ตามโปรไฟล์ใน ตั้งค่า → กระดาษบาร์โค้ด
+// พิมพ์ป้ายบาร์โค้ดสินค้า (สติ๊กเกอร์ม้วน / กระดาษแผ่น A4 · A5 · กำหนดเอง) ตามโปรไฟล์ใน ตั้งค่า → กระดาษบาร์โค้ด
 // เปิดหน้าต่างพิมพ์ของระบบ ให้เลือกเครื่องพิมพ์ป้ายเอง (ป้ายมักใช้เครื่องพิมพ์คนละตัวกับใบเสร็จ)
 import { Platform } from 'react-native';
 import { DEFAULT_LABEL_PROFILE, getAppSettings, type LabelProfile } from './appSettings';
@@ -22,21 +22,40 @@ export const SAMPLE_LABEL: LabelItem = { key: 'sample', name: 'เข็มข�
 
 /** ขนาดกระดาษสำเร็จรูป (กดแล้วกรอกขนาด/จำนวนดวงให้) */
 export const LABEL_PRESETS: { id: string; label: string; hint: string; apply: Partial<LabelProfile> }[] = [
-  { id: 'r30x20', label: '30 × 20 มม.', hint: 'ม้วน · 1 ดวง/แถว', apply: { paper: 'roll', width: 30, height: 20, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 0.8, barHeight: 7, nameSize: 6, codeSize: 6, priceSize: 6 } },
-  { id: 'r32x25', label: '32 × 25 มม.', hint: 'ม้วน · 1 ดวง/แถว', apply: { paper: 'roll', width: 32, height: 25, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1, barHeight: 9, nameSize: 6, codeSize: 6, priceSize: 6 } },
-  { id: 'r40x30', label: '40 × 30 มม.', hint: 'ม้วน · 1 ดวง/แถว', apply: { paper: 'roll', width: 40, height: 30, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1.2, barHeight: 10, nameSize: 7, codeSize: 7, priceSize: 7 } },
-  { id: 'r50x30old', label: '50 × 30 แบบเดิม', hint: 'ชื่อ+สีไซซ์ · รหัสตัวหนา · ราคาล่าง', apply: { paper: 'roll', width: 50, height: 30, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1.2, layout: 'classic', align: 'center', bold: false, italic: false, showName: true, showVariant: true, showPrice: true, showCode: true, barHeight: 8, barWidth: 70, barModule: 0, textGap: 0.3, nameGap: 1, nameSize: 8, codeSize: 7, priceSize: 10 } },
-  { id: 'r50x30', label: '50 × 30 มม.', hint: 'ม้วน · 1 ดวง/แถว (นิยม)', apply: { paper: 'roll', width: 50, height: 30, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1.2, barHeight: 10, nameSize: 8, codeSize: 8, priceSize: 8 } },
-  { id: 'r60x40', label: '60 × 40 มม.', hint: 'ม้วน · 1 ดวง/แถว', apply: { paper: 'roll', width: 60, height: 40, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1.5, barHeight: 14, nameSize: 9, codeSize: 9, priceSize: 10 } },
-  { id: 'r33x25x3', label: '33 × 25 มม. × 3', hint: 'ม้วน 105 มม. · 3 ดวง/แถว', apply: { paper: 'roll', width: 33, height: 25, cols: 3, rows: 1, gapX: 2, marginLeft: 1, marginTop: 0, padding: 1, barHeight: 9, nameSize: 6, codeSize: 6, priceSize: 6 } },
-  { id: 'r50x30x2', label: '50 × 30 มม. × 2', hint: 'ม้วน 104 มม. · 2 ดวง/แถว', apply: { paper: 'roll', width: 50, height: 30, cols: 2, rows: 1, gapX: 2, marginLeft: 1, marginTop: 0, padding: 1.2, barHeight: 10, nameSize: 8, codeSize: 8, priceSize: 8 } },
-  { id: 'a4x24', label: 'A4 · 24 ดวง', hint: '3 × 8 (70 × 37 มม.)', apply: { paper: 'a4', width: 70, height: 37.1, cols: 3, rows: 8, gapX: 0, gapY: 0, marginLeft: 0, marginTop: 0, padding: 2, barHeight: 12, nameSize: 9, codeSize: 9, priceSize: 9 } },
-  { id: 'a4x65', label: 'A4 · 65 ดวง', hint: '5 × 13 (38 × 21 มม.)', apply: { paper: 'a4', width: 38.1, height: 21.2, cols: 5, rows: 13, gapX: 2.5, gapY: 0, marginLeft: 4.7, marginTop: 10.7, padding: 1, barHeight: 7, nameSize: 6, codeSize: 6, priceSize: 6 } },
+  { id: 'r30x20', label: '30 × 20 มม.', hint: 'ม้วน · 1 ดวง/แถว', apply: { paper: 'roll', pageWidth: 0, pageHeight: 0, marginBottom: 0, marginRight: 0, width: 30, height: 20, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 0.8, barHeight: 7, nameSize: 6, codeSize: 6, priceSize: 6 } },
+  { id: 'r32x25', label: '32 × 25 มม.', hint: 'ม้วน · 1 ดวง/แถว', apply: { paper: 'roll', pageWidth: 0, pageHeight: 0, marginBottom: 0, marginRight: 0, width: 32, height: 25, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1, barHeight: 9, nameSize: 6, codeSize: 6, priceSize: 6 } },
+  { id: 'r40x30', label: '40 × 30 มม.', hint: 'ม้วน · 1 ดวง/แถว', apply: { paper: 'roll', pageWidth: 0, pageHeight: 0, marginBottom: 0, marginRight: 0, width: 40, height: 30, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1.2, barHeight: 10, nameSize: 7, codeSize: 7, priceSize: 7 } },
+  { id: 'r50x30old', label: '50 × 30 แบบเดิม', hint: 'ชื่อ+สีไซซ์ · รหัสตัวหนา · ราคาล่าง', apply: { paper: 'roll', pageWidth: 0, pageHeight: 0, marginBottom: 0, marginRight: 0, width: 50, height: 30, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1.2, layout: 'classic', align: 'center', bold: false, italic: false, showName: true, showVariant: true, showPrice: true, showCode: true, barHeight: 8, barWidth: 70, barModule: 0, textGap: 0.3, nameGap: 1, nameSize: 8, codeSize: 7, priceSize: 10 } },
+  { id: 'r50x30', label: '50 × 30 มม.', hint: 'ม้วน · 1 ดวง/แถว (นิยม)', apply: { paper: 'roll', pageWidth: 0, pageHeight: 0, marginBottom: 0, marginRight: 0, width: 50, height: 30, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1.2, barHeight: 10, nameSize: 8, codeSize: 8, priceSize: 8 } },
+  { id: 'r60x40', label: '60 × 40 มม.', hint: 'ม้วน · 1 ดวง/แถว', apply: { paper: 'roll', pageWidth: 0, pageHeight: 0, marginBottom: 0, marginRight: 0, width: 60, height: 40, cols: 1, rows: 1, gapX: 2, marginLeft: 0, marginTop: 0, padding: 1.5, barHeight: 14, nameSize: 9, codeSize: 9, priceSize: 10 } },
+  { id: 'r33x25x3', label: '33 × 25 มม. × 3', hint: 'ม้วน 105 มม. · 3 ดวง/แถว', apply: { paper: 'roll', pageWidth: 0, pageHeight: 0, marginBottom: 0, marginRight: 1, width: 33, height: 25, cols: 3, rows: 1, gapX: 2, marginLeft: 1, marginTop: 0, padding: 1, barHeight: 9, nameSize: 6, codeSize: 6, priceSize: 6 } },
+  { id: 'r50x30x2', label: '50 × 30 มม. × 2', hint: 'ม้วน 104 มม. · 2 ดวง/แถว', apply: { paper: 'roll', pageWidth: 0, pageHeight: 0, marginBottom: 0, marginRight: 1, width: 50, height: 30, cols: 2, rows: 1, gapX: 2, marginLeft: 1, marginTop: 0, padding: 1.2, barHeight: 10, nameSize: 8, codeSize: 8, priceSize: 8 } },
 ];
+
+/** ขนาดกระดาษแผ่นมาตรฐาน (มม.) */
+export const SHEET_SIZES: { id: string; width: number; height: number }[] = [
+  { id: 'A4', width: 210, height: 297 },
+  { id: 'A5', width: 148, height: 210 },
+  { id: 'A6', width: 105, height: 148 },
+  { id: 'Letter', width: 215.9, height: 279.4 },
+];
+/** ขนาดแผ่น (กระดาษแผ่น) — ข้อมูลเก่าที่ไม่มีขนาด = A4 */
+export const sheetSize = (p: LabelProfile) => ({ width: p.pageWidth || 210, height: p.pageHeight || 297 });
+/** ชื่อขนาดแผ่น เช่น "A4" / "100 × 150 มม." */
+export const sheetName = (p: LabelProfile) => {
+  const s = sheetSize(p);
+  return SHEET_SIZES.find((x) => x.width === s.width && x.height === s.height)?.id ?? `${s.width} × ${s.height} มม.`;
+};
+/** ความกว้างม้วน: กำหนดเอง หรือคำนวณจากดวง (ขอบซ้าย + ดวง + ระยะห่าง + ขอบขวา) */
+export const rollWidth = (p: LabelProfile) =>
+  p.pageWidth && p.pageWidth > 0 ? p.pageWidth : Math.round((p.marginLeft + p.cols * p.width + (p.cols - 1) * p.gapX + (p.marginRight ?? 0)) * 10) / 10;
+/** ความสูงกระดาษม้วน (1 แถว): กำหนดเอง หรือ ขอบบน + สูงดวง + ขอบล่าง */
+export const rollHeight = (p: LabelProfile) =>
+  p.pageHeight && p.pageHeight > 0 ? p.pageHeight : Math.round((p.marginTop + p.height + (p.marginBottom ?? 0)) * 10) / 10;
 
 /** ขนาดโดยย่อ เช่น "50×30 มม. · 2 ดวง/แถว" */
 export const profileSummary = (p: LabelProfile) =>
-  p.paper === 'a4' ? `A4 · ${p.cols}×${p.rows} (${p.width}×${p.height} มม.)` : `${p.width}×${p.height} มม. · ${p.cols} ดวง/แถว`;
+  p.paper === 'a4' ? `${sheetName(p)} · ${p.cols}×${p.rows} (${p.width}×${p.height} มม.)` : `${p.width}×${p.height} มม. · ${p.cols} ดวง/แถว`;
 
 /** โปรไฟล์ทั้งหมดของร้าน (อย่างน้อย 1) */
 export function labelProfiles(): LabelProfile[] {
@@ -107,16 +126,18 @@ const price = (n: number) => `฿${n.toLocaleString('en-US', { maximumFractionDi
 /** CSS ของป้าย (ใช้ทั้งพิมพ์จริงและตัวอย่าง) */
 function labelCss(p: LabelProfile) {
   const just = p.align === 'left' ? 'flex-start' : p.align === 'right' ? 'flex-end' : 'center';
-  const rowW = p.marginLeft + p.cols * p.width + (p.cols - 1) * p.gapX;
+  const rowW = rollWidth(p);
+  const rowH = rollHeight(p);
+  const sh = sheetSize(p);
   const page =
     p.paper === 'a4'
-      ? `@page { size: A4; margin: 0 }
-         .sheet { width: 210mm; height: 297mm; overflow: hidden; page-break-after: always; break-after: page; display: grid; align-content: start;
+      ? `@page { size: ${sh.width}mm ${sh.height}mm; margin: 0 }
+         .sheet { width: ${sh.width}mm; height: ${sh.height}mm; overflow: hidden; page-break-after: always; break-after: page; display: grid; align-content: start;
            grid-template-columns: repeat(${p.cols}, ${p.width}mm); grid-auto-rows: ${p.height}mm; column-gap: ${p.gapX}mm; row-gap: ${p.gapY}mm;
            padding: ${p.marginTop}mm 0 0 ${p.marginLeft}mm }
          .sheet:last-child { page-break-after: auto; break-after: auto }`
-      : `@page { size: ${rowW}mm ${p.height}mm; margin: 0 }
-         .row { width: ${rowW}mm; height: ${p.height}mm; display: flex; gap: ${p.gapX}mm; padding: ${p.marginTop}mm 0 0 ${p.marginLeft}mm; overflow: hidden; page-break-after: always; break-after: page }
+      : `@page { size: ${rowW}mm ${rowH}mm; margin: 0 }
+         .row { width: ${rowW}mm; height: ${rowH}mm; display: flex; gap: ${p.gapX}mm; padding: ${p.marginTop}mm 0 0 ${p.marginLeft}mm; overflow: hidden; page-break-after: always; break-after: page }
          .row:last-child { page-break-after: auto; break-after: auto }`;
   const tw = `${p.bold ? 'font-weight: 700;' : ''}${p.italic ? 'font-style: italic;' : ''}`;
   return `${page}
@@ -133,6 +154,7 @@ function labelCss(p: LabelProfile) {
   .code-wrap { height: ${p.barHeight}mm; width: ${p.barWidth}%; flex: none; margin: ${p.nameGap ?? 0.5}mm 0 0; align-self: ${just}; position: relative }
   .bars { position: absolute; inset: 0; width: 100%; height: 100% }
   .code { margin-top: ${p.textGap}mm; font-family: 'Consolas', 'Courier New', monospace; font-size: ${p.codeSize}pt; letter-spacing: .4px; white-space: nowrap; overflow: hidden }
+  .blank { visibility: hidden }
   .bad { font-size: ${Math.max(4, p.codeSize - 1)}pt; color: #c00; text-align: center }
   /* แบบเดิม: รหัสตัวหนาใต้บาร์โค้ด ราคาอยู่ล่างสุด */
   .classic .code { font-weight: 700 }
@@ -170,14 +192,19 @@ function oneLabel(it: LabelItem, p: LabelProfile, shop: string) {
 
 function labelBody(labels: LabelItem[], p: LabelProfile) {
   const shop = getAppSettings().shop.name;
+  // จุดเริ่มพิมพ์: เว้นดวงแรก ๆ ของแถวแรกไว้ (ดวงที่ลอกใช้ไปแล้ว)
+  const skip = Math.max(0, Math.min((p.startAt ?? 1) - 1, (p.paper === 'a4' ? p.cols * p.rows : p.cols) - 1));
+  const cells: (LabelItem | null)[] = [...Array.from({ length: skip }, () => null), ...labels];
+  const one = (it: LabelItem | null) => (it ? oneLabel(it, p, shop) : '<div class="lbl blank"></div>');
   return p.paper === 'a4'
-    ? chunk(labels, Math.max(1, p.cols * p.rows)).map((g) => `<div class="sheet">${g.map((it) => oneLabel(it, p, shop)).join('')}</div>`).join('')
-    : chunk(labels, Math.max(1, p.cols)).map((g) => `<div class="row">${g.map((it) => oneLabel(it, p, shop)).join('')}</div>`).join('');
+    ? chunk(cells, Math.max(1, p.cols * p.rows)).map((g) => `<div class="sheet">${g.map(one).join('')}</div>`).join('')
+    : chunk(cells, Math.max(1, p.cols)).map((g) => `<div class="row">${g.map(one).join('')}</div>`).join('');
 }
 
 /** หน้าตัวอย่างป้าย (ใส่ใน iframe ของหน้าตั้งค่า) — แสดง 1 แถว (ม้วน) หรือ 2 แถวแรก (A4) ขยายให้เห็นชัด */
 export function labelPreviewHtml(p: LabelProfile, sample: LabelItem = SAMPLE_LABEL, zoom = 2) {
-  const n = p.paper === 'a4' ? p.cols * Math.min(2, p.rows) : p.cols;
+  // ตัวอย่างแสดงแถวเดียว: ดวงก่อนจุดเริ่มพิมพ์เว้นว่าง
+  const n = p.paper === 'a4' ? p.cols * Math.min(2, p.rows) : Math.max(1, p.cols - Math.min(p.cols - 1, (p.startAt ?? 1) - 1));
   const items = Array.from({ length: n }, () => sample);
   return `<!doctype html><html lang="th"><head><meta charset="utf-8"><style>
   ${labelCss(p)}
@@ -190,10 +217,10 @@ export function labelPreviewHtml(p: LabelProfile, sample: LabelItem = SAMPLE_LAB
 </style></head><body><div class="zoom">${labelBody(items, p)}</div></body></html>`;
 }
 
-/** ขนาดกระดาษ 1 หน้า (มม.) ตามโปรไฟล์ — ม้วน: 1 แถวต่อหน้า · A4: 210×297 */
+/** ขนาดกระดาษ 1 หน้า (มม.) ตามโปรไฟล์ — ม้วน: 1 แถวต่อหน้า (กว้าง = ความกว้างม้วน) · แผ่น: ขนาดแผ่น */
 export function labelPageSize(p: LabelProfile) {
-  if (p.paper === 'a4') return { width: 210, height: 297 };
-  return { width: p.marginLeft + p.cols * p.width + (p.cols - 1) * p.gapX, height: p.height };
+  if (p.paper === 'a4') return sheetSize(p);
+  return { width: rollWidth(p), height: rollHeight(p) };
 }
 
 /** เอกสารสำหรับส่งเข้าเครื่องพิมพ์บาร์โค้ดโดยตรง (ไม่มีแถบคำแนะนำ / ไม่สั่งพิมพ์เอง) */

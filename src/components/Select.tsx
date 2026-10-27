@@ -1,3 +1,4 @@
+// ช่องเลือกแบบ dropdown
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, font, radius } from '../theme';

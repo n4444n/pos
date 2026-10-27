@@ -39,3 +39,14 @@ echo "==> รีสตาร์ตเซิร์ฟเวอร์"
 systemctl restart pos
 sleep 3
 curl -fsS http://127.0.0.1:3000/api/health >/dev/null && echo "อัปเดต $OLD → $NEW สำเร็จ ✓" || { echo "เซิร์ฟเวอร์ไม่ตอบ — journalctl -u pos -n 50"; exit 1; }
+
+# ระบบ license + ร้านทดลอง (ถ้าติดตั้งไว้) — ร้านทดลองใช้โค้ดชุดเดียวกัน ต้องรีสตาร์ตด้วย
+if [ -f /etc/systemd/system/pos-license.service ]; then
+  echo "==> อัปเดตระบบ license + ร้านทดลอง"
+  install -m 755 deploy/pos-trial-ctl.sh /usr/local/bin/pos-trial-ctl
+  install -m 644 deploy/pos-trial@.service /etc/systemd/system/pos-trial@.service
+  install -m 644 deploy/pos-license.service /etc/systemd/system/pos-license.service
+  systemctl daemon-reload
+  systemctl restart pos-license
+  for u in $(systemctl list-units --state=active --no-legend --plain 'pos-trial@*' | awk '{print $1}'); do systemctl restart "$u"; done
+fi

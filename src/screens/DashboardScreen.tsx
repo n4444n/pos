@@ -1,3 +1,4 @@
+// หน้า รายงาน → รายงานรวม (KPI · กราฟ · สินค้าขายดี · ส่งออก Excel)
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { api, type Branch } from '../api';

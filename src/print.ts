@@ -1,3 +1,4 @@
+// พิมพ์เอกสาร: ใบเสร็จ · รายงานปิดกะ · สรุปยอดประจำวัน · ใบส่งของ A4 · ใบกำกับภาษีเต็มรูป/ใบลดหนี้ A4
 import { Platform } from 'react-native';
 import { variantLabel } from './format';
 import { parseLocal, receiptText } from './receiptText';
@@ -7,6 +8,7 @@ import type { Order } from './types';
 import { getAppSettings } from './appSettings';
 import { code128 } from './components/stock/Barcode';
 import { desktop, type PrintKind } from './desktop';
+import { taxBranchText } from './terminal';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const m = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -82,8 +84,15 @@ export function footerBlocksHtml(blocks: FooterBlock[], bodyW: number, fs: numbe
 /** พิมพ์ใบเสร็จ (เว็บ) — รูปแบบตาม ตั้งค่า → ใบเสร็จ */
 export function printReceipt(order: Order) {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-  const { receipt: r, shop } = getAppSettings();
+  const { receipt: r, shop, tax } = getAppSettings();
   const { t, pay, date, vat, lang } = receiptText(r);
+  // ข้อมูลภาษี (ใบกำกับภาษีอย่างย่อ): ผู้ประกอบการ · สาขาตามทะเบียนภาษี · หมายเลขเครื่อง POS
+  const legal = tax?.vatRegistered && tax.legalName ? tax.legalName : '';
+  const taxBranch = tax?.vatRegistered ? taxBranchText(tax.taxBranchNo) : '';
+  // บิลที่ไม่ได้คิด VAT (สาขาไม่จด VAT) ห้ามเรียกตัวเองว่าใบกำกับภาษี
+  const taxed = (order.vatRate ?? 0) > 0 || order.vat > 0;
+  const title = taxed ? r.title : r.title.replace(/\s*\/?\s*(ใบกำกับภาษีอย่างย่อ|ABBREVIATED TAX INVOICE)\s*/gi, '').trim();
+  const pos = order.terminal ? `POS ${order.terminal.code}${order.terminal.rdNo ? ` · หมายเลขเครื่อง ${order.terminal.rdNo}` : ''}` : '';
   const shopName = r.shopName?.trim() || shop.name;
   const pw = paperWidth();
   const fs = r.fontSize === 'small' ? 11 : r.fontSize === 'large' ? 14 : 12;
@@ -92,7 +101,7 @@ export function printReceipt(order: Order) {
   const rows = order.items
     .map(
       (i) =>
-        `<tr><td>${esc(i.name)}<br><small>${esc(variantLabel(i))}${r.showSku && i.sku ? ` · ${esc(i.sku)}` : ''} · @${m(i.unitPrice)}</small></td><td class="q">${i.qty.toLocaleString()}</td><td class="r">${m(i.lineTotal)}</td></tr>`,
+        `<tr><td>${esc(i.name)}<br><small>${esc(variantLabel(i))}${r.showSku && i.sku ? ` · ${esc(i.sku)}` : ''} · @${m(i.unitPrice)}${i.vatExempt && order.vat > 0 ? ' · ยกเว้น VAT' : ''}</small></td><td class="q">${i.qty.toLocaleString()}</td><td class="r">${m(i.lineTotal)}</td></tr>`,
     )
     .join('');
   const logo = r.logoUrl ? `<div class="c"><img src="${esc(absUrl(r.logoUrl))}" style="width:${((bodyW * r.logoWidth) / 100).toFixed(1)}mm;max-width:100%"></div>` : '';
@@ -102,9 +111,11 @@ export function printReceipt(order: Order) {
   ${shop.branchName ? `<div class="c">${esc(shop.branchName)}${shop.branchCode ? ` (${esc(shop.branchCode)})` : ''}</div>` : ''}
   ${shop.address ? `<div class="c"><small>${esc(shop.address)}</small></div>` : ''}
   ${shop.phone ? `<div class="c"><small>${esc(t('tel'))} ${esc(shop.phone)}</small></div>` : ''}
-  ${shop.taxId ? `<div class="c"><small>${esc(t('taxId'))} ${esc(shop.taxId)}</small></div>` : ''}
+  ${legal ? `<div class="c"><small>${esc(legal)}</small></div>` : ''}
+  ${shop.taxId ? `<div class="c"><small>${esc(t('taxId'))} ${esc(shop.taxId)}${taxBranch ? ` (${esc(taxBranch)})` : ''}</small></div>` : ''}
+  ${pos ? `<div class="c"><small>${esc(pos)}</small></div>` : ''}
   ${r.header ? lines(r.header) : ''}
-  ${r.title ? `<div class="c b">${esc(r.title)}</div>` : ''}<hr>
+  ${title ? `<div class="c b">${esc(title)}</div>` : ''}<hr>
   <div>${esc(t('orderNo'))}: ${esc(order.orderNo)}</div>
   <div>${esc(t('date'))}: ${esc(date(parseLocal(order.createdAt)))}</div>
   ${r.showCustomer && order.customerName ? `<div>${esc(t('customer'))}: ${esc(order.customerName)}</div>` : ''}
@@ -115,7 +126,9 @@ export function printReceipt(order: Order) {
     ${order.discount > 0 ? `<tr><td>${esc(t('discount'))} ${esc(order.promoCode ?? '')}</td><td class="r">-${m(order.discount)}</td></tr>` : ''}
     ${order.fee && order.feePayer === 'customer' ? `<tr><td>${esc(t('fee'))} ${esc(pay(order.paymentMethod))}</td><td class="r">+${m(order.fee)}</td></tr>` : ''}
     <tr class="t"><td>${esc(t('total'))}</td><td class="r">${m(order.total)}</td></tr>
+    ${r.showVat && order.vat > 0 && order.vatBase != null ? `<tr><td><small>มูลค่าสินค้าที่เสีย VAT</small></td><td class="r"><small>${m(order.vatBase)}</small></td></tr>` : ''}
     ${r.showVat && order.vat > 0 ? `<tr><td><small>${esc(vat(order))}</small></td><td class="r"><small>${m(order.vat)}</small></td></tr>` : ''}
+    ${r.showVat && order.vat > 0 && (order.exemptAmount ?? 0) > 0 ? `<tr><td><small>มูลค่าสินค้ายกเว้น VAT</small></td><td class="r"><small>${m(order.exemptAmount!)}</small></td></tr>` : ''}
     <tr><td>${esc(t('paidBy'))} ${esc(pay(order.paymentMethod))}</td><td class="r">${order.cashReceived != null ? m(order.cashReceived) : ''}</td></tr>
     ${order.changeDue != null ? `<tr><td>${esc(t('change'))}</td><td class="r">${m(order.changeDue)}</td></tr>` : ''}
   </table><hr>
@@ -398,6 +411,181 @@ export function printShipment(d: import('./api').ShipmentDetail, shopName = getA
       <div><div class="line">ผู้ตรวจรับ (${esc(s.destBranchName ?? 'สาขา')})</div><div class="d">วันที่ ____/____/______</div></div>
     </div>
   </div>
+</body></html>`);
+  w.document.close();
+}
+
+// ---------------------------------------------------------------- ใบกำกับภาษีเต็มรูป / ใบลดหนี้ (A4)
+const TH_DIGIT = ['', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'];
+const TH_UNIT = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน'];
+/** อ่านจำนวนเต็มเป็นภาษาไทย (รองรับหลักล้านซ้อน) */
+function thaiNumber(n: number): string {
+  if (n === 0) return '';
+  if (n >= 1_000_000) return `${thaiNumber(Math.floor(n / 1_000_000))}ล้าน${thaiNumber(n % 1_000_000)}`;
+  const s = String(n);
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const d = Number(s[i]);
+    const pos = s.length - i - 1;
+    if (d === 0) continue;
+    if (pos === 1 && d === 1) out += 'สิบ';
+    else if (pos === 1 && d === 2) out += 'ยี่สิบ';
+    else if (pos === 0 && d === 1 && s.length > 1) out += 'เอ็ด';
+    else out += TH_DIGIT[d] + TH_UNIT[pos];
+  }
+  return out;
+}
+/** 1234.50 → หนึ่งพันสองร้อยสามสิบสี่บาทห้าสิบสตางค์ */
+export function bahtText(amount: number): string {
+  const satang = Math.round(Math.abs(amount) * 100);
+  const b = Math.floor(satang / 100);
+  const st = satang % 100;
+  if (!b && !st) return 'ศูนย์บาทถ้วน';
+  return `${b ? `${thaiNumber(b)}บาท` : ''}${st ? `${thaiNumber(st)}สตางค์` : 'ถ้วน'}`;
+}
+
+type TaxDoc =
+  | { kind: 'invoice'; doc: import('./types').TaxInvoiceDoc }
+  | { kind: 'credit'; doc: import('./types').CreditNoteDoc };
+
+/** ใบกำกับภาษีเต็มรูป / ใบลดหนี้ (A4) — หน้าตัวอย่างก่อนพิมพ์ + ปุ่มพิมพ์ · พิมพ์ "ต้นฉบับ" และ "สำเนา" ในครั้งเดียว */
+export function printTaxDoc(d: TaxDoc) {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  const w = window.open('', '_blank', 'width=980,height=940');
+  if (!w) return;
+  const inv = d.kind === 'invoice' ? d.doc : null;
+  const cn = d.kind === 'credit' ? d.doc : null;
+  const doc = d.doc;
+  const seller = doc.seller;
+  const title = inv ? 'ใบกำกับภาษี / ใบเสร็จรับเงิน' : 'ใบลดหนี้ / ใบรับคืนสินค้า';
+  const sub = inv ? 'TAX INVOICE / RECEIPT' : 'CREDIT NOTE';
+  const date = (inv ? inv.issuedAt : cn!.issuedAt).slice(0, 16);
+  const buyer = inv
+    ? { name: inv.buyerName, address: inv.buyerAddress, taxId: inv.buyerTaxId, branch: inv.buyerBranchText }
+    : cn!.buyer;
+  const items = (inv ? inv.items : cn!.items).map((i) => ({
+    name: i.name, label: variantLabel(i as never), qty: i.qty, unit: i.unitPrice, total: i.lineTotal, exempt: !!i.vatExempt,
+  }));
+  const rows = items
+    .map((i, n) => `<tr><td class="c">${n + 1}</td><td>${esc(i.name)}<div class="muted">${esc(i.label)}${i.exempt ? ' · ยกเว้น VAT' : ''}</div></td>
+      <td class="c">${i.qty.toLocaleString()}</td><td class="r">${m(i.unit)}</td><td class="r">${m(i.total)}</td></tr>`)
+    .join('');
+  const sum = (label: string, v: string, strong = false) => `<tr${strong ? ' class="grand"' : ''}><td>${label}</td><td class="r">${v}</td></tr>`;
+  const totals = inv
+    ? [
+        sum('รวมเป็นเงิน', m(inv.subtotal)),
+        inv.discount ? sum('หักส่วนลด', `−${m(inv.discount)}`) : '',
+        inv.fee ? sum('ค่าธรรมเนียม', m(inv.fee)) : '',
+        inv.exempt ? sum('มูลค่าสินค้ายกเว้นภาษีมูลค่าเพิ่ม', m(inv.exempt)) : '',
+        sum('มูลค่าสินค้าที่เสียภาษีมูลค่าเพิ่ม (ฐานภาษี)', m(inv.vatBase)),
+        sum(`ภาษีมูลค่าเพิ่ม ${inv.vatRate}%`, m(inv.vat)),
+        sum('จำนวนเงินรวมทั้งสิ้น', m(inv.total), true),
+      ].join('')
+    : [
+        sum('มูลค่าตามใบกำกับภาษีเดิม', m(cn!.orderTotal)),
+        cn!.priorCredits ? sum('หักใบลดหนี้ก่อนหน้า', `−${m(cn!.priorCredits)}`) : '',
+        sum('มูลค่าที่ถูกต้อง (หลังลดหนี้)', m(cn!.orderTotal - (cn!.priorCredits ?? 0) - cn!.total)),
+        sum('มูลค่าสินค้าที่รับคืน (ตามราคาในบิล)', m(cn!.gross)),
+        cn!.gross !== cn!.total ? sum('หักส่วนลดตามสัดส่วน', `−${m(cn!.gross - cn!.total)}`) : '',
+        cn!.exempt ? sum('มูลค่าที่ลดลง (ยกเว้นภาษีมูลค่าเพิ่ม)', m(cn!.exempt)) : '',
+        sum('มูลค่าที่ลดลง (ฐานภาษี)', m(cn!.vatBase)),
+        sum(`ภาษีมูลค่าเพิ่มที่ลดลง ${cn!.vatRate}%`, m(cn!.vat)),
+        sum('ผลต่าง — จำนวนเงินที่คืนทั้งสิ้น', m(cn!.total), true),
+      ].join('');
+  const total = inv ? inv.total : cn!.total;
+  const page = (copy: string) => `
+  <div class="paper">
+    <div class="top">
+      <div>
+        <div class="seller">${esc(seller.name)}</div>
+        ${seller.name !== seller.shopName ? `<div class="muted">${esc(seller.shopName)}</div>` : ''}
+        ${seller.address ? `<div>${esc(seller.address)}</div>` : ''}
+        <div>เลขประจำตัวผู้เสียภาษี <b class="mono">${esc(seller.taxId || '-')}</b>${seller.branch ? ` · ${esc(seller.branch)}` : ''}</div>
+        ${seller.phone ? `<div class="muted">โทร ${esc(seller.phone)}</div>` : ''}
+      </div>
+      <div class="doc">
+        <div class="copy">${copy}</div>
+        <h1>${title}</h1>
+        <div class="muted">${sub}</div>
+        <div class="no">เลขที่ <b class="mono">${esc(doc.docNo)}</b></div>
+        <div class="no">วันที่ <b class="mono">${esc(date)}</b></div>
+      </div>
+    </div>
+    ${inv && inv.status === 'cancelled' ? `<div class="cancel">ยกเลิกแล้ว — ${esc(inv.cancelReason ?? '')}</div>` : ''}
+    <div class="info">
+      <div>
+        <div class="lab">${cn ? 'ลูกค้า' : 'ผู้ซื้อ'}</div>
+        ${buyer
+          ? `<div class="big">${esc(buyer.name)}</div><div>${esc(buyer.address)}</div>
+             <div>เลขประจำตัวผู้เสียภาษี <b class="mono">${esc(buyer.taxId)}</b>${buyer.branch ? ` · ${esc(buyer.branch)}` : ''}</div>`
+          : '<div class="big">ลูกค้าทั่วไป</div>'}
+      </div>
+      <div class="r">
+        <div class="lab">อ้างอิง</div>
+        <div>บิลขาย (ใบกำกับภาษีอย่างย่อ) <b class="mono">${esc(doc.orderNo)}</b></div>
+        <div class="muted">ลงวันที่ ${esc(doc.orderDate.slice(0, 16))}</div>
+        ${cn?.taxInvoiceNo ? `<div>ใบกำกับภาษีเต็มรูป <b class="mono">${esc(cn.taxInvoiceNo)}</b></div>` : ''}
+        ${cn ? `<div>เหตุผลที่ลดหนี้: ${esc(cn.reason)}</div>` : ''}
+      </div>
+    </div>
+    <table class="items">
+      <thead><tr><th style="width:44px">ลำดับ</th><th style="text-align:left">รายการ</th><th style="width:70px">จำนวน</th><th style="width:110px">ราคาต่อหน่วย</th><th style="width:120px">จำนวนเงิน</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="sumwrap">
+      <div class="words">(${esc(bahtText(total))})<div class="muted">ราคาสินค้ารวมภาษีมูลค่าเพิ่มแล้ว</div></div>
+      <table class="sum">${totals}</table>
+    </div>
+    <div class="sign">
+      <div><div class="line">${cn ? 'ผู้รับคืนสินค้า' : 'ผู้รับเงิน'}</div><div class="muted">${esc(inv ? inv.issuedBy : cn!.issuedBy)}</div></div>
+      <div><div class="line">${cn ? 'ผู้อนุมัติ' : 'ผู้มีอำนาจลงนาม'}</div><div class="muted">${esc(cn ? cn.approver : '')}</div></div>
+    </div>
+  </div>`;
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(doc.docNo)}</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'IBM Plex Sans Thai', 'Noto Sans Thai', system-ui, sans-serif; color: #111827; background: #e5e7eb; font-size: 12.5px; line-height: 1.6; }
+  .bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 12px; padding: 12px 20px; background: #1e293b; color: #fff; }
+  .bar h2 { margin: 0; font-size: 15px; font-weight: 600; flex: 1; }
+  .bar button { font: inherit; font-weight: 700; border: 0; border-radius: 10px; padding: 10px 18px; cursor: pointer; }
+  .bar .print { background: #109e5e; color: #fff; } .bar .close { background: #334155; color: #fff; font-weight: 500; }
+  .paper { width: 210mm; min-height: 297mm; margin: 18px auto; background: #fff; padding: 14mm; box-shadow: 0 6px 24px rgba(0,0,0,.12); page-break-after: always; }
+  .top { display: flex; justify-content: space-between; gap: 20px; padding-bottom: 12px; border-bottom: 2px solid #111827; }
+  .seller { font-size: 17px; font-weight: 700; }
+  .doc { text-align: right; min-width: 230px; }
+  .doc h1 { font-size: 19px; margin: 2px 0 0; }
+  .copy { display: inline-block; border: 1.5px solid #111827; border-radius: 4px; padding: 1px 10px; font-weight: 700; font-size: 12px; }
+  .no { margin-top: 2px; } .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .muted { color: #6b7280; font-size: 11.5px; } .lab { color: #6b7280; font-size: 11.5px; } .big { font-size: 14px; font-weight: 700; }
+  .cancel { margin-top: 10px; padding: 8px 12px; border: 2px solid #c93434; color: #c93434; font-weight: 700; border-radius: 6px; text-align: center; }
+  .info { display: flex; justify-content: space-between; gap: 16px; margin-top: 14px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 8px; }
+  .info .r { text-align: right; max-width: 48%; }
+  table.items { width: 100%; border-collapse: collapse; margin-top: 14px; }
+  .items th { background: #f1f5f9; font-weight: 700; font-size: 12px; padding: 8px; border: 1px solid #e2e8f0; }
+  .items td { padding: 7px 8px; border: 1px solid #e2e8f0; vertical-align: top; }
+  .c { text-align: center; } .r { text-align: right; }
+  .sumwrap { display: flex; justify-content: space-between; gap: 16px; margin-top: 10px; align-items: flex-start; }
+  .words { flex: 1; padding: 10px 12px; background: #f8fafc; border-radius: 6px; font-weight: 600; }
+  table.sum { width: 330px; border-collapse: collapse; }
+  .sum td { padding: 4px 8px; border-bottom: 1px solid #eef0f3; }
+  .sum .grand td { font-weight: 700; font-size: 14px; border-top: 2px solid #111827; border-bottom: 2px solid #111827; }
+  .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; margin-top: 56px; text-align: center; }
+  .sign .line { border-top: 1px solid #111827; padding-top: 6px; }
+  tr { page-break-inside: avoid; }
+  @media print {
+    body { background: #fff; } .bar { display: none; }
+    .paper { margin: 0; min-height: 0; box-shadow: none; }
+    .items th, .words { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style></head><body>
+  <div class="bar">
+    <h2>← ตัวอย่างก่อนพิมพ์ ${title} ${esc(doc.docNo)} (ต้นฉบับ + สำเนา)</h2>
+    <button class="print" onclick="window.print()">🖨 พิมพ์</button>
+    <button class="close" onclick="window.close()">ปิด</button>
+  </div>
+  ${page('ต้นฉบับ')}${page('สำเนา')}
 </body></html>`);
   w.document.close();
 }

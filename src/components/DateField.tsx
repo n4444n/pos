@@ -1,3 +1,4 @@
+// ช่องเลือกวันที่ (input type=date บนเว็บ)
 import { createElement } from 'react';
 import { Platform, StyleSheet, TextInput, View } from 'react-native';
 import { colors, font, radius } from '../theme';

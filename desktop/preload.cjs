@@ -18,6 +18,10 @@ if (location.protocol === 'file:') {
     retry: () => ipcRenderer.send('shell:retry'),
     openSettings: () => ipcRenderer.send('shell:open-settings'),
     closeSettings: () => ipcRenderer.send('shell:close-settings'),
+    // หน้าเปิดใช้งาน (ชุดทดลอง)
+    licenseState: () => ipcRenderer.invoke('shell:license-state'),
+    activate: (code) => ipcRenderer.invoke('shell:activate', String(code || '')),
+    startPos: () => ipcRenderer.send('shell:start-pos'),
   });
 } else if (location.origin === cfg.serverOrigin) {
   let paper = cfg.paperWidth; // ขนาดกระดาษของเครื่องนี้ (อัปเดตเมื่อบันทึกจากหน้า ตั้งค่า → ใบเสร็จ)

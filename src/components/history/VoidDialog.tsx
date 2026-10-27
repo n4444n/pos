@@ -1,3 +1,4 @@
+// ยกเลิกทั้งบิล (ยืนยันด้วย PIN · คืนสต็อก · คืนเงินในกะ)
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { api } from '../../api';

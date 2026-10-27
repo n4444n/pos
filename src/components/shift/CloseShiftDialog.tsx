@@ -1,3 +1,4 @@
+// กะ: ปิดกะ (นับเงินสด · ตรวจยอดบัตร/QR/โอน · ส่วนต่าง)
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { api } from '../../api';

@@ -1,3 +1,4 @@
+// ขนาดจอและการจัดวางหน้าขาย (จำนวนคอลัมน์การ์ด · ความกว้างตะกร้า)
 import { useEffect, useState } from 'react';
 import { useWindowDimensions } from 'react-native';
 

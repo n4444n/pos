@@ -7,11 +7,12 @@ import { db } from './db.ts';
 import { round2 } from './common.ts';
 import { getSettings } from './settings.ts';
 import { buildXlsx, typed, type Col, type SheetSpec } from './xlsx.ts';
+import { CN_RANGE } from './creditAdj.ts';
 
 const WEEKDAY = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
 /** ลำดับวันในสัปดาห์แบบไทย (จันทร์ก่อน) */
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
-const STATUS_LABEL: Record<string, string> = { paid: 'ชำระแล้ว', edited: 'แก้ไขแล้ว', void: 'ยกเลิก' };
+const STATUS_LABEL: Record<string, string> = { paid: 'ชำระแล้ว', edited: 'แก้ไขแล้ว', void: 'ยกเลิก', credit: 'ใบลดหนี้ (คืนสินค้า)' };
 const pad = (n: number) => String(n).padStart(2, '0');
 const parseDay = (s: string) => {
   const [y, m, d] = s.slice(0, 10).split('-').map(Number);
@@ -51,7 +52,7 @@ class Agg {
     this.exVat += l.exVat;
     this.cost += l.cost;
     this.profit += l.profit;
-    this.bills.add(l.orderId);
+    if (l.status !== 'credit') this.bills.add(l.orderId); // ใบลดหนี้ไม่นับเป็นบิล
     this.products.add(l.productId ?? l.productName);
     if (!this.first || l.createdAt < this.first) this.first = l.createdAt;
     if (l.createdAt > this.last) this.last = l.createdAt;
@@ -66,11 +67,6 @@ function groupBy<K>(lines: Line[], key: (l: Line) => K): Map<K, Agg> {
     a.add(l);
   }
   return m;
-}
-
-export function reportFileName(f: DashQuery) {
-  const d = dashboard(f);
-  return `report-${d.range.from}-${d.range.to}.xlsx`;
 }
 
 export function reportXlsx(f: DashQuery, scopeLabel: string): Buffer {
@@ -91,6 +87,18 @@ export function reportXlsx(f: DashQuery, scopeLabel: string): Buffer {
         ORDER BY o.created_at, o.id`,
     )
     .all(...args) as unknown as OrderRow[];
+  // ใบลดหนี้ (รับคืนสินค้า) ในช่วงนี้ → แถวยอดติดลบ ตามวันที่ออกใบลดหนี้ (สถานะ 'credit' · ไม่นับเป็นบิล)
+  const credits = db
+    .prepare(
+      `SELECT -cn.id AS id, cn.doc_no || ' (คืนจาก ' || o.order_no || ')' AS orderNo, cn.issued_at AS createdAt, 'credit' AS status,
+              o.customer_name AS customerName, o.salesperson, o.order_type AS orderType, cn.refund_method AS paymentMethod, NULL AS promoCode,
+              -cn.gross AS subtotal, -(cn.gross - cn.total) AS discount, -cn.vat AS vat, -cn.total AS total, 0 AS fee, o.fee_payer AS feePayer,
+              b.name AS branch, b.code AS branchCode, -(SELECT COALESCE(SUM(qty), 0) FROM credit_note_items ci WHERE ci.credit_note_id = cn.id) AS items
+         FROM credit_notes cn JOIN orders_all o ON o.id = cn.order_id LEFT JOIN branches b ON b.id = cn.branch_id
+        WHERE ${CN_RANGE} ORDER BY cn.issued_at, cn.id`,
+    )
+    .all(...args) as unknown as OrderRow[];
+  orders.push(...credits);
   const valid = orders.filter((o) => o.status !== 'void');
 
   const rawLines = db
@@ -111,6 +119,28 @@ export function reportXlsx(f: DashQuery, scopeLabel: string): Buffer {
         ORDER BY o.created_at, o.id, oi.id`,
     )
     .all(...args) as unknown as LineRow[];
+  // สินค้าที่คืนด้วยใบลดหนี้ = บรรทัดติดลบ (ส่วนลด/VAT ปันส่วนแบบเดียวกับบิล)
+  rawLines.push(
+    ...(db
+      .prepare(
+        `SELECT -cn.id AS orderId, cn.doc_no AS orderNo, cn.issued_at AS createdAt, 'credit' AS status, o.salesperson, cn.refund_method AS paymentMethod,
+                o.customer_name AS customerName, NULL AS promoCode, b.name AS branch,
+                ci.variant_id AS variantId, p.id AS productId, p.sku AS productCode, ci.product_name AS productName, c.name AS category,
+                ci.sku AS variantSku, v.barcode, COALESCE(ci.size, '') AS size, COALESCE(ci.color, '') AS color, COALESCE(ci.extra, '') AS extra,
+                -ci.qty AS qty, ci.unit_price AS unitPrice, -ci.line_total AS lineTotal, COALESCE(v.cost, p.cost, 0) AS unitCost,
+                -cn.gross AS subtotal, -(cn.gross - cn.total) AS discount, -cn.vat AS vat, -cn.total AS total
+           FROM credit_note_items ci
+           JOIN credit_notes cn ON cn.id = ci.credit_note_id
+           JOIN orders_all o ON o.id = cn.order_id
+           LEFT JOIN variants_all v ON v.id = ci.variant_id
+           LEFT JOIN products p ON p.id = v.product_id
+           LEFT JOIN categories c ON c.id = p.category_id
+           LEFT JOIN branches b ON b.id = cn.branch_id
+          WHERE ${CN_RANGE}
+          ORDER BY cn.issued_at, cn.id, ci.id`,
+      )
+      .all(...args) as unknown as LineRow[]),
+  );
   // ปันส่วนส่วนลดท้ายบิล + VAT ลงแต่ละบรรทัด (ตามสัดส่วนยอดของบรรทัด)
   const lines: Line[] = rawLines.map((l) => {
     const disc = l.subtotal > 0 ? (l.discount * l.lineTotal) / l.subtotal : 0;
@@ -142,7 +172,7 @@ export function reportXlsx(f: DashQuery, scopeLabel: string): Buffer {
     const k = d.kpis;
     const p = d.prev;
     const rows: R[] = [
-      { label: 'ยอดขายสุทธิ (บาท)', cur: k.sales, prev: p.sales, t: 'money', note: 'ยอดรวมบิลที่ไม่ถูกยกเลิก (รวม VAT)' },
+      { label: 'ยอดขายสุทธิ (บาท)', cur: k.sales, prev: p.sales, t: 'money', note: 'ยอดรวมบิลที่ไม่ถูกยกเลิก หักใบลดหนี้ (รวม VAT)' },
       { label: 'จำนวนบิล', cur: k.bills, prev: p.bills, t: 'int' },
       { label: 'จำนวนชิ้นที่ขาย', cur: k.units, prev: p.units, t: 'int' },
       { label: 'ยอดเฉลี่ยต่อบิล (AOV)', cur: k.aov, prev: p.aov, t: 'money' },
@@ -154,7 +184,8 @@ export function reportXlsx(f: DashQuery, scopeLabel: string): Buffer {
       { label: 'กำไรสุทธิ', cur: round2(k.profit - d.expenses.total), prev: round2(p.profit - d.expenses.prev), t: 'money', note: 'กำไรขั้นต้น − ค่าใช้จ่ายร้าน' },
       { label: 'บิลที่แก้ไข (เปลี่ยน/คืนสินค้า)', cur: d.returns.edits, prev: null, t: 'int' },
       { label: 'บิลที่ยกเลิก', cur: d.returns.voids, prev: null, t: 'int' },
-      { label: 'เงินที่คืนลูกค้า', cur: d.returns.refunded, prev: null, t: 'money' },
+      { label: 'ใบลดหนี้ (คืนสินค้า)', cur: d.returns.creditNotes, prev: null, t: 'int' },
+      { label: 'เงินที่คืนลูกค้า', cur: d.returns.refunded, prev: null, t: 'money', note: 'แก้ไขบิล / ยกเลิกบิล / ใบลดหนี้' },
       { label: 'SKU ที่หมดสต็อก (ตอนนี้)', cur: d.stock.out, prev: null, t: 'int' },
       { label: 'SKU ที่ใกล้หมด (ตอนนี้)', cur: d.stock.low, prev: null, t: 'int' },
       { label: 'สต็อกคงเหลือ (ชิ้น)', cur: d.stock.units, prev: null, t: 'int' },
@@ -194,7 +225,7 @@ export function reportXlsx(f: DashQuery, scopeLabel: string): Buffer {
     };
     for (const o of valid) {
       const p = get(keyOf(o.createdAt));
-      p.bills++;
+      p.bills += o.status === 'credit' ? 0 : 1;
       p.sales += o.total;
       p.discount += o.discount;
       p.vat += o.vat;
@@ -284,7 +315,7 @@ export function reportXlsx(f: DashQuery, scopeLabel: string): Buffer {
       const key = `${weekdayOf(o.createdAt)}|${hourOf(o.createdAt)}`;
       const g = grid.get(key) ?? { sales: 0, bills: 0 };
       g.sales += o.total;
-      g.bills++;
+      g.bills += o.status === 'credit' ? 0 : 1;
       grid.set(key, g);
     }
     const hrs = Array.from({ length: 24 }, (_, h) => h);
@@ -422,7 +453,7 @@ export function reportXlsx(f: DashQuery, scopeLabel: string): Buffer {
     for (const o of valid) {
       const k = key(o);
       const g = m.get(k) ?? { key: k, bills: 0, sales: 0, fee: 0, discount: 0, units: 0 };
-      g.bills++;
+      g.bills += o.status === 'credit' ? 0 : 1;
       g.sales += o.total;
       g.fee += o.fee;
       g.discount += o.discount;
@@ -495,7 +526,7 @@ export function reportXlsx(f: DashQuery, scopeLabel: string): Buffer {
   // ---------- 8) ข้อมูลดิบ ----------
   sheets.push({
     name: 'บิล',
-    intro: intro('ข้อมูลดิบ: บิลทั้งหมดในช่วง (รวมบิลที่ยกเลิก — กรองด้วยคอลัมน์ "สถานะ")'),
+    intro: intro('ข้อมูลดิบ: บิลทั้งหมดในช่วง (รวมบิลที่ยกเลิก และใบลดหนี้เป็นยอดติดลบ — กรองด้วยคอลัมน์ "สถานะ")'),
     cols: [
       { header: 'เลขที่บิล', value: (o: OrderRow) => o.orderNo },
       { header: 'วันเวลา', value: (o) => o.createdAt, type: 'datetime' },
@@ -521,7 +552,7 @@ export function reportXlsx(f: DashQuery, scopeLabel: string): Buffer {
   });
   sheets.push({
     name: 'รายการขาย',
-    intro: intro('ข้อมูลดิบ: สินค้าที่ขายทีละรายการ (ไม่รวมบิลที่ยกเลิก) — เลือกทั้งตารางแล้ว แทรก → PivotTable เพื่อวิเคราะห์ต่อ'),
+    intro: intro('ข้อมูลดิบ: สินค้าที่ขายทีละรายการ (ไม่รวมบิลที่ยกเลิก · สินค้าที่คืนด้วยใบลดหนี้เป็นจำนวนติดลบ) — เลือกทั้งตารางแล้ว แทรก → PivotTable เพื่อวิเคราะห์ต่อ'),
     cols: [
       { header: 'เลขที่บิล', value: (l: Line) => l.orderNo },
       { header: 'วันเวลา', value: (l) => l.createdAt, type: 'datetime' },

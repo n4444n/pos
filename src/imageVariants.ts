@@ -27,10 +27,6 @@ function draw(img: HTMLImageElement, max: number, quality: number) {
 }
 
 /** รูปหลัก (สำหรับอัปโหลด) จาก dataURL/URL */
-export async function mainImage(src: string, max = 900) {
-  return draw(await loadImage(src), max, 0.85);
-}
-
 /** รูปย่อขนาดกลาง + เล็ก จาก dataURL/URL */
 export async function makeVariants(src: string): Promise<{ m: string; s: string }> {
   const img = await loadImage(src);

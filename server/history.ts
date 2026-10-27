@@ -1,7 +1,11 @@
 // ประวัติการขาย + แก้ไขบิล (เปลี่ยน/คืนสินค้า) + ยกเลิกบิล + export CSV
 import { db, tx, countChanges } from './db.ts';
 import { allowNegativeStock, feeFor } from './settings.ts';
-import { discountFor, HttpError, PAYMENT_METHODS, round2, vatOf, type Promo } from './common.ts';
+import { discountFor, HttpError, PAYMENT_METHODS, round2, type Promo } from './common.ts';
+import { getSettings } from './settings.ts';
+import { currentBranchInfo } from './branches.ts';
+import { billTax, getTerminal, isExempt } from './tax.ts';
+import { assertVoidable, docsForOrder } from './taxDocs.ts';
 import { recordPayment, requireShift } from './shifts.ts';
 import { variantLabel } from './products.ts';
 
@@ -13,12 +17,15 @@ const q = {
     `SELECT id, order_no AS orderNo, customer_name AS customerName, salesperson, order_type AS orderType,
             subtotal, discount, vat, total, promo_code AS promoCode, payment_method AS paymentMethod,
             cash_received AS cashReceived, change_due AS changeDue, status, created_at AS createdAt,
-            updated_at AS updatedAt, edit_count AS editCount, void_reason AS voidReason, fee, fee_payer AS feePayer
+            updated_at AS updatedAt, edit_count AS editCount, void_reason AS voidReason, fee, fee_payer AS feePayer,
+            vat_rate AS vatRate, vat_base AS vatBase, exempt_amount AS exemptAmount, terminal_id AS terminalId,
+            voided_at AS voidedAt, voided_by AS voidedBy, void_approver AS voidApprover
        FROM orders WHERE id = ?`,
   ),
   items: db.prepare(
-    `SELECT oi.variant_id AS variantId, v.product_id AS productId, oi.product_name AS name, oi.sku, oi.size,
-            oi.color, oi.extra, v.color_hex AS colorHex, p.art, oi.qty, oi.unit_price AS unitPrice, oi.line_total AS lineTotal
+    `SELECT oi.id AS itemId, oi.variant_id AS variantId, v.product_id AS productId, oi.product_name AS name, oi.sku, oi.size,
+            oi.color, oi.extra, v.color_hex AS colorHex, p.art, oi.qty, oi.unit_price AS unitPrice, oi.line_total AS lineTotal,
+            oi.vat_exempt AS vatExempt
        FROM order_items oi
        LEFT JOIN variants v ON v.id = oi.variant_id
        LEFT JOIN products p ON p.id = v.product_id
@@ -39,16 +46,17 @@ const q = {
   decStockAny: db.prepare('UPDATE variants SET stock = stock - ? WHERE id = ?'),
   delItems: db.prepare('DELETE FROM order_items WHERE order_id = ?'),
   insItem: db.prepare(
-    `INSERT INTO order_items (order_id, variant_id, product_name, sku, size, color, extra, qty, unit_price, line_total)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO order_items (order_id, variant_id, product_name, sku, size, color, extra, qty, unit_price, line_total, vat_exempt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ),
   updOrder: db.prepare(
-    `UPDATE orders SET customer_name = ?, subtotal = ?, discount = ?, vat = ?, total = ?, status = 'edited',
+    `UPDATE orders SET customer_name = ?, subtotal = ?, discount = ?, vat = ?, total = ?, vat_base = ?, exempt_amount = ?, status = 'edited',
             edit_count = edit_count + 1, updated_at = datetime('now', 'localtime')
       WHERE id = ?`,
   ),
   voidOrder: db.prepare(
-    `UPDATE orders SET status = 'void', void_reason = ?, updated_at = datetime('now', 'localtime') WHERE id = ?`,
+    `UPDATE orders SET status = 'void', void_reason = ?, voided_at = datetime('now', 'localtime'), voided_by = ?, void_approver = ?,
+            updated_at = datetime('now', 'localtime') WHERE id = ?`,
   ),
   insEdit: db.prepare(
     `INSERT INTO order_edits (order_id, kind, staff, reason, summary, old_total, new_total, diff, settle_method,
@@ -59,10 +67,11 @@ const q = {
 
 type OrderRow = {
   id: number; orderNo: string; customerName: string | null; total: number; promoCode: string | null; status: string; paymentMethod: string; feePayer: string;
+  vatRate: number | null; vatBase: number | null; exemptAmount: number; terminalId: number | null;
 };
 type ItemRow = {
   variantId: number; productId: number | null; name: string; sku: string; size: string; color: string; extra: string;
-  colorHex: string | null; art: string | null; qty: number; unitPrice: number; lineTotal: number;
+  colorHex: string | null; art: string | null; qty: number; unitPrice: number; lineTotal: number; vatExempt: number;
 };
 
 function getOrder(id: number) {
@@ -73,7 +82,12 @@ function getOrder(id: number) {
 
 export function orderDetail(id: number) {
   const order = getOrder(id);
-  return { ...order, items: q.items.all(id) as ItemRow[], edits: q.edits.all(id) };
+  const t = order.terminalId ? getTerminal(order.terminalId) : null;
+  return {
+    ...order, terminal: t ? { code: t.code, rdNo: t.rdNo, name: t.name } : null,
+    items: (q.items.all(id) as ItemRow[]).map((i) => ({ ...i, vatExempt: !!i.vatExempt })), edits: q.edits.all(id),
+    ...docsForOrder(id), // ใบกำกับภาษีเต็มรูป · ใบลดหนี้ · จำนวนที่คืนแล้วต่อรายการ
+  };
 }
 
 // ---------------- ค้นหา / รายการบิล ----------------
@@ -160,6 +174,14 @@ export interface EditBody {
 export function editOrder(id: number, body: EditBody) {
   const order = getOrder(id);
   if (order.status === 'void') throw new HttpError(409, 'บิลนี้ถูกยกเลิกแล้ว แก้ไขไม่ได้');
+  // ข้อกำหนด VAT: ใบกำกับภาษีที่ออกแล้วห้ามแก้ไข → ยกเลิกแล้วออกบิลใหม่ (ปิดได้ที่ ตั้งค่า → ภาษี)
+  if (getSettings().tax.lockEdit && currentBranchInfo().vatRegistered) {
+    throw new HttpError(409, 'สาขานี้จด VAT — บิลที่ออกแล้วแก้ไขไม่ได้ ให้ "ยกเลิกบิล" แล้วออกบิลใหม่ (ตั้งค่า → ภาษี (VAT) → ห้ามแก้ไขบิล)', 'BILL_LOCKED');
+  }
+  const docs = docsForOrder(id);
+  if (docs.creditNotes.length || docs.taxInvoices.some((t) => t.status === 'active')) {
+    throw new HttpError(409, 'บิลนี้มีใบกำกับภาษีเต็มรูปหรือใบลดหนี้แล้ว — แก้ไขบิลไม่ได้ (คืนสินค้าเพิ่มให้ออกใบลดหนี้)', 'BILL_LOCKED');
+  }
   const before = q.items.all(id) as ItemRow[];
 
   const oldQty = new Map<number, number>();
@@ -190,7 +212,10 @@ export function editOrder(id: number, body: EditBody) {
     if (qty > available && !allowNegativeStock()) throw new HttpError(409, `${v.name} (${variantLabel(v)}) ใช้ได้ ${available} ชิ้น`);
     // สินค้าเดิมในบิลใช้ราคาเดิม, สินค้าใหม่ใช้ราคาปัจจุบัน
     const unitPrice = oldPrice.get(variantId) ?? v.price;
-    return { ...v, qty, unitPrice, lineTotal: round2(unitPrice * qty) };
+    // เสีย/ยกเว้น VAT: สินค้าเดิมในบิลใช้ค่าตอนขาย · สินค้าใหม่ใช้ค่าปัจจุบัน
+    const old = before.find((b) => b.variantId === variantId);
+    const exempt = old ? !!old.vatExempt : isExempt(variantId);
+    return { ...v, qty, unitPrice, lineTotal: round2(unitPrice * qty), exempt };
   });
 
   const subtotal = round2(lines.reduce((s, l) => s + l.lineTotal, 0));
@@ -200,7 +225,9 @@ export function editOrder(id: number, body: EditBody) {
   const goods = round2(subtotal - discount);
   const fee = feeFor(order.paymentMethod, goods);
   const total = round2(goods + (order.feePayer === 'customer' ? fee : 0));
-  const vat = vatOf(total);
+  // ใช้อัตรา VAT เดิมของบิล (อัตรา ณ วันที่ออกบิล)
+  const tax = billTax(lines, subtotal, discount, total, order.vatRate ?? 0);
+  const vat = tax.vat;
   const diff = round2(total - order.total);
 
   // สรุปการเปลี่ยนแปลง: คืน / รับเพิ่ม
@@ -258,9 +285,9 @@ export function editOrder(id: number, body: EditBody) {
       if (countChanges(dec) !== 1) throw new HttpError(409, `${l.name} (${variantLabel(l)}) สต็อกไม่พอ`);
     }
     q.delItems.run(id);
-    for (const l of lines) q.insItem.run(id, l.id, l.name, l.sku, l.size, l.color, l.extra, l.qty, l.unitPrice, l.lineTotal);
+    for (const l of lines) q.insItem.run(id, l.id, l.name, l.sku, l.size, l.color, l.extra, l.qty, l.unitPrice, l.lineTotal, l.exempt ? 1 : 0);
     const customer = body.customerName !== undefined ? body.customerName.trim().slice(0, 80) || null : order.customerName;
-    q.updOrder.run(customer, subtotal, discount, vat, total, id);
+    q.updOrder.run(customer, subtotal, discount, vat, total, tax.vatBase, tax.exempt, id);
     // ยอดเปลี่ยน → คิดค่าธรรมเนียมใหม่ตามวิธีชำระของบิล
     db.prepare('UPDATE orders SET fee = ? WHERE id = ?').run(fee, id);
     q.insEdit.run(
@@ -272,9 +299,10 @@ export function editOrder(id: number, body: EditBody) {
   return { order: orderDetail(id), diff, changeDue: change };
 }
 
-export function voidOrder(id: number, body: { staff?: string; reason?: string; refundMethod?: string }) {
+export function voidOrder(id: number, body: { staff?: string; reason?: string; refundMethod?: string; operator?: string; approver?: string }) {
   const order = getOrder(id);
   if (order.status === 'void') throw new HttpError(409, 'บิลนี้ถูกยกเลิกไปแล้ว');
+  assertVoidable(id);
   const staff = body.staff?.trim();
   const reason = body.reason?.trim();
   if (!staff) throw new HttpError(422, 'กรุณาเลือกพนักงานผู้ยกเลิก');
@@ -286,7 +314,8 @@ export function voidOrder(id: number, body: { staff?: string; reason?: string; r
   tx(() => {
     if (shift) recordPayment(shift.id, id, 'void', method, -order.total);
     for (const it of before) q.restock.run(it.qty, it.variantId); // คืนสต็อกทั้งหมด
-    q.voidOrder.run(reason.slice(0, 200), id);
+    // บิลไม่ถูกลบ — เก็บเหตุผล ผู้ทำรายการ ผู้อนุมัติ และเวลา
+    q.voidOrder.run(reason.slice(0, 200), (body.operator ?? staff).slice(0, 80), (body.approver ?? staff).slice(0, 80), id);
     q.insEdit.run(
       id, 'void', staff.slice(0, 80), reason.slice(0, 200), 'ยกเลิกบิล · คืนสินค้าเข้าสต็อกทั้งหมด',
       order.total, 0, -order.total, refund, null, null, JSON.stringify(before), '[]',

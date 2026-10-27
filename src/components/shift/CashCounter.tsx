@@ -1,3 +1,4 @@
+// กะ: นับธนบัตร/เหรียญแยกชนิด
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { baht, moneyInput } from '../../format';

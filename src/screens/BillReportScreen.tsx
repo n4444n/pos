@@ -117,6 +117,7 @@ export function BillReportScreen({ onNavigate }: { onNavigate: (r: Route) => voi
     },
     { id: 'gross', label: 'ยอดขาย', width: 110, align: 'center', sortable: true, render: (r) => num(r, r.gross), total: t && money(t.gross) },
     { id: 'discount', label: 'ส่วนลด', width: 96, align: 'center', sortable: true, render: (r) => num(r, r.discount), total: t && money(t.discount) },
+    { id: 'refund', label: 'ใบลดหนี้', width: 104, align: 'center', sortable: true, render: (r) => num(r, r.refund ? -r.refund : 0), total: t && money(t.refund ? -t.refund : 0) },
     { id: 'net', label: 'ยอดสุทธิ', width: 120, align: 'center', sortable: true, render: (r) => num(r, r.net, true), total: t && money(t.net) },
     { id: 'vat', label: 'VAT', width: 96, align: 'center', sortable: true, render: (r) => num(r, r.vat), total: t && money(t.vat) },
     { id: 'cost', label: 'ต้นทุน', width: 110, align: 'center', sortable: true, render: (r) => num(r, r.cost), total: t && money(t.cost) },
@@ -214,7 +215,7 @@ export function BillReportScreen({ onNavigate }: { onNavigate: (r: Route) => voi
           />
         </View>
         <Text style={k.note}>
-          ยอดขาย = ก่อนส่วนลดท้ายบิล · ยอดสุทธิ = ยอดที่เก็บจริง (หลังแก้ไขบิล รวม VAT) · กำไร = ยอดสุทธิ − VAT − ต้นทุน · บิลที่ยกเลิกแสดงไว้ (ขีดฆ่า) แต่ไม่นับในยอดรวม ·
+          ยอดขาย = ก่อนส่วนลดท้ายบิล · ยอดสุทธิ = ยอดที่เก็บจริง (หลังแก้ไขบิล และหักใบลดหนี้ของบิลนั้นแล้ว รวม VAT) · กำไร = ยอดสุทธิ − VAT − ต้นทุน · บิลที่ยกเลิกแสดงไว้ (ขีดฆ่า) แต่ไม่นับในยอดรวม ·
           ยอดรวมตรงกับรายงานยอดขาย · กดเลขที่บิลเพื่อดูรายละเอียด
         </Text>
       </ScrollView>

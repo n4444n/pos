@@ -1,3 +1,4 @@
+// กะ: นำเงินเข้า/ออกจากลิ้นชักระหว่างกะ
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { api } from '../../api';

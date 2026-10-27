@@ -28,7 +28,18 @@ export interface HeldBill {
 }
 const COLS = `id, customer_name AS customerName, note, salesperson, order_type AS orderType, promo_code AS promoCode, items,
   item_count AS itemCount, total, staff, created_at AS createdAt`;
-const parse = (r: Record<string, unknown>): HeldBill => ({ ...(r as unknown as HeldBill), items: JSON.parse(String(r.items)) });
+// ราคาขาย = ราคาของ SKU (สาขานี้) ถ้าไม่ได้ตั้ง ใช้ราคาระดับสินค้า (variants.price = NULL → products.price)
+const priceStmt = () => db.prepare('SELECT COALESCE(v.price, p.price) AS price FROM variants v JOIN products p ON p.id = v.product_id WHERE v.id = ?');
+const parse = (r: Record<string, unknown>): HeldBill => {
+  const bill = { ...(r as unknown as HeldBill), items: JSON.parse(String(r.items)) as HeldItem[] };
+  // บิลที่พักไว้ก่อนแก้ (ราคาเป็น null → ยอด 0) → เติมราคาปัจจุบันแล้วคิดยอดใหม่
+  if (bill.items.some((x) => x.price == null)) {
+    const st = priceStmt();
+    for (const x of bill.items) if (x.price == null) x.price = (st.get(x.variantId) as { price: number } | undefined)?.price ?? 0;
+    bill.total = round2(bill.items.reduce((a, x) => a + x.price * x.qty, 0));
+  }
+  return bill;
+};
 const BR = '((SELECT branch_id FROM temp.ctx) = 0 OR branch_id = (SELECT branch_id FROM temp.ctx))';
 
 export function listHeld(): HeldBill[] {
@@ -42,7 +53,7 @@ export function holdBill(body: Record<string, any>, staff: string) {
   if (!raw.length) throw new HttpError(422, 'ยังไม่มีสินค้าในรายการ');
   if (raw.length > 200) throw new HttpError(422, 'รายการมากเกินไป');
   const get = db.prepare(
-    `SELECT v.id, v.price, v.size, v.color, v.extra, p.name FROM variants v JOIN products p ON p.id = v.product_id WHERE v.id = ?`,
+    `SELECT v.id, COALESCE(v.price, p.price) AS price, v.size, v.color, v.extra, p.name FROM variants v JOIN products p ON p.id = v.product_id WHERE v.id = ?`,
   );
   const items: HeldItem[] = [];
   for (const it of raw) {
@@ -51,7 +62,7 @@ export function holdBill(body: Record<string, any>, staff: string) {
     if (!Number.isInteger(id) || !(qty > 0)) continue;
     const v = get.get(id) as { id: number; price: number; size: string; color: string; extra: string | null; name: string } | undefined;
     if (!v) continue;
-    const label = [v.color, v.size, v.extra].filter(Boolean).join(' / ');
+    const label = [v.color, v.size, v.extra].filter((x) => x && x !== '-').join(' / ');
     items.push({ variantId: id, qty, name: v.name, label, price: v.price });
   }
   if (!items.length) throw new HttpError(422, 'ไม่พบสินค้าในรายการ');

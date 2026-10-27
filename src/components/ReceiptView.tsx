@@ -1,3 +1,4 @@
+// ใบเสร็จแบบย่อบนจอ (หลังขาย / ประวัติ)
 import { StyleSheet, Text, View } from 'react-native';
 import { useAppSettings } from '../appSettings';
 import { baht, variantLabel } from '../format';
@@ -17,6 +18,7 @@ export function ReceiptView({ order, compact }: { order: Order; compact?: boolea
           {order.customerName ? <Row l={t('customer')} r={order.customerName} /> : null}
           {order.salesperson ? <Row l={t('staff')} r={order.salesperson} /> : null}
           <Row l={t('orderType')} r={order.orderType} />
+          {order.terminal ? <Row l="เครื่อง POS" r={`${order.terminal.code}${order.terminal.rdNo ? ` · ${order.terminal.rdNo}` : ''}`} /> : null}
         </View>
       ) : null}
       <View style={s.items}>
@@ -24,7 +26,7 @@ export function ReceiptView({ order, compact }: { order: Order; compact?: boolea
           <View key={i} style={s.item}>
             <View style={{ flex: 1 }}>
               <Text style={s.name}>{it.name}</Text>
-              <Text style={s.sub}>{variantLabel(it)} · {it.qty} × {baht(it.unitPrice)}</Text>
+              <Text style={s.sub}>{variantLabel(it)} · {it.qty} × {baht(it.unitPrice)}{it.vatExempt && order.vat > 0 ? ' · ยกเว้น VAT' : ''}</Text>
             </View>
             <Text style={s.amount}>{baht(it.lineTotal)}</Text>
           </View>
@@ -35,6 +37,7 @@ export function ReceiptView({ order, compact }: { order: Order; compact?: boolea
         {order.discount > 0 ? <Row l={`${t('discount')} (${order.promoCode})`} r={`−${baht(order.discount)}`} accent /> : null}
         {order.fee && order.feePayer === 'customer' ? <Row l={`${t('fee')} ${pay(order.paymentMethod)}`} r={`+${baht(order.fee)}`} /> : null}
         {order.vat > 0 ? <Row l={vat(order)} r={baht(order.vat)} small /> : null}
+        {order.vat > 0 && (order.exemptAmount ?? 0) > 0 ? <Row l="มูลค่าสินค้ายกเว้น VAT" r={baht(order.exemptAmount!)} small /> : null}
         <View style={s.totalRow}>
           <Text style={s.totalL}>{t('total')}</Text>
           <Text style={s.totalR}>{baht(order.total)}</Text>

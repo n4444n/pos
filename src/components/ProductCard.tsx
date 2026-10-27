@@ -1,3 +1,4 @@
+// หน้าขาย: การ์ดสินค้า 1 รายการ (รูป · ราคา · เลือกสี/ไซซ์ · ใส่ตะกร้า)
 import { memo, useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { bahtShort, priceRange } from '../format';

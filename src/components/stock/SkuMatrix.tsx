@@ -1,3 +1,4 @@
+// สต็อก: ตาราง SKU ของสินค้า (รหัส · ราคา · สต็อก ต่อสี/ไซซ์)
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { moneyInput } from '../../format';

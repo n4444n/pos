@@ -1,3 +1,4 @@
+// กะ: เปิดกะ (เงินทอนตั้งต้น)
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { api } from '../../api';

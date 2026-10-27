@@ -31,7 +31,7 @@ export function daySummary(date?: string) {
   const edits = db
     .prepare(
       `SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN e.diff < 0 THEN -e.diff END), 0) AS refunded
-         FROM order_edits e JOIN orders o ON o.id = e.order_id WHERE e.kind = 'edit' AND date(e.edited_at) = ?`,
+         FROM order_edits e JOIN orders o ON o.id = e.order_id WHERE e.kind IN ('edit', 'credit') AND date(e.edited_at) = ?`,
     )
     .get(d) as { n: number; refunded: number };
   const top = db

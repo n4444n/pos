@@ -1,3 +1,4 @@
+// สี · ขนาดมุมโค้ง · ฟอนต์ ที่ใช้ทั้งแอป
 import { Platform } from 'react-native';
 
 export const colors = {

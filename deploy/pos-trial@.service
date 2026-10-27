@@ -1,0 +1,32 @@
+# ร้านทดลอง 1 ร้าน = 1 instance (สร้าง/เปิด/ปิดโดยระบบ license ผ่าน pos-trial-ctl)
+#   systemctl status pos-trial@a      journalctl -u pos-trial@a -f
+# ใช้โค้ดชุดเดียวกับร้านหลัก (/opt/pos) · ข้อมูลแยกร้านละโฟลเดอร์ /var/lib/pos-trial/<ร้าน>
+[Unit]
+Description=Clothing POS trial shop %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pos
+Group=pos
+WorkingDirectory=/opt/pos
+Environment=NODE_ENV=production
+Environment=TZ=Asia/Bangkok
+Environment=DB_PATH=/var/lib/pos-trial/%i/pos.db
+Environment=WEB_DIR=/opt/pos/dist
+Environment=POS_NO_DEMO_PINS=1
+# PORT + POS_MANAGER_PIN
+EnvironmentFile=/etc/pos-trial/%i.env
+ExecStart=/usr/bin/node --experimental-strip-types --disable-warning=ExperimentalWarning server/index.ts
+Restart=always
+RestartSec=3
+MemoryMax=400M
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/pos-trial/%i
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

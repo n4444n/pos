@@ -1,3 +1,4 @@
+// กะ: แถวสรุปกะในรายการ
 import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { baht, duration, signedBaht, VERDICT } from '../../format';

@@ -1,3 +1,4 @@
+// จัดรูปแบบตัวเลข/เงิน/วันที่ภาษาไทย และป้ายข้อความที่ใช้ซ้ำ (วิธีชำระ · VAT · ตัวเลือกสินค้า)
 const money = new Intl.NumberFormat('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const money0 = new Intl.NumberFormat('th-TH', { maximumFractionDigits: 0 });
 
@@ -27,12 +28,17 @@ export const PAYMENT_LABEL: Record<string, string> = {
   transfer: 'โอนเงิน',
 };
 
-/** คำนวณยอด — ตรงกับที่ server คำนวณ (ราคารวม VAT แล้ว) */
-export function computeTotals(subtotal: number, discount: number, vatRate: number, surcharge = 0) {
+/**
+ * คำนวณยอด — ตรงกับที่ server คำนวณ (server/tax.ts billTax · ราคารวม VAT แล้ว)
+ * exemptGross = มูลค่าสินค้ายกเว้น VAT ก่อนส่วนลด → ส่วนลดเฉลี่ยตามสัดส่วน · VAT คิดเฉพาะส่วนที่เสีย VAT
+ */
+export function computeTotals(subtotal: number, discount: number, vatRate: number, surcharge = 0, exemptGross = 0) {
   const goods = round2(subtotal - discount);
   const total = round2(goods + surcharge);
-  const vat = round2((total * vatRate) / (1 + vatRate));
-  return { subtotal: round2(subtotal), discount, goods, surcharge, total, vat };
+  const exempt = Math.max(0, round2(exemptGross - (subtotal > 0 ? round2((discount * exemptGross) / subtotal) : 0)));
+  const vatable = Math.max(0, round2(total - exempt));
+  const vat = round2((vatable * vatRate) / (1 + vatRate));
+  return { subtotal: round2(subtotal), discount, goods, surcharge, total, vat, exempt };
 }
 
 export const STATUS_LABEL: Record<string, string> = { paid: 'ชำระแล้ว', edited: 'แก้ไขแล้ว', void: 'ยกเลิก' };
@@ -100,9 +106,17 @@ export function priceRange(min: number, max: number) {
   return min === max ? bahtShort(min) : `${bahtShort(min)}–${money0.format(max)}`;
 }
 
-/** ข้อความ VAT ของบิล — คำนวณอัตราจากตัวเลขในบิล (บิลเก่าที่ใช้อัตราเดิมยังแสดงถูก) */
-export function vatLabel(o: { vat: number; total: number }, suffix = '(รวมในราคา)') {
-  const base = o.total - o.vat;
-  const pct = base > 0 ? Math.round((o.vat / base) * 1000) / 10 : 0;
+/** ข้อความ VAT ของบิล — ใช้อัตราที่บันทึกในบิล (vatRate) · บิลเก่าที่ไม่มี คำนวณจากตัวเลขในบิล */
+export function vatLabel(o: { vat: number; total: number; vatRate?: number | null; vatBase?: number | null }, suffix = '(รวมในราคา)') {
+  const base = o.vatBase ?? o.total - o.vat;
+  const pct = o.vatRate != null && o.vatRate > 0 ? o.vatRate : base > 0 ? Math.round((o.vat / base) * 1000) / 10 : 0;
   return `VAT ${pct % 1 === 0 ? pct.toFixed(0) : pct}% ${suffix}`;
+}
+
+/** ตรวจเลขประจำตัวผู้เสียภาษี 13 หลัก — หลักสุดท้ายเป็นเลขตรวจสอบ (เหมือน server/tax.ts validTaxId) */
+export function validTaxId(id: string) {
+  if (!/^\d{13}$/.test(id)) return false;
+  let sum = 0;
+  for (let i = 0; i < 12; i++) sum += Number(id[i]) * (13 - i);
+  return (11 - (sum % 11)) % 10 === Number(id[12]);
 }

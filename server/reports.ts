@@ -7,6 +7,7 @@ import { db } from './db.ts';
 import { HttpError, PAYMENT_METHODS, round2 } from './common.ts';
 import { getSettings } from './settings.ts';
 import { buildXlsx, type Col } from './xlsx.ts';
+import { CN_PER_BILL, CN_RANGE, CNI_COST, CNI_EXVAT, CNI_FROM } from './creditAdj.ts';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
@@ -86,6 +87,22 @@ export function salesReport(f: SalesQuery) {
     .all(from, to) as { d: string; refund: number }[]) {
     day(r.d).refund = r.refund;
   }
+  // ใบลดหนี้ (รับคืนสินค้า): บิลเดิมไม่เปลี่ยน → หักยอดสุทธิ / VAT / ชิ้น / ต้นทุน ในวันที่ออกใบลดหนี้ และนับเป็น "คืนเงิน"
+  for (const r of db
+    .prepare(`SELECT date(cn.issued_at) AS d, SUM(cn.total) AS total, SUM(cn.vat) AS vat FROM credit_notes cn WHERE ${CN_RANGE} GROUP BY d`)
+    .all(from, to) as { d: string; total: number; vat: number }[]) {
+    const x = day(r.d);
+    x.refund += r.total;
+    x.net -= r.total;
+    x.vat -= r.vat;
+  }
+  for (const r of db
+    .prepare(`SELECT date(cn.issued_at) AS d, SUM(ci.qty) AS units, SUM(${CNI_COST}) AS cost ${CNI_FROM} WHERE ${CN_RANGE} GROUP BY d`)
+    .all(from, to) as { d: string; units: number; cost: number }[]) {
+    const x = day(r.d);
+    x.units -= r.units;
+    x.cost -= r.cost;
+  }
 
   const rows = new Map<string, SalesRow>();
   for (let d = from; d <= to; d = addDays(d, 1)) {
@@ -159,7 +176,7 @@ export function salesReportXlsx(f: SalesQuery, scope: string): Buffer {
       intro: [
         `รายงานยอดขาย${GROUP_LABEL[d.group]}`,
         `${dayText(d.range.from)} – ${dayText(d.range.to)} · ${scope}`,
-        'ยอดขาย = ก่อนส่วนลดท้ายบิล · ยอดสุทธิ = ยอดที่เก็บจริง (หลังแก้ไขบิล รวม VAT) · คืนเงิน = เงินที่คืนจากการเปลี่ยน/คืนสินค้า (หักในยอดแล้ว) · กำไร = ยอดสุทธิ − VAT − ต้นทุน · ไม่รวมบิลที่ยกเลิก',
+        'ยอดขาย = ก่อนส่วนลดท้ายบิล · ยอดสุทธิ = ยอดที่เก็บจริง (หลังแก้ไขบิล และหักใบลดหนี้ตามวันที่ออกใบลดหนี้ รวม VAT) · คืนเงิน = เงินที่คืนจากการเปลี่ยน/คืนสินค้า และใบลดหนี้ (หักในยอดแล้ว) · กำไร = ยอดสุทธิ − VAT − ต้นทุน · ไม่รวมบิลที่ยกเลิก',
       ],
       cols,
       rows: d.rows,
@@ -222,6 +239,23 @@ function productRows(f: ProductQuery) {
         GROUP BY oi.variant_id`,
     )
     .all(from, to) as unknown as S[];
+  // ใบลดหนี้ในช่วงนี้ (ตามวันที่ออก) → หักชิ้น / ยอดขาย / ต้นทุน ของ SKU ที่คืน
+  const returned = db
+    .prepare(
+      `SELECT ci.variant_id AS variantId, MAX(ci.product_name) AS productName, SUM(ci.qty) AS units, SUM(ci.line_total) AS sales,
+              SUM(${CNI_EXVAT}) AS exVat, SUM(${CNI_COST}) AS cost
+         ${CNI_FROM} WHERE ${CN_RANGE} AND ci.variant_id IS NOT NULL GROUP BY ci.variant_id`,
+    )
+    .all(from, to) as unknown as S[];
+  for (const r of returned) {
+    const s = sold.find((x) => x.variantId === r.variantId);
+    if (s) {
+      s.units -= r.units;
+      s.sales -= r.sales;
+      s.exVat -= r.exVat;
+      s.cost -= r.cost;
+    } else sold.push({ ...r, bills: 0, units: -r.units, sales: -r.sales, exVat: -r.exVat, cost: -r.cost });
+  }
   const sMap = new Map(sold.map((s) => [s.variantId, s]));
 
   const q = (f.q ?? '').trim().toLowerCase();
@@ -394,12 +428,17 @@ export interface BillRow {
   orderType: string | null; payment: string; paymentLabel: string; lines: number; units: number;
   gross: number; discount: number; fee: number; net: number; vat: number; cost: number; profit: number;
   status: 'paid' | 'edited' | 'void'; editCount: number; voidReason: string | null;
+  /** คืนเงินด้วยใบลดหนี้ (หักออกจากยอดสุทธิ / VAT / ชิ้น / ต้นทุนของบิลนี้แล้ว) */
+  refund: number;
 }
 
 const BILL_SORT: Record<string, string> = {
   time: 'o.id', no: 'o.order_no', staff: "COALESCE(o.salesperson, '')", customer: "COALESCE(o.customer_name, '')",
-  payment: 'o.payment_method', units: 'COALESCE(it.units, 0)', gross: 'o.subtotal', discount: 'o.discount', net: 'o.total', vat: 'o.vat',
-  cost: 'COALESCE(it.cost, 0)', profit: "(CASE WHEN o.status = 'void' THEN 0 ELSE o.total - o.vat - COALESCE(it.cost, 0) END)", status: 'o.status',
+  payment: 'o.payment_method', units: 'COALESCE(it.units, 0) - COALESCE(ri.units, 0)', gross: 'o.subtotal', discount: 'o.discount',
+  net: 'o.total - COALESCE(cr.refund, 0)', vat: 'o.vat - COALESCE(cr.vat, 0)', refund: 'COALESCE(cr.refund, 0)',
+  cost: 'COALESCE(it.cost, 0) - COALESCE(ri.cost, 0)',
+  profit: "(CASE WHEN o.status = 'void' THEN 0 ELSE (o.total - COALESCE(cr.refund, 0)) - (o.vat - COALESCE(cr.vat, 0)) - (COALESCE(it.cost, 0) - COALESCE(ri.cost, 0)) END)",
+  status: 'o.status',
 };
 
 function billWhere(f: BillQuery) {
@@ -424,10 +463,12 @@ const BILL_FROM = `FROM orders o
     SELECT oi.order_id, COUNT(*) AS lines, SUM(oi.qty) AS units, SUM(oi.qty * COALESCE(v.cost, p.cost, 0)) AS cost
       FROM order_items oi LEFT JOIN variants_all v ON v.id = oi.variant_id LEFT JOIN products p ON p.id = v.product_id
      GROUP BY oi.order_id
-  ) it ON it.order_id = o.id`;
+  ) it ON it.order_id = o.id
+  ${CN_PER_BILL}`;
 const BILL_COLS = `o.id, o.order_no AS orderNo, o.created_at AS createdAt, b.name AS branch, o.salesperson, o.customer_name AS customer,
-  o.order_type AS orderType, o.payment_method AS payment, COALESCE(it.lines, 0) AS lines, COALESCE(it.units, 0) AS units,
-  o.subtotal AS gross, o.discount, COALESCE(o.fee, 0) AS fee, o.total AS net, o.vat, COALESCE(it.cost, 0) AS cost,
+  o.order_type AS orderType, o.payment_method AS payment, COALESCE(it.lines, 0) AS lines, COALESCE(it.units, 0) - COALESCE(ri.units, 0) AS units,
+  o.subtotal AS gross, o.discount, COALESCE(o.fee, 0) AS fee, o.total - COALESCE(cr.refund, 0) AS net, o.vat - COALESCE(cr.vat, 0) AS vat,
+  COALESCE(it.cost, 0) - COALESCE(ri.cost, 0) AS cost, COALESCE(cr.refund, 0) AS refund,
   o.status, o.edit_count AS editCount, o.void_reason AS voidReason`;
 
 function billRows(f: BillQuery, limit: number, offset: number) {
@@ -440,7 +481,7 @@ function billRows(f: BillQuery, limit: number, offset: number) {
     .all(...w.args, limit, offset) as Omit<BillRow, 'profit' | 'paymentLabel'>[]).map((r) => ({
     ...r,
     paymentLabel: labels.get(r.payment) ?? r.payment,
-    gross: round2(r.gross), discount: round2(r.discount), fee: round2(r.fee), net: round2(r.net), vat: round2(r.vat), cost: round2(r.cost),
+    gross: round2(r.gross), discount: round2(r.discount), fee: round2(r.fee), net: round2(r.net), vat: round2(r.vat), cost: round2(r.cost), refund: round2(r.refund),
     // บิลที่ยกเลิก: ไม่มีกำไร (ไม่นับในยอดรวม)
     profit: r.status === 'void' ? 0 : round2(r.net - r.vat - r.cost),
   })) as BillRow[];
@@ -453,9 +494,9 @@ function billTotals(f: BillQuery) {
     .prepare(
       `SELECT COUNT(*) AS all_, SUM(CASE WHEN o.status = 'void' THEN 1 ELSE 0 END) AS voided,
               SUM(CASE WHEN o.status = 'edited' THEN 1 ELSE 0 END) AS edited,
-              ${['units', 'gross', 'discount', 'fee', 'net', 'vat', 'cost']
+              ${['units', 'gross', 'discount', 'fee', 'net', 'vat', 'cost', 'refund']
                 .map((k) => {
-                  const e = k === 'units' ? 'COALESCE(it.units, 0)' : k === 'cost' ? 'COALESCE(it.cost, 0)' : k === 'fee' ? 'COALESCE(o.fee, 0)' : k === 'gross' ? 'o.subtotal' : k === 'net' ? 'o.total' : `o.${k}`;
+                  const e = k === 'fee' ? 'COALESCE(o.fee, 0)' : k === 'gross' ? 'o.subtotal' : k === 'discount' ? 'o.discount' : BILL_SORT[k];
                   return `COALESCE(SUM(CASE WHEN o.status != 'void' THEN ${e} END), 0) AS ${k}`;
                 })
                 .join(', ')}
@@ -465,12 +506,13 @@ function billTotals(f: BillQuery) {
   const total = {
     rows: t.all_, bills: t.all_ - (t.voided ?? 0), voided: t.voided ?? 0, edited: t.edited ?? 0,
     units: t.units, gross: round2(t.gross), discount: round2(t.discount), fee: round2(t.fee), net: round2(t.net), vat: round2(t.vat), cost: round2(t.cost),
+    refund: round2(t.refund),
     profit: round2(t.net - t.vat - t.cost),
   };
   // แยกตามวิธีชำระ (ไม่รวมบิลที่ยกเลิก) — ผลรวม = ยอดสุทธิรวม
   const labels = new Map(getSettings().payments.methods.map((m) => [m.id as string, m.label]));
   const byPayment = (db
-    .prepare(`SELECT o.payment_method AS payment, COUNT(*) AS bills, COALESCE(SUM(o.total), 0) AS net ${BILL_FROM} WHERE ${w.where} AND o.status != 'void' GROUP BY o.payment_method ORDER BY net DESC`)
+    .prepare(`SELECT o.payment_method AS payment, COUNT(*) AS bills, COALESCE(SUM(o.total - COALESCE(cr.refund, 0)), 0) AS net ${BILL_FROM} WHERE ${w.where} AND o.status != 'void' GROUP BY o.payment_method ORDER BY net DESC`)
     .all(...w.args) as { payment: string; bills: number; net: number }[]).map((r) => ({ ...r, label: labels.get(r.payment) ?? r.payment, net: round2(r.net) }));
   return { range: { from: w.from, to: w.to }, total, byPayment };
 }
@@ -502,6 +544,7 @@ export function billReportXlsx(f: BillQuery, scope: string, allBranches: boolean
     { header: 'ยอดขาย', value: (r) => r.gross, type: 'money' },
     { header: 'ส่วนลด', value: (r) => r.discount, type: 'money' },
     { header: 'ค่าธรรมเนียม', value: (r) => r.fee, type: 'money' },
+    { header: 'คืนเงิน (ใบลดหนี้)', value: (r) => r.refund || '', type: 'money' },
     { header: 'ยอดสุทธิ', value: (r) => r.net, type: 'money' },
     { header: 'VAT', value: (r) => r.vat, type: 'money' },
     { header: 'ต้นทุน', value: (r) => r.cost, type: 'money' },
@@ -513,7 +556,7 @@ export function billReportXlsx(f: BillQuery, scope: string, allBranches: boolean
   const x = t.total;
   const totals = {
     orderNo: `รวม ${x.bills} บิล`, createdAt: '', lines: null, units: x.units, gross: x.gross, discount: x.discount, fee: x.fee,
-    net: x.net, vat: x.vat, cost: x.cost, profit: x.profit, paymentLabel: '', status: '', editCount: 0,
+    net: x.net, vat: x.vat, cost: x.cost, profit: x.profit, refund: x.refund, paymentLabel: '', status: '', editCount: 0,
   } as unknown as BillRow;
   const filters = [
     f.q ? `ค้นหา "${f.q}"` : '',
@@ -526,7 +569,7 @@ export function billReportXlsx(f: BillQuery, scope: string, allBranches: boolean
       intro: [
         'รายงานยอดขายรายบิล',
         `${dayText(t.range.from)} – ${dayText(t.range.to)} · ${scope}${filters ? ` · ${filters}` : ''}`,
-        `ยอดสุทธิ = ยอดที่เก็บจริง (หลังแก้ไขบิล รวม VAT) · กำไร = ยอดสุทธิ − VAT − ต้นทุน · บิลที่ยกเลิกแสดงไว้แต่ไม่นับในยอดรวม (ยกเลิก ${x.voided} บิล)`,
+        `ยอดสุทธิ = ยอดที่เก็บจริง (หลังแก้ไขบิล และหักใบลดหนี้ของบิลนั้นแล้ว รวม VAT) · กำไร = ยอดสุทธิ − VAT − ต้นทุน · บิลที่ยกเลิกแสดงไว้แต่ไม่นับในยอดรวม (ยกเลิก ${x.voided} บิล)`,
       ],
       cols,
       rows,

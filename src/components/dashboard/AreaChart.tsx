@@ -1,3 +1,4 @@
+// รายงาน: กราฟพื้นที่ยอดขายตามช่วงเวลา
 import { memo, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';

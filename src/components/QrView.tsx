@@ -1,3 +1,4 @@
+// แสดง QR code (ตัวอย่างใบเสร็จ)
 import { memo, useMemo } from 'react';
 import { View } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';

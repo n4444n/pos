@@ -325,9 +325,7 @@ db.exec(`
     address        TEXT NOT NULL DEFAULT '',
     vat_registered INTEGER NOT NULL DEFAULT 0,
     phone          TEXT NOT NULL DEFAULT '',
-    url            TEXT NOT NULL DEFAULT '',
     photo          TEXT NOT NULL DEFAULT '',
-    key_id         INTEGER,
     is_main        INTEGER NOT NULL DEFAULT 0,
     created_at     TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     updated_at     TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
@@ -337,7 +335,10 @@ db.exec(`
 {
   const cols = (db.prepare('PRAGMA table_info(branches)').all() as { name: string }[]).map((c) => c.name);
   if (!cols.includes('is_main')) db.exec('ALTER TABLE branches ADD COLUMN is_main INTEGER NOT NULL DEFAULT 0');
-  for (const c of ['country', 'province', 'postcode', 'tax_id']) if (cols.includes(c)) db.exec(`ALTER TABLE branches DROP COLUMN ${c}`);
+  // สาขาตามทะเบียนภาษี: '00000' = สำนักงานใหญ่ · '00001' … = สาขาที่ (ว่าง = ยังไม่ระบุ)
+  if (!cols.includes('tax_branch_no')) db.exec("ALTER TABLE branches ADD COLUMN tax_branch_no TEXT NOT NULL DEFAULT ''");
+  // คอลัมน์ที่เลิกใช้: ที่อยู่แยกช่อง (รวมเป็น address) · url / key_id ของระบบเชื่อมสาขาแบบแยกเครื่อง (เลิกแล้ว — ทุกสาขาใช้เซิร์ฟเวอร์เดียว)
+  for (const c of ['country', 'province', 'postcode', 'tax_id', 'url', 'key_id']) if (cols.includes(c)) db.exec(`ALTER TABLE branches DROP COLUMN ${c}`);
 }
 
 /** สาขาหลัก = ข้อมูลร้านเดิม (ตั้งค่า → ข้อมูลร้าน) */
@@ -346,11 +347,23 @@ function ensureMainBranch(): number {
   if (cur) return cur.id;
   const shop = readSetting('shop');
   const pay = readSetting('payments');
+  // จด VAT: ตามที่ร้านเคยตั้งไว้ · ไม่เคยตั้ง → ดูว่าเคยมีบิลที่คิด VAT ไหม (ข้อมูลเดิม) · ร้านใหม่ = ยังไม่จด VAT
+  // (ร้านใหม่ขายได้ทันที — เปิดจด VAT + ตั้งอัตราได้ที่ ตั้งค่า → ภาษี (VAT))
+  let hadVat = false;
+  for (const t of ['orders_all', 'orders']) {
+    try {
+      hadVat = !!db.prepare(`SELECT 1 FROM ${t} WHERE vat > 0 LIMIT 1`).get();
+      break;
+    } catch {
+      /* ตารางยังไม่มี */
+    }
+  }
+  const vatRegistered = pay.vat?.enabled === false ? 0 : pay.vat?.enabled === true || hadVat ? 1 : 0;
   const r = db
-    .prepare('INSERT INTO branches (name, code, address, vat_registered, phone, url, photo, is_main) VALUES (?, ?, ?, ?, ?, ?, ?, 1)')
+    .prepare('INSERT INTO branches (name, code, address, vat_registered, phone, photo, is_main) VALUES (?, ?, ?, ?, ?, ?, 1)')
     .run(
       String(shop.branchName || shop.name || 'สาขาหลัก'), String(shop.branchCode || 'B01'), String(shop.address ?? ''),
-      pay.vat?.enabled === false ? 0 : 1, String(shop.phone ?? ''), String(shop.publicUrl ?? ''), String(shop.photoUrl ?? ''),
+      vatRegistered, String(shop.phone ?? ''), String(shop.photoUrl ?? ''),
     );
   return Number(r.lastInsertRowid);
 }
@@ -402,7 +415,6 @@ if (!MIGRATED) {
     db.prepare('INSERT INTO branch_stock (branch_id, variant_id, stock) SELECT ?, id, stock FROM variants_all').run(MAIN_ID);
     // เลิกใช้ระบบเชื่อมสาขาแบบแยกเครื่อง (API key สิทธิ์ "เชื่อมสาขา")
     if (tableExists('api_keys')) db.exec("UPDATE api_keys SET revoked = 1 WHERE scope = 'sync'");
-    db.exec('UPDATE branches SET key_id = NULL');
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
@@ -462,6 +474,39 @@ const CTX = '(SELECT branch_id FROM temp.ctx)';
 // ปิดกะ: ยอดจริงของช่องทางที่ไม่ใช่เงินสด (บัตร / QR / โอน) — JSON { method: { system, count, actual, diff } }
 // ต้องเพิ่มก่อนสร้าง view ด้านล่าง (trigger UPDATE ของ view อ้างชื่อคอลัมน์ตอนสร้าง)
 if (!colsOf('shifts_all').includes('tenders')) db.exec('ALTER TABLE shifts_all ADD COLUMN tenders TEXT');
+
+// ภาษีมูลค่าเพิ่ม (ข้อกำหนดกรมสรรพากร) — เก็บค่าที่ใช้จริงในบิลแต่ละใบ (ดู tax.ts)
+// vat_rate = อัตรา % ณ วันที่ออกบิล · vat_base = ฐานภาษี (มูลค่าก่อน VAT ของสินค้าที่เสีย VAT) · exempt_amount = มูลค่าสินค้ายกเว้น VAT
+// terminal_id = เครื่อง POS ที่ออกบิล · voided_* = ผู้ทำรายการ / ผู้อนุมัติ / เวลา ยกเลิกบิล (บิลไม่ถูกลบ)
+{
+  const oc = colsOf('orders_all');
+  const add = (c: string, def: string) => {
+    if (!oc.includes(c)) db.exec(`ALTER TABLE orders_all ADD COLUMN ${c} ${def}`);
+  };
+  add('vat_rate', 'REAL');
+  add('vat_base', 'REAL');
+  add('exempt_amount', 'REAL NOT NULL DEFAULT 0');
+  add('terminal_id', 'INTEGER');
+  add('voided_at', 'TEXT');
+  add('voided_by', 'TEXT');
+  add('void_approver', 'TEXT');
+  if (!oc.includes('vat_base')) {
+    // บิลเดิม: อัตราคำนวณย้อนจากยอด VAT ที่บันทึกไว้ (ไม่มีสินค้ายกเว้น VAT)
+    db.exec(`UPDATE orders_all SET
+               vat_rate = CASE WHEN vat > 0 AND total - vat > 0 THEN ROUND(vat * 100.0 / (total - vat), 2) ELSE 0 END,
+               vat_base = ROUND(total - vat, 2)
+             WHERE vat_base IS NULL`);
+    // บิลที่ยกเลิกไว้ก่อนหน้า: ดึงผู้ยกเลิก/เวลา จากประวัติการแก้ไข
+    db.exec(`UPDATE orders_all SET
+               voided_at = (SELECT e.edited_at FROM order_edits e WHERE e.order_id = orders_all.id AND e.kind = 'void' ORDER BY e.id DESC LIMIT 1),
+               voided_by = (SELECT e.staff FROM order_edits e WHERE e.order_id = orders_all.id AND e.kind = 'void' ORDER BY e.id DESC LIMIT 1)
+             WHERE status = 'void' AND voided_at IS NULL`);
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_orders_terminal ON orders_all(terminal_id, id)');
+  // สินค้าเสีย VAT / ยกเว้น VAT (+ snapshot ในรายการของบิล)
+  if (!colsOf('products').includes('vat_exempt')) db.exec('ALTER TABLE products ADD COLUMN vat_exempt INTEGER NOT NULL DEFAULT 0');
+  if (!colsOf('order_items').includes('vat_exempt')) db.exec('ALTER TABLE order_items ADD COLUMN vat_exempt INTEGER NOT NULL DEFAULT 0');
+}
 
 for (const t of SCOPED) {
   const cols = colsOf(`${t}_all`).filter((c) => c !== 'id' && c !== 'branch_id');

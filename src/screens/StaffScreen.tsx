@@ -1,3 +1,4 @@
+// หน้า พนักงาน (ผู้จัดการ): เพิ่ม/แก้ไข · PIN · สิทธิ์ · สาขา
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,

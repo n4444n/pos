@@ -1,3 +1,4 @@
+// ปุ่มเลือกแบบชิป + หัวข้อช่องกรอก (ใช้ในหน้าต่างของบิล)
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, font, radius } from '../../theme';
 

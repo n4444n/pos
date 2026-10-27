@@ -1,4 +1,4 @@
-import { Credit } from './Credit';
+// เมนูด้านซ้าย / เมนูมือถือ: รายการหน้า (Route) และสิทธิ์ผู้จัดการ
 import { useEffect, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../api';
@@ -9,10 +9,10 @@ import { Icon, type IconName } from './Icon';
 import { AppVersionChip, UpdateButton } from './UpdateButton';
 
 export type Route =
-  | 'sales' | 'dashboard' | 'salesReport' | 'billReport' | 'productReport' | 'history' | 'shifts' | 'expenses' | 'staff' | 'stock' | 'skus' | 'shipments' | 'branches' | 'settings';
+  | 'sales' | 'dashboard' | 'salesReport' | 'billReport' | 'productReport' | 'taxReport' | 'history' | 'shifts' | 'expenses' | 'staff' | 'stock' | 'skus' | 'shipments' | 'shipmentReport' | 'branches' | 'settings';
 
 /** หน้าที่อยู่ใต้เมนู "รายงาน" (เฉพาะผู้จัดการ) */
-export const REPORT_ROUTES: Route[] = ['dashboard', 'salesReport', 'billReport', 'productReport'];
+export const REPORT_ROUTES: Route[] = ['dashboard', 'salesReport', 'billReport', 'productReport', 'taxReport'];
 // เปิด/ปิดกลุ่มเมนู (รายงาน / สต็อกสินค้า) — จำไว้ระหว่างเปลี่ยนหน้า (แต่ละหน้ามี sidebar ของตัวเอง)
 const groupOpen: Partial<Record<string, boolean>> = {};
 
@@ -43,7 +43,7 @@ function useStockBadge() {
   return n;
 }
 
-interface Item { id: Route | 'report' | 'stockGroup'; label: string; icon: IconName; soon?: boolean; manager?: boolean; children?: Item[] }
+interface Item { id: Route | 'report' | 'stockGroup' | 'shipGroup'; label: string; icon: IconName; soon?: boolean; manager?: boolean; children?: Item[] }
 const ITEMS: Item[] = [
   { id: 'sales', label: 'หน้าขาย', icon: 'storefront-outline' },
   {
@@ -53,6 +53,7 @@ const ITEMS: Item[] = [
       { id: 'salesReport', label: 'ยอดขาย', icon: 'cash-outline' },
       { id: 'billReport', label: 'ยอดขายรายบิล', icon: 'receipt-outline' },
       { id: 'productReport', label: 'สินค้า', icon: 'pricetags-outline' },
+      { id: 'taxReport', label: 'ภาษีขาย (VAT)', icon: 'document-text-outline' },
     ],
   },
   { id: 'history', label: 'ประวัติการขาย', icon: 'receipt-outline' },
@@ -66,7 +67,13 @@ const ITEMS: Item[] = [
       { id: 'skus', label: 'สต็อกสินค้า (คุณสมบัติ)', icon: 'barcode-outline' },
     ],
   },
-  { id: 'shipments', label: 'ส่งของจากโรงงาน', icon: 'cube-outline', manager: true },
+  {
+    id: 'shipGroup', label: 'ส่งของจากโรงงาน', icon: 'cube-outline', manager: true,
+    children: [
+      { id: 'shipments', label: 'ใบส่งของ (สแกนส่ง)', icon: 'scan-outline' },
+      { id: 'shipmentReport', label: 'รายงานการส่ง', icon: 'document-text-outline' },
+    ],
+  },
   { id: 'branches', label: 'สาขา', icon: 'business-outline', manager: true },
   { id: 'settings', label: 'ตั้งค่า', icon: 'settings-outline', manager: true },
 ];
@@ -178,17 +185,10 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
       </View>
       <UpdateButton block />
       <View style={s.footer}>
-        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-          <Text style={s.brand}>Clothing POS</Text>
-          <Text style={s.brandSub}>• ระบบขายหน้าร้าน</Text>
-        </View>
-        <Text style={s.tagline}>ขายง่าย เปลี่ยนไซซ์ได้ สต็อกตรงทุกชิ้น</Text>
         <View style={s.footRow}>
-          <Text style={s.footChip}>© 2026</Text>
           <Text style={s.footChip}>v0.4</Text>
           <AppVersionChip style={s.footChip} />
         </View>
-        <Credit />
       </View>
     </View>
   );

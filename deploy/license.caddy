@@ -1,0 +1,20 @@
+# แผงควบคุม license + API เปิดใช้งาน + ไฟล์อัปเดตแอปชุดทดลอง
+# ติดตั้งโดย deploy/license-setup.sh → /etc/caddy/conf.d/license.caddy ({$LICENSE_DOMAIN} ถูกแทนที่ตอนติดตั้ง)
+{$LICENSE_DOMAIN} {
+	encode gzip
+
+	# ตัวติดตั้ง + อัปเดตแอปชุดทดลอง (electron-updater: latest.yml + Setup.exe)
+	handle_path /updates/* {
+		root * /var/www/pos-trial-updates
+		@nocache path *.yml *.json
+		header @nocache Cache-Control "no-cache"
+		file_server
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:3100
+	}
+}
+
+# ร้านทดลองแต่ละร้าน (<ร้าน>.{$TRIAL_DOMAIN}) — pos-trial-ctl สร้าง/ลบไฟล์ในโฟลเดอร์นี้
+import /etc/caddy/trials/*.caddy

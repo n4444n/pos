@@ -1,0 +1,26 @@
+# เซิร์ฟเวอร์ license + แผงควบคุมร้านทดลอง (https://license.<โดเมน>/admin)
+[Unit]
+Description=Clothing POS license server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=poslic
+Group=poslic
+WorkingDirectory=/opt/pos/license-server
+Environment=NODE_ENV=production
+Environment=TZ=Asia/Bangkok
+Environment=PROVISIONER=systemd
+Environment=LICENSE_PORT=3100
+Environment=LICENSE_DB=/var/lib/pos-license/license.db
+# ADMIN_PASSWORD, TRIAL_DOMAIN, DOWNLOAD_URL
+EnvironmentFile=/etc/pos-license/env
+ExecStart=/usr/bin/node --experimental-strip-types --disable-warning=ExperimentalWarning server.ts
+Restart=always
+RestartSec=3
+# ไม่ใช้ NoNewPrivileges / ProtectSystem: pos-trial-ctl (ผ่าน sudo) ต้องเขียน /etc/caddy /etc/pos-trial /var/lib/pos-trial
+# สิทธิ์ root จำกัดแค่คำสั่งเดียวใน /etc/sudoers.d/pos-license
+
+[Install]
+WantedBy=multi-user.target

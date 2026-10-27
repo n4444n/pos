@@ -1,3 +1,4 @@
+// ตั้งค่าร้านฝั่งหน้าจอ (โหลดจากเซิร์ฟเวอร์ครั้งเดียว ใช้ทุกหน้า) + ค่าเริ่มต้น · useAppSettings()
 import type { Symbology } from './barcodeEncode';
 // การตั้งค่าที่หน้าขาย/ใบเสร็จใช้ (โหลดมากับ bootstrap) — เก็บไว้ที่เดียวให้ทุกหน้าอ่านได้
 import { useEffect, useState } from 'react';
@@ -35,8 +36,14 @@ export interface PayMethod { id: PaymentMethod; label: string; enabled: boolean;
 export interface LabelProfile {
   id: string;
   name: string;
-  /** roll = สติ๊กเกอร์ม้วน · a4 = กระดาษสติ๊กเกอร์ A4 */
+  /** roll = สติ๊กเกอร์ม้วน · a4 = กระดาษแผ่น (A4 / A5 / กำหนดเอง — ชื่อเดิม a4 คงไว้ให้ข้อมูลเก่าใช้ได้) */
   paper: 'roll' | 'a4';
+  /** แผ่น: กว้าง × สูง ของแผ่น (มม. · ไม่มี = A4) · ม้วน: pageWidth = ความกว้างม้วน (0 = คำนวณจากดวง) */
+  pageWidth?: number; pageHeight?: number;
+  /** ม้วน: ขอบขวา / ขอบล่างของกระดาษ (มม.) — ใช้คำนวณขนาดดวงจากขนาดกระดาษ */
+  marginRight?: number; marginBottom?: number;
+  /** จุดเริ่มพิมพ์: เริ่มที่ดวง (คอลัมน์) ที่เท่าไรของแถวแรก — ใช้แถวที่ลอกไปบางดวงแล้ว */
+  startAt?: number;
   /** ขนาดดวง (มม.) */
   width: number; height: number;
   /** ดวงต่อแถว · จำนวนแถวต่อแผ่น (A4) */
@@ -59,9 +66,12 @@ export interface LabelProfile {
   /** ระยะห่างชื่อสินค้า/บาร์โค้ด (มม.) */
   nameGap: number;
 }
+/** แบบสำเร็จรูปขนาดกระดาษที่ร้านบันทึกเอง */
+export interface LabelPreset { id: string; label: string; apply: Partial<LabelProfile> }
+
 export const DEFAULT_LABEL_PROFILE: LabelProfile = {
   id: 'p1', name: 'โปรไฟล์ 1', paper: 'roll', width: 50, height: 30, cols: 1, rows: 1, gapX: 2, gapY: 0, marginTop: 0, marginLeft: 0, padding: 1.2,
-  symbology: 'auto', barHeight: 10, barWidth: 90, barModule: 0, layout: 'standard', showCode: true, showName: true, showVariant: true, showPrice: true, showShop: false,
+  symbology: 'code128b', barHeight: 10, barWidth: 90, barModule: 0, layout: 'standard', showCode: true, showName: true, showVariant: true, showPrice: true, showShop: false,
   bold: true, italic: false, align: 'center', codeSize: 8, nameSize: 8, priceSize: 8, textGap: 0.5, nameGap: 0.5,
 };
 
@@ -87,10 +97,12 @@ export interface PublicSettings {
     language: 'th' | 'en' | 'both'; labels: Record<string, string>; shopName: string;
     logoUrl: string; logoWidth: number; showShopName: boolean; footerBlocks: FooterBlock[];
   };
-  barcode: { symbology: 'code128' | 'ean13'; labelProfiles: LabelProfile[]; labelProfile: string };
+  barcode: { symbology: 'code128' | 'ean13'; labelProfiles: LabelProfile[]; labelProfile: string; labelPresets?: LabelPreset[] };
   stock: { lowStockDefault: number; allowNegative: boolean };
   /** สาขาที่กำลังใช้งาน */
   branch: { id: number; name: string; code: string; isMain: boolean };
+  /** ภาษี: ชื่อผู้ประกอบการ · เลขผู้เสียภาษี · สาขาตามทะเบียนภาษี ('00000' = สำนักงานใหญ่) · ห้ามแก้บิล */
+  tax?: { legalName: string; taxId: string; taxBranchNo: string; vatRegistered: boolean; lockEdit: boolean };
 }
 
 export const DEFAULT_SETTINGS: PublicSettings = {
@@ -108,7 +120,8 @@ export const DEFAULT_SETTINGS: PublicSettings = {
       { id: 'transfer', label: 'โอนผ่านธนาคาร', enabled: true, feePercent: 0, feeFixed: 0 },
     ],
     promptpayId: '',
-    vat: { enabled: true, rate: 7 },
+    // อัตราจริงมาจากเซิร์ฟเวอร์ (ตารางอัตรา VAT)
+    vat: { enabled: true, rate: 0 },
     feePayer: 'customer',
     requireDenominations: false,
   },

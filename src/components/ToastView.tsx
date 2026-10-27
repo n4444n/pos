@@ -1,3 +1,4 @@
+// แถบแจ้งเตือนสั้น ๆ (สำเร็จ / ผิดพลาด)
 import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { Toast } from '../store/usePos';

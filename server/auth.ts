@@ -50,9 +50,13 @@ addColumn('sessions', 'branch_id', 'INTEGER');      // สาขาที่ก�
 addColumn('staff', 'last_branch_id', 'INTEGER');    // สาขาล่าสุด (เข้าสู่ระบบครั้งหน้าเปิดสาขานี้)
 
 // ตั้ง PIN เริ่มต้นให้พนักงานเดิมที่ยังไม่มี PIN + สร้างผู้จัดการคนแรก
+// ร้านทดลอง (สร้างจากระบบ license): POS_MANAGER_PIN = PIN ผู้จัดการคนแรก · POS_NO_DEMO_PINS=1 = พนักงานตัวอย่างไม่ได้ PIN เดาง่าย
 (function ensureDefaults() {
   db.exec("UPDATE staff SET name = TRIM(REPLACE(name, 'พนักงาน: ', '')) WHERE name LIKE 'พนักงาน: %'");
-  const noPin = db.prepare('SELECT id, name FROM staff WHERE pin_hash IS NULL ORDER BY id').all() as { id: number; name: string }[];
+  const envPin = PIN_RE.test(process.env.POS_MANAGER_PIN ?? '') ? process.env.POS_MANAGER_PIN! : '';
+  const noPin = process.env.POS_NO_DEMO_PINS === '1'
+    ? []
+    : (db.prepare('SELECT id, name FROM staff WHERE pin_hash IS NULL ORDER BY id').all() as { id: number; name: string }[]);
   const defaults = ['123456', '234567', '345678', '456789', '567890', '678901', '789012', '890123'];
   const created: string[] = [];
   tx(() => {
@@ -64,7 +68,8 @@ addColumn('staff', 'last_branch_id', 'INTEGER');    // สาขาล่าส�
     }
     const hasManager = db.prepare("SELECT 1 FROM staff WHERE role = 'manager' AND active = 1").get();
     if (!hasManager) {
-      const pin = db.prepare('SELECT 1 FROM staff WHERE pin_hash = ?').get(hashPin('999999')) ? '909090' : '999999';
+      const pin = envPin && !db.prepare('SELECT 1 FROM staff WHERE pin_hash = ?').get(hashPin(envPin)) ? envPin
+        : db.prepare('SELECT 1 FROM staff WHERE pin_hash = ?').get(hashPin('999999')) ? '909090' : '999999';
       db.prepare("INSERT INTO staff (name, pin_hash, role, can_void) VALUES ('ผู้จัดการ', ?, 'manager', 1)").run(hashPin(pin));
       created.push(`ผู้จัดการ (manager) = ${pin}`);
     }
@@ -209,6 +214,13 @@ export function approveVoid(pin: unknown, ip: string): Me {
   const b = currentBranch();
   if (!allowedBranches(row).includes(b)) throw new HttpError(403, `${row.name} ไม่ได้ดูแลสาขานี้ กรุณาใช้ PIN ของพนักงานสาขานี้หรือผู้จัดการ`, 'NO_PERMISSION');
   return toMe(row, b);
+}
+
+/** ยืนยันด้วย PIN ผู้จัดการ (งานเสี่ยง เช่น กู้คืนข้อมูล) — คืนชื่อผู้อนุมัติ */
+export function approveManager(pin: unknown, ip: string): string {
+  const row = checkPin(pin, 'mgr:' + ip);
+  if (row.role !== 'manager') throw new HttpError(403, `${row.name} ไม่ใช่ผู้จัดการ — ใช้ PIN ผู้จัดการ`, 'NO_PERMISSION');
+  return row.name;
 }
 
 export function requireManager(me: Me) {

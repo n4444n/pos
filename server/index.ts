@@ -1,7 +1,7 @@
 // POS API + static web server — ไม่มี dependency ภายนอก (node:http + node:sqlite)
 // รัน: node --experimental-strip-types server/index.ts
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { createWriteStream, readFileSync, existsSync, statSync, unlinkSync } from 'node:fs';
 import { join, extname, resolve, normalize } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { countChanges, currentBranch, db, DB_PATH, mainBranchId, setBranch, tx, withBranch } from './db.ts';
@@ -16,10 +16,16 @@ import {
 import { apiKeyOf, authenticateKey, createKey, listKeys, revokeKey } from './apikeys.ts';
 import { createBranch, currentBranchInfo, deleteBranches, getBranch, listBranches, nextCode, resetBranchPrices, updateBranch } from './branches.ts';
 import {
-  approveVoid, authenticate, clientIp, createStaff, listStaff, login, logout, PIN_LENGTH, requireManager, switchBranch, tokenOf, updateStaff,
+  approveManager, approveVoid, authenticate, clientIp, createStaff, listStaff, login, logout, PIN_LENGTH, requireManager, switchBranch, tokenOf, updateStaff,
   type Me,
 } from './auth.ts';
-import { discountFor, HttpError, ORDER_TYPES, PAYMENT_METHODS, round2, getVatRate, vatOf, type Promo } from './common.ts';
+import { discountFor, HttpError, ORDER_TYPES, PAYMENT_METHODS, round2, getVatRate, type Promo } from './common.ts';
+import {
+  addRate, addTerminal, deleteRate, deleteTerminal, getTerminal, isExempt, saleTax, saveBranchTax, saveTaxCompany, taxAdmin, terminalFor, updateRate, updateTerminal,
+  type Terminal,
+} from './tax.ts';
+import { taxReport, taxReportXlsx } from './taxReport.ts';
+import { cancelTaxInvoice, createCreditNote, creditNoteDoc, issueTaxInvoice, taxInvoiceDoc } from './taxDocs.ts';
 import { editOrder, history, historyCsv, orderDetail, voidOrder, type HistoryQuery } from './history.ts';
 import {
   cashMove, closeShift, currentShift, listShifts, openShift, recordPayment, requireShift, shiftBrief, shiftDetail,
@@ -28,9 +34,13 @@ import { dashboard, dashboardCsv } from './dashboard.ts';
 import { importProducts } from './productImport.ts';
 import { reportXlsx } from './reportExport.ts';
 import { shipmentXlsx } from './shipmentExport.ts';
+import { shipmentReport, shipmentReportXlsx } from './shipmentReport.ts';
 import { billReport, billReportXlsx, productReport, productReportXlsx, salesReport, salesReportXlsx } from './reports.ts';
 import { stockXlsx } from './stockExport.ts';
 import { XLSX_TYPE } from './xlsx.ts';
+import { internalAllowed, shopStats } from './internal.ts';
+import { backupBuffer, backupFileName, dropUpload, newUploadPath, previewUpload, restoreBranches } from './backup.ts';
+import { docFloor } from './docFloor.ts';
 import { cancelShipment, createShipment, holdShipment, listShipments, restoreShipment, resumeShipment, scanShipment, setShipmentItem, shipmentDetail, shipShipment, updateShipment } from './shipments.ts';
 import {
   createCategory, getProduct, listCategories, saveBranchStock, listProducts, listSkus, patchVariant, bulkUpdateSkus, stockCommand, bulkProducts, readUpload, saveProduct, saveUpload, saveUploadVariants, uploadsMissingVariants, setProductActive, stockSummary,
@@ -46,7 +56,7 @@ const q = {
   // หน้าขาย: เฉพาะสินค้า/SKU ที่เปิดแสดงขาย
   products: db.prepare(
     `SELECT p.id, p.sku, p.barcode, p.name, p.category_id AS categoryId, p.price, p.art, p.tint, p.image_url AS imageUrl,
-            p.low_stock AS lowStock, p.attrs
+            p.low_stock AS lowStock, p.attrs, p.vat_exempt AS vatExempt
        FROM products p WHERE p.active = 1 AND EXISTS (SELECT 1 FROM variants v WHERE v.product_id = p.id AND v.active = 1)
       ORDER BY p.id`,
   ),
@@ -73,38 +83,43 @@ const q = {
   countToday: db.prepare(`SELECT COUNT(*) AS n FROM orders_all WHERE order_no LIKE ?`),
   insOrder: db.prepare(
     `INSERT INTO orders_all (order_no, customer_name, salesperson, order_type, subtotal, discount, vat, total,
-                         promo_code, payment_method, cash_received, change_due, shift_id, fee, fee_payer)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                         promo_code, payment_method, cash_received, change_due, shift_id, fee, fee_payer,
+                         vat_rate, vat_base, exempt_amount, terminal_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ),
   insItem: db.prepare(
-    `INSERT INTO order_items (order_id, variant_id, product_name, sku, size, color, extra, qty, unit_price, line_total)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO order_items (order_id, variant_id, product_name, sku, size, color, extra, qty, unit_price, line_total, vat_exempt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ),
   recentOrders: db.prepare(
     `SELECT id, order_no AS orderNo, customer_name AS customerName, salesperson, order_type AS orderType,
             subtotal, discount, vat, total, promo_code AS promoCode, payment_method AS paymentMethod,
-            cash_received AS cashReceived, change_due AS changeDue, status, created_at AS createdAt
+            cash_received AS cashReceived, change_due AS changeDue, status, created_at AS createdAt,
+            vat_rate AS vatRate, vat_base AS vatBase, exempt_amount AS exemptAmount, terminal_id AS terminalId
        FROM orders ORDER BY id DESC LIMIT ?`,
   ),
   itemsOf: db.prepare(
-    `SELECT product_name AS name, sku, size, color, extra, qty, unit_price AS unitPrice, line_total AS lineTotal
+    `SELECT product_name AS name, sku, size, color, extra, qty, unit_price AS unitPrice, line_total AS lineTotal, vat_exempt AS vatExempt
        FROM order_items WHERE order_id = ?`,
   ),
 };
 
 
-/** เลขที่บิล: สาขาหลัก INV-251011-0001 · สาขาอื่นมีรหัสสาขา INV-B02-251011-0001 (ไม่ซ้ำกันข้ามสาขา) */
-function todayPrefix() {
+/**
+ * เลขที่บิล: สาขาหลัก INV-251011-0001 · สาขาอื่นมีรหัสสาขา INV-B02-251011-0001 (ไม่ซ้ำกันข้ามสาขา)
+ * ตั้งเครื่อง POS แล้ว → มีรหัสเครื่องด้วย INV-POS01-251011-0001 (เลขรันต่อเครื่อง ตามข้อกำหนดกรมสรรพากร)
+ */
+function todayPrefix(t: Terminal | null) {
   const d = new Date();
   const p = (x: number) => String(x).padStart(2, '0');
   const b = currentBranchInfo();
   const code = b.isMain ? '' : `${b.code.replace(/[^A-Za-z0-9]/g, '') || b.id}-`;
-  return `INV-${code}${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}-`;
+  return `INV-${code}${t ? `${t.code}-` : ''}${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}-`;
 }
-function nextOrderNo() {
-  const prefix = todayPrefix();
+function nextOrderNo(t: Terminal | null = null) {
+  const prefix = todayPrefix(t);
   const { n } = q.countToday.get(prefix + '%') as { n: number };
-  return prefix + String(n + 1).padStart(4, '0');
+  return prefix + String(Math.max(n, docFloor(prefix)) + 1).padStart(4, '0');
 }
 
 
@@ -115,15 +130,17 @@ function requireMain() {
 }
 
 // ---------- handlers ----------
-function bootstrap() {
+function bootstrap(terminalHeader?: unknown) {
+  const terminal = terminalFor(terminalHeader, false);
   return {
     categories: q.categories.all(),
-    products: (q.products.all() as { attrs: string | null }[]).map((p) => ({ ...p, attrs: p.attrs ? JSON.parse(p.attrs) : [] })),
+    products: (q.products.all() as { attrs: string | null; vatExempt: number }[]).map((p) => ({ ...p, vatExempt: !!p.vatExempt, attrs: p.attrs ? JSON.parse(p.attrs) : [] })),
     variants: q.variants.all(),
     staff: q.staff.all(),
     orderTypes: ORDER_TYPES,
     vatRate: getVatRate(),
-    nextOrderNo: nextOrderNo(),
+    nextOrderNo: nextOrderNo(terminal),
+    terminal,
     shift: shiftBrief(),
     stockAlerts: stockSummary(),
     settings: publicSettings(),
@@ -148,7 +165,7 @@ interface OrderBody {
   items?: { variantId: number; qty: number }[];
 }
 
-function createOrder(body: OrderBody) {
+function createOrder(body: OrderBody, terminalHeader?: unknown) {
   const items = Array.isArray(body.items) ? body.items : [];
   if (items.length === 0) throw new HttpError(400, 'ยังไม่มีสินค้าในรายการ');
   if (items.length > 200) throw new HttpError(400, 'รายการสินค้ามากเกินไป');
@@ -158,6 +175,7 @@ function createOrder(body: OrderBody) {
   if (!methodEnabled(payment)) throw new HttpError(400, 'วิธีชำระเงินนี้ถูกปิดใช้งาน (ตั้งค่า → วิธีชำระเงิน)');
 
   const shift = requireShift(); // ต้องเปิดกะก่อนขาย
+  const terminal = terminalFor(terminalHeader, true); // เครื่อง POS ที่ออกบิล
 
   return tx(() => {
     // ราคาและสต็อกคำนวณจากฐานข้อมูลเสมอ (ไม่เชื่อราคาจากฝั่ง client)
@@ -170,7 +188,7 @@ function createOrder(body: OrderBody) {
       if (!v) throw new HttpError(404, `ไม่พบสินค้า #${variantId}`);
       if (v.stock < qn && !allowNegativeStock())
         throw new HttpError(409, `${v.name} (${variantLabel(v)}) คงเหลือ ${v.stock} ชิ้น`);
-      return { ...v, qty: qn, lineTotal: round2(v.price * qn) };
+      return { ...v, qty: qn, lineTotal: round2(v.price * qn), exempt: isExempt(v.id) };
     });
 
     const subtotal = round2(lines.reduce((s, l) => s + l.lineTotal, 0));
@@ -186,7 +204,9 @@ function createOrder(body: OrderBody) {
     const fee = feeFor(payment, goods);
     const payer = feePayer();
     const total = round2(goods + (payer === 'customer' ? fee : 0));
-    const vat = vatOf(total);
+    // VAT ตามอัตราที่มีผลวันนี้ (ตารางอัตรา VAT) · แยกสินค้ายกเว้น VAT
+    const tax = saleTax(lines, subtotal, discount, total);
+    const vat = tax.vat;
 
     let cashReceived: number | null = null;
     let change: number | null = null;
@@ -196,7 +216,7 @@ function createOrder(body: OrderBody) {
       change = round2(cashReceived - total);
     }
 
-    const orderNo = nextOrderNo();
+    const orderNo = nextOrderNo(terminal);
     const res = q.insOrder.run(
       orderNo,
       body.customerName?.trim().slice(0, 80) || null,
@@ -213,13 +233,17 @@ function createOrder(body: OrderBody) {
       shift.id,
       fee,
       payer,
+      tax.vatRate,
+      tax.vatBase,
+      tax.exempt,
+      terminal?.id ?? null,
     );
     const orderId = Number(res.lastInsertRowid);
     recordPayment(shift.id, orderId, 'sale', payment, total);
     for (const l of lines) {
       const dec = allowNegativeStock() ? () => q.decStockAny.run(l.qty, l.id) : () => q.decStock.run(l.qty, l.id, l.qty);
       if (countChanges(dec) !== 1) throw new HttpError(409, `${l.name} สต็อกไม่พอ`);
-      q.insItem.run(orderId, l.id, l.name, l.sku, l.size, l.color, l.extra, l.qty, l.price, l.lineTotal);
+      q.insItem.run(orderId, l.id, l.name, l.sku, l.size, l.color, l.extra, l.qty, l.price, l.lineTotal, l.exempt ? 1 : 0);
     }
 
     // สินค้าที่เพิ่งลดลงถึงจุดแจ้งเตือน/หมด (ส่ง LINE/WhatsApp/Webhook หลังบันทึกสำเร็จ)
@@ -244,20 +268,57 @@ function createOrder(body: OrderBody) {
       order: {
         id: orderId, orderNo, orderType, subtotal, discount, vat, total, promoCode, fee, feePayer: payer,
         paymentMethod: payment, cashReceived, changeDue: change,
-        items: lines.map((l) => ({ name: l.name, sku: l.sku, size: l.size, color: l.color, extra: l.extra, qty: l.qty, unitPrice: l.price, lineTotal: l.lineTotal })),
+        vatRate: tax.vatRate, vatBase: tax.vatBase, exemptAmount: tax.exempt, terminal: terminal ? { code: terminal.code, rdNo: terminal.rdNo } : null,
+        items: lines.map((l) => ({ name: l.name, sku: l.sku, size: l.size, color: l.color, extra: l.extra, qty: l.qty, unitPrice: l.price, lineTotal: l.lineTotal, vatExempt: l.exempt })),
       },
       stock: lines.map((l) => q.stockOf.get(l.id)),
-      nextOrderNo: nextOrderNo(),
+      nextOrderNo: nextOrderNo(terminal),
     };
   });
 }
 
 function recentOrders(limit: number) {
-  const rows = q.recentOrders.all(Math.min(Math.max(limit, 1), 100)) as { id: number }[];
-  return rows.map((o) => ({ ...o, items: q.itemsOf.all(o.id) }));
+  const rows = q.recentOrders.all(Math.min(Math.max(limit, 1), 100)) as { id: number; terminalId: number | null }[];
+  return rows.map((o) => {
+    const t = o.terminalId ? getTerminal(o.terminalId) : null;
+    return {
+      ...o, terminal: t ? { code: t.code, rdNo: t.rdNo } : null,
+      items: (q.itemsOf.all(o.id) as { vatExempt: number }[]).map((i) => ({ ...i, vatExempt: !!i.vatExempt })),
+    };
+  });
 }
 
 // ---------- http helpers ----------
+/** ?branch=<id> → สำรองเฉพาะสาขา · ไม่ระบุ/all = ทั้งร้าน */
+function branchParam(url: URL): number | undefined {
+  const v = url.searchParams.get('branch');
+  if (!v || v === 'all') return undefined;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n <= 0) throw new HttpError(400, 'สาขาไม่ถูกต้อง');
+  return n;
+}
+
+/** รับไฟล์ที่อัปโหลด (body ดิบ) ลงดิสก์ — จำกัดขนาด */
+function receiveFile(req: IncomingMessage, file: string, limit: number) {
+  return new Promise<void>((ok, fail) => {
+    const out = createWriteStream(file);
+    let size = 0;
+    req.on('data', (c: Buffer) => {
+      size += c.length;
+      if (size > limit) {
+        req.destroy();
+        out.destroy();
+        try { unlinkSync(file); } catch { /* ไม่มีไฟล์ */ }
+        fail(new HttpError(413, `ไฟล์ใหญ่เกิน ${Math.round(limit / 1048576)} MB`));
+      }
+    });
+    req.pipe(out);
+    out.on('finish', () => (size ? ok() : fail(new HttpError(400, 'ไม่ได้แนบไฟล์'))));
+    out.on('error', fail);
+    req.on('error', fail);
+  });
+}
+
 function send(req: IncomingMessage, res: ServerResponse, status: number, body: Buffer | string, type: string, cache = 'no-store') {
   let buf = typeof body === 'string' ? Buffer.from(body) : body;
   const headers: Record<string, string> = {
@@ -344,12 +405,20 @@ const server = createServer(async (req, res) => {
       res.writeHead(204, {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, X-Branch',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, X-Branch, X-POS-Terminal',
       });
       return res.end();
     }
     if (path.startsWith('/api/')) {
-      if (req.method === 'GET' && path === '/api/health') return json(req, res, 200, { ok: true, db: DB_PATH });
+      if (req.method === 'GET' && path === '/api/health') return json(req, res, 200, { ok: true }); // ไม่เปิดเผยที่อยู่ไฟล์ฐานข้อมูล
+
+      // ----- API ภายใน (เซิร์ฟเวอร์ license เรียก) — ไม่มี token ที่ถูกต้อง = ไม่มีเส้นทางนี้ -----
+      if (path.startsWith('/api/internal/')) {
+        if (!internalAllowed(req)) throw new HttpError(404, 'Not found');
+        if (req.method === 'GET' && path === '/api/internal/stats') return json(req, res, 200, shopStats());
+        if (req.method === 'GET' && path === '/api/internal/backup') return send(req, res, 200, backupBuffer(branchParam(url)), 'application/vnd.sqlite3');
+        throw new HttpError(404, 'Not found');
+      }
 
       // ----- เข้าสู่ระบบด้วย PIN (ไม่ต้องมี token) -----
       if (req.method === 'POST' && path === '/api/auth/login') {
@@ -364,6 +433,43 @@ const server = createServer(async (req, res) => {
       // ข้อมูลทั้งหมดของ request นี้เป็นของสาขาที่เลือกไว้
       setBranch(me.branchId);
       branchOfReq.set(req, me.branchId);
+
+      // ----- สำรอง / กู้คืนข้อมูล (ผู้จัดการ) -----
+      if (path.startsWith('/api/backup/')) {
+        requireManager(me);
+        if (req.method === 'GET' && path === '/api/backup/download') {
+          const branch = branchParam(url);
+          const buf = backupBuffer(branch);
+          res.writeHead(200, {
+            'Content-Type': 'application/vnd.sqlite3', 'Content-Length': buf.length, 'Cache-Control': 'no-store',
+            'Content-Disposition': `attachment; filename="backup.db"; filename*=UTF-8''${encodeURIComponent(backupFileName(branch))}`,
+            'Access-Control-Allow-Origin': '*', 'X-Content-Type-Options': 'nosniff',
+          });
+          return res.end(buf);
+        }
+        if (req.method === 'POST' && path === '/api/backup/upload') {
+          const up = newUploadPath();
+          await receiveFile(req, up.path, 500 * 1024 * 1024);
+          try {
+            return json(req, res, 200, previewUpload(up.id));
+          } catch (e) {
+            dropUpload(up.id);
+            throw e;
+          }
+        }
+        if (req.method === 'POST' && path === '/api/backup/restore') {
+          const body = (await readBody(req)) as { id?: string; branchIds?: unknown; pin?: string };
+          const by = approveManager(body.pin, clientIp(req));
+          const ids = Array.isArray(body.branchIds) ? body.branchIds.map(Number).filter(Number.isInteger) : [];
+          return json(req, res, 200, restoreBranches(String(body.id ?? ''), ids, by));
+        }
+        if (req.method === 'POST' && path === '/api/backup/discard') {
+          const body = (await readBody(req)) as { id?: string };
+          if (/^[a-f0-9]{24}$/.test(String(body.id))) dropUpload(String(body.id));
+          return json(req, res, 200, { ok: true });
+        }
+        throw new HttpError(404, 'Not found');
+      }
 
       // ----- สาขา: สาขาที่เข้าได้ + สลับสาขา -----
       if (path === '/api/branches' && req.method === 'GET') {
@@ -381,7 +487,7 @@ const server = createServer(async (req, res) => {
       if (path === '/api/staff' && req.method === 'POST') { requireManager(me); return json(req, res, 201, createStaff((await readBody(req)) as never, me)); }
       const st = path.match(/^\/api\/staff\/(\d+)$/);
       if (st && req.method === 'PUT') { requireManager(me); return json(req, res, 200, updateStaff(Number(st[1]), (await readBody(req)) as never, me)); }
-      if (req.method === 'GET' && path === '/api/bootstrap') return json(req, res, 200, bootstrap());
+      if (req.method === 'GET' && path === '/api/bootstrap') return json(req, res, 200, bootstrap(req.headers['x-pos-terminal']));
       if (req.method === 'GET' && path.startsWith('/api/promos/')) {
         const code = decodeURIComponent(path.slice('/api/promos/'.length));
         return json(req, res, 200, checkPromo(code, Number(url.searchParams.get('subtotal') ?? 0)));
@@ -391,7 +497,7 @@ const server = createServer(async (req, res) => {
       if (req.method === 'POST' && path === '/api/orders') {
         const body = (await readBody(req)) as OrderBody;
         body.salesperson = body.salesperson || me.name; // ค่าเริ่มต้น = ผู้ที่ล็อกอิน
-        return json(req, res, 201, createOrder(body));
+        return json(req, res, 201, createOrder(body, req.headers['x-pos-terminal']));
       }
 
       // ----- ประวัติการขาย / แก้ไขบิล -----
@@ -423,6 +529,40 @@ const server = createServer(async (req, res) => {
         return send(req, res, 200, stockXlsx(me), XLSX_TYPE);
       }
       // ----- ตั้งค่า (ผู้จัดการ) -----
+      // ----- ภาษีมูลค่าเพิ่ม (ผู้จัดการ) -----
+      if (path.startsWith('/api/tax')) {
+        // เครื่องนี้เลือกเครื่อง POS ได้ทุกคน (ดูรายการเครื่องของสาขา)
+        if (path === '/api/tax/terminals' && req.method === 'GET') {
+          const b = currentBranch() || mainBranchId();
+          return json(req, res, 200, taxAdmin().terminals.filter((t) => t.branchId === b && t.active));
+        }
+        requireManager(me);
+        if (path === '/api/tax' && req.method === 'GET') return json(req, res, 200, taxAdmin());
+        if (path === '/api/tax/company' && req.method === 'PUT') return json(req, res, 200, saveTaxCompany((await readBody(req)) as never));
+        if (path === '/api/tax/rates' && req.method === 'POST') return json(req, res, 201, addRate((await readBody(req)) as never, me.name));
+        if (path === '/api/tax/terminals' && req.method === 'POST') return json(req, res, 201, addTerminal((await readBody(req)) as never));
+        const tm = /^\/api\/tax\/(branches|rates|terminals)\/(\d+)$/.exec(path);
+        if (tm) {
+          const id = Number(tm[2]);
+          if (tm[1] === 'branches' && req.method === 'PUT') return json(req, res, 200, saveBranchTax(id, (await readBody(req)) as never));
+          if (tm[1] === 'rates' && req.method === 'PUT') return json(req, res, 200, updateRate(id, (await readBody(req)) as never));
+          if (tm[1] === 'rates' && req.method === 'DELETE') return json(req, res, 200, deleteRate(id));
+          if (tm[1] === 'terminals' && req.method === 'PUT') return json(req, res, 200, updateTerminal(id, (await readBody(req)) as never));
+          if (tm[1] === 'terminals' && req.method === 'DELETE') return json(req, res, 200, deleteTerminal(id));
+        }
+        // รายงานภาษีขาย: สรุปรายวันต่อเครื่อง + รายบิล + บิลยกเลิก (+ Excel)
+        if ((path === '/api/tax/report' || path === '/api/tax/report.xlsx') && req.method === 'GET') {
+          const sp = url.searchParams;
+          const bq = sp.get('branch');
+          if (bq === 'all') setBranch(0);
+          else if (bq && me.branchIds.includes(Number(bq))) setBranch(Number(bq));
+          const f = Object.fromEntries(sp.entries()) as Record<string, string>;
+          if (path === '/api/tax/report') return json(req, res, 200, taxReport(f));
+          const { file, range } = taxReportXlsx(f);
+          res.setHeader('Content-Disposition', `attachment; filename="sales-tax-report-${range.from}-to-${range.to}.xlsx"`);
+          return send(req, res, 200, file, XLSX_TYPE);
+        }
+      }
       if (path === '/api/settings' && req.method === 'GET') { requireManager(me); return json(req, res, 200, { settings: forAdmin(), keys: listKeys() }); }
       {
         const sm2 = /^\/api\/settings\/([a-z]+)$/.exec(path);
@@ -466,6 +606,15 @@ const server = createServer(async (req, res) => {
       // ---- ส่งของจากโรงงาน (ใบส่งของ DO) — ผู้จัดการเท่านั้น (ย้ายสต็อกข้ามสาขา) ----
       if (path === '/api/shipments' && req.method === 'GET') { requireManager(me); return json(req, res, 200, listShipments()); }
       if (path === '/api/shipments' && req.method === 'POST') { requireManager(me); return json(req, res, 201, createShipment((await readBody(req)) as never, me)); }
+      // รายงานการส่ง: ใบส่งของที่ส่งออกแล้วในช่วงวันที่ (+ Excel รวมรายการสินค้า)
+      if ((path === '/api/shipments/report' || path === '/api/shipments/report.xlsx') && req.method === 'GET') {
+        requireManager(me);
+        const f = Object.fromEntries(url.searchParams.entries()) as Record<string, string>;
+        if (path === '/api/shipments/report') return json(req, res, 200, shipmentReport(f));
+        const { file, range } = shipmentReportXlsx(f);
+        res.setHeader('Content-Disposition', `attachment; filename="shipment-report-${range.from}-to-${range.to}.xlsx"`);
+        return send(req, res, 200, file, XLSX_TYPE);
+      }
       {
         // ใบส่งของเป็น Excel (หน้าตาเดียวกับใบพิมพ์ A4)
         const se = /^\/api\/shipments\/(\d+)\/export\.xlsx$/.exec(path);
@@ -643,6 +792,29 @@ const server = createServer(async (req, res) => {
       const sm = path.match(/^\/api\/shifts\/(\d+)$/);
       if (sm && req.method === 'GET') return json(req, res, 200, shiftDetail(Number(sm[1])));
 
+      // ----- ใบกำกับภาษีเต็มรูป / ใบลดหนี้ (taxDocs.ts) -----
+      const td = path.match(/^\/api\/orders\/(\d+)\/(tax-invoice|credit-note)$/);
+      if (td && req.method === 'POST') {
+        const body = (await readBody(req)) as Record<string, unknown>;
+        if (td[2] === 'tax-invoice') return json(req, res, 201, issueTaxInvoice(Number(td[1]), body, me.name));
+        // รับคืนสินค้า = คืนเงิน → ยืนยันด้วย PIN ผู้มีสิทธิ์ยกเลิกบิล (เหมือนยกเลิกบิล)
+        const approver = approveVoid(body.pin as string | undefined, clientIp(req));
+        const out = createCreditNote(Number(td[1]), body, { operator: me.name, approver: approver.name });
+        emit('order.edited', { id: out.orderId, orderNo: out.orderNo, oldTotal: out.orderTotal, newTotal: out.orderTotal, diff: -out.total, reason: `ใบลดหนี้ ${out.docNo} · ${out.reason}`, staff: me.name });
+        return json(req, res, 201, out);
+      }
+      const tv = path.match(/^\/api\/tax-invoices\/(\d+)(\/cancel)?$/);
+      if (tv) {
+        if (!tv[2] && req.method === 'GET') return json(req, res, 200, taxInvoiceDoc(Number(tv[1])));
+        if (tv[2] && req.method === 'POST') {
+          requireManager(me);
+          const body = (await readBody(req)) as { reason?: string };
+          return json(req, res, 200, cancelTaxInvoice(Number(tv[1]), body.reason, me.name));
+        }
+      }
+      const cn = path.match(/^\/api\/credit-notes\/(\d+)$/);
+      if (cn && req.method === 'GET') return json(req, res, 200, creditNoteDoc(Number(cn[1])));
+
       const m = path.match(/^\/api\/orders\/(\d+)(\/void)?$/);
       if (m) {
         const id = Number(m[1]);
@@ -661,7 +833,7 @@ const server = createServer(async (req, res) => {
           const body = (await readBody(req)) as { pin?: string; reason?: string; refundMethod?: string };
           const approver = approveVoid(body.pin, clientIp(req));
           const by = approver.id === me.id ? approver.name : `${approver.name} (อนุมัติ) · ทำรายการโดย ${me.name}`;
-          const out = voidOrder(id, { reason: body.reason, refundMethod: body.refundMethod, staff: by }) as Record<string, any>;
+          const out = voidOrder(id, { reason: body.reason, refundMethod: body.refundMethod, staff: by, operator: me.name, approver: approver.name }) as Record<string, any>;
           emit('order.voided', { id, orderNo: out.order?.orderNo ?? out.orderNo, total: out.order?.total ?? out.total, reason: body.reason ?? '', staff: by });
           return json(req, res, 200, out);
         }

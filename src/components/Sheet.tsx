@@ -1,3 +1,4 @@
+// กล่อง dialog กลางจอ — ใช้ร่วมกันทุกหน้าต่าง
 import type { ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, font, radius } from '../theme';
