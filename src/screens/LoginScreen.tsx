@@ -1,3 +1,4 @@
+// หน้าเข้าสู่ระบบด้วย PIN 6 หลัก
 import { Credit } from '../components/Credit';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
@@ -5,7 +6,7 @@ import { api } from '../api';
 import { Icon } from '../components/Icon';
 import { thaiDate, thaiTime } from '../format';
 import { auth, type Me } from '../session';
-import { colors, font, radius } from '../theme';
+import { colors, font } from '../theme';
 
 export const PIN_LENGTH = 6;
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'clear', '0', 'back'] as const;

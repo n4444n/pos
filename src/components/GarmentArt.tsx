@@ -1,3 +1,4 @@
+// รูปวาดเสื้อผ้าแทนรูปสินค้า (เมื่อสินค้ายังไม่มีรูป)
 import { memo } from 'react';
 import Svg, { Path, G } from 'react-native-svg';
 

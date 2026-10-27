@@ -1,3 +1,4 @@
+// สถานะหน้าขาย: สินค้า · ตะกร้า · ส่วนลด · ชำระเงิน · แจ้งเตือน (toast)
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import { api, ApiError, type HeldBill } from '../api';
 import { allowNegativeStock, feeOf, sellableStock, setAppSettings, useAppSettings } from '../appSettings';
@@ -212,8 +213,9 @@ export function usePos() {
   // ค่าธรรมเนียมของวิธีชำระที่เลือก: ถ้าลูกค้าจ่าย บวกเพิ่มในยอดสุทธิ
   const totals = useMemo(() => {
     const f = feeOf(payment?.method, Math.max(0, subtotal - discount));
-    return { ...computeTotals(subtotal, discount, data?.vatRate ?? 0.07, f?.customer ? f.fee : 0), fee: f };
-  }, [subtotal, discount, data, payment, appSettings]); // eslint-disable-line react-hooks/exhaustive-deps
+    const exemptGross = rows.reduce((s, r) => s + (r.product.vatExempt ? r.lineTotal : 0), 0);
+    return { ...computeTotals(subtotal, discount, data?.vatRate ?? 0, f?.customer ? f.fee : 0, exemptGross), fee: f };
+  }, [subtotal, discount, data, payment, appSettings, rows]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addToCart = useCallback(
     (variantId: number, qty = 1) => {

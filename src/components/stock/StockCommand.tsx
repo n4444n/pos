@@ -1,3 +1,4 @@
+// สต็อก: รับเข้า/ตัดออกจำนวนมากด้วยการสแกนบาร์โค้ด
 import { useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { api } from '../../api';

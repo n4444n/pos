@@ -1,3 +1,4 @@
+// หน้าขาย: บิลล่าสุดของเครื่องนี้ (ดู/พิมพ์ซ้ำ)
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../api';

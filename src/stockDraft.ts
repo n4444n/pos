@@ -31,6 +31,8 @@ export interface Draft {
   art: string;
   tint: string;
   active: boolean;
+  /** ยกเว้น VAT (false = เสีย VAT ตามปกติ) */
+  vatExempt: boolean;
   lowStock: number;
   note: string;
   attrs: DAttr[];
@@ -105,7 +107,7 @@ export function remapRows(oldAttrs: DAttr[], newAttrs: DAttr[], rows: DRow[]): D
 
 export function emptyDraft(categoryId: string): Draft {
   return {
-    id: null, code: '', name: '', categoryId, barcode: '', imageUrl: null, art: 'tshirt', tint: '#E8EEF9', active: true,
+    id: null, code: '', name: '', categoryId, barcode: '', imageUrl: null, art: 'tshirt', tint: '#E8EEF9', active: true, vatExempt: false,
     lowStock: getAppSettings().stock.lowStockDefault, note: '', attrs: [], rows: [{ key: '', sku: '', cost: '0', price: '', stock: '0', active: true }],
   };
 }
@@ -122,7 +124,7 @@ export function toDraft(p: ProductFull): Draft {
   });
   return {
     id: p.id, code: p.sku, name: p.name, categoryId: p.categoryId, barcode: p.barcode ?? '', imageUrl: p.imageUrl, art: p.art, tint: p.tint,
-    active: p.active, lowStock: p.lowStock, note: p.note ?? '', attrs, rows: syncRows(attrs, rows, { cost: '0', price: rows[0]?.price ?? '' }),
+    active: p.active, vatExempt: !!p.vatExempt, lowStock: p.lowStock, note: p.note ?? '', attrs, rows: syncRows(attrs, rows, { cost: '0', price: rows[0]?.price ?? '' }),
   };
 }
 
@@ -143,7 +145,7 @@ export function fromDraft(d: Draft) {
   });
   return {
     code: d.code.trim(), name: d.name.trim(), categoryId: d.categoryId, barcode: d.barcode.trim(), imageUrl: d.imageUrl, art: d.art, tint: d.tint,
-    active: d.active, lowStock: d.lowStock, note: d.note,
+    active: d.active, vatExempt: d.vatExempt, lowStock: d.lowStock, note: d.note,
     attrs: d.attrs.map((a) => ({ type: a.type, name: a.name.trim(), options: a.options.map((o) => ({ value: o.value.trim(), hex: o.hex })) })),
     variants,
   };

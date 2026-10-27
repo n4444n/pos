@@ -1,3 +1,4 @@
+// หน้า สต็อกสินค้า: รายการสินค้า · เพิ่ม/แก้ไข · นำเข้า/ส่งออก Excel
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { api, imageSrc } from '../api';
@@ -123,12 +124,12 @@ export function StockScreen({ onNavigate, onStockChanged }: Props) {
   const toggleAll = () => setSelected(allSel ? new Set() : new Set(rows?.map((r) => r.id) ?? []));
   const selectedRows = rows?.filter((r) => selected.has(r.id)) ?? [];
 
-  const runBulk = async (action: 'activate' | 'deactivate' | 'category' | 'zero' | 'delete', categoryId?: string) => {
+  const runBulk = async (action: 'activate' | 'deactivate' | 'category' | 'zero' | 'delete' | 'vat' | 'exempt', categoryId?: string) => {
     if (!selected.size) return;
     setBulkBusy(true);
     try {
       const r = await api.bulkProducts([...selected], action, categoryId);
-      const label = { activate: 'เปิดแสดงขาย', deactivate: 'ปิดแสดงขาย', category: 'ย้ายหมวดหมู่', zero: 'ล้างสต็อกเป็น 0', delete: 'ลบ' }[action];
+      const label = { activate: 'เปิดแสดงขาย', deactivate: 'ปิดแสดงขาย', category: 'ย้ายหมวดหมู่', zero: 'ล้างสต็อกเป็น 0', delete: 'ลบ', vat: 'ตั้งเป็นเสีย VAT', exempt: 'ตั้งเป็นยกเว้น VAT' }[action];
       notify('success', `${label} ${r.done} สินค้าแล้ว${r.archived ? ` (${r.archived} รายการเคยขายแล้ว — เก็บไว้ในประวัติการขาย)` : ''}`);
       setSelected(new Set());
       setConfirm(null);
@@ -282,6 +283,8 @@ export function StockScreen({ onNavigate, onStockChanged }: Props) {
                 {isMain ? <BulkBtn icon="eye-outline" label="เปิดขาย" onPress={() => runBulk('activate')} disabled={bulkBusy} /> : null}
                 {isMain ? <BulkBtn icon="eye-off-outline" label="ปิดขาย" onPress={() => runBulk('deactivate')} disabled={bulkBusy} /> : null}
                 {isMain ? <BulkBtn icon="folder-open-outline" label="ย้ายหมวดหมู่" onPress={() => { setBulkCat(''); setConfirm('category'); }} disabled={bulkBusy} /> : null}
+                {isMain ? <BulkBtn icon="receipt-outline" label="เสีย VAT" onPress={() => runBulk('vat')} disabled={bulkBusy} /> : null}
+                {isMain ? <BulkBtn icon="remove-circle-outline" label="ยกเว้น VAT" onPress={() => runBulk('exempt')} disabled={bulkBusy} /> : null}
                 <BulkBtn icon="refresh-outline" label="ล้างสต็อกเป็น 0" onPress={() => setConfirm('zero')} disabled={bulkBusy} />
                 {isMain ? <BulkBtn icon="trash-outline" label="ลบ" danger onPress={() => setConfirm('delete')} disabled={bulkBusy} /> : null}
                 <View style={{ flex: 1 }} />
@@ -372,6 +375,7 @@ export function StockScreen({ onNavigate, onStockChanged }: Props) {
                             <Text style={[s.catText, { color: chip.fg }]} numberOfLines={1}>{r.category}</Text>
                           </View>
                           <Text style={s.code} numberOfLines={1}>{r.sku}</Text>
+                          {r.vatExempt ? <Text style={s.exempt}>ยกเว้น VAT</Text> : null}
                         </View>
                       </View>
                     </View>
@@ -401,7 +405,7 @@ export function StockScreen({ onNavigate, onStockChanged }: Props) {
                     <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
                       <Text style={s.name} numberOfLines={1}>{r.name}</Text>
                       <Text style={s.code}>
-                        {r.category} · {r.skuCount} SKU · {priceRange(r.minPrice, r.maxPrice)}
+                        {r.category} · {r.skuCount} SKU · {priceRange(r.minPrice, r.maxPrice)}{r.vatExempt ? ' · ยกเว้น VAT' : ''}
                       </Text>
                       {stockCell}
                     </View>
@@ -587,6 +591,7 @@ const s = StyleSheet.create({
   check: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: '#C3C9D4', backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   checkOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   trSel: { backgroundColor: '#EEF3FF' },
+  exempt: { fontFamily: font, fontSize: 10.5, fontWeight: '700', color: '#B26A00', backgroundColor: '#FFF4E0', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, overflow: 'hidden' },
   bulkBar: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, padding: 8, borderRadius: radius.md, backgroundColor: colors.primarySoft, borderWidth: 1, borderColor: '#C9D8FF' },
   bulkCount: { fontFamily: font, fontSize: 13, fontWeight: '700', color: colors.primary, marginHorizontal: 6 },
   bulkBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 34, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line },

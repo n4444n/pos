@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>แผงควบคุม License</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f3f5f9; --card: #ffffff; --text: #1f2633; --muted: #6a7385; --faint: #9aa2b1; --line: #e6e9ef; --soft: #f7f8fb;
+    --head: #1d2433; --head-text: #f3f5f9;
+    --primary: #3563e9; --primary-soft: #eaf0fe; --primary-text: #2448b8;
+    --ok: #12804f; --ok-soft: #e6f5ed; --warn: #a75d00; --warn-soft: #fff3df; --bad: #c93434; --bad-soft: #fcebea;
+    --idle: #5f6b7d; --idle-soft: #eef1f5;
+    --shadow: 0 1px 2px rgba(20, 30, 50, .05), 0 4px 16px rgba(20, 30, 50, .04);
+    --mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141820; --card: #1c212b; --text: #e6e9ef; --muted: #9aa3b4; --faint: #6d7688; --line: #2b3240; --soft: #222833;
+      --head: #0f1218; --head-text: #e6e9ef;
+      --primary: #6d8ff5; --primary-soft: #232d48; --primary-text: #a9bcfa;
+      --ok: #4cc58a; --ok-soft: #173326; --warn: #f0ad4e; --warn-soft: #3a2c14; --bad: #f07171; --bad-soft: #3a1d1f;
+      --idle: #a3adbd; --idle-soft: #262c37;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.55 'IBM Plex Sans Thai', system-ui, sans-serif; }
+  a { color: var(--primary); text-decoration: none; } a:hover { text-decoration: underline; }
+  .mono { font-family: var(--mono); }
+  .muted { color: var(--muted); } .sub { color: var(--muted); font-size: 12.5px; }
+
+  /* ---- แถบบน */
+  header { background: var(--head); color: var(--head-text); }
+  .bar { max-width: 1280px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 220px; }
+  .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--primary); display: grid; place-items: center; font-weight: 700; color: #fff; }
+  .brand b { font-size: 15.5px; font-weight: 600; } .brand small { display: block; font-size: 12px; opacity: .65; }
+  .pill { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: rgba(255,255,255,.1); white-space: nowrap; }
+  .urlchip { display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,.08); border-radius: 10px; padding: 4px 4px 4px 12px; max-width: 100%; }
+  .urlchip span { font-family: var(--mono); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  header button { background: rgba(255,255,255,.12); color: var(--head-text); }
+
+  main { max-width: 1280px; margin: 0 auto; padding: 20px 20px 56px; display: grid; gap: 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+  .pad { padding: 18px 20px; }
+  h2 { font-size: 15px; font-weight: 600; margin: 0; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+
+  /* ---- ปุ่ม / ช่องกรอก */
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 9px; padding: 8px 14px; cursor: pointer; background: var(--primary); color: #fff; white-space: nowrap; }
+  button:disabled { opacity: .5; cursor: progress; }
+  button.ghost { background: var(--soft); color: var(--text); border: 1px solid var(--line); font-weight: 500; }
+  button.ghost:hover { border-color: var(--faint); }
+  button.small { padding: 5px 11px; font-size: 13px; }
+  button.danger { background: var(--bad-soft); color: var(--bad); }
+  button.danger-solid { background: var(--bad); color: #fff; }
+  button.icon { padding: 4px 8px; font-weight: 500; }
+  label { display: grid; gap: 5px; font-size: 13px; color: var(--muted); font-weight: 500; }
+  input { font: inherit; color: var(--text); padding: 9px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--soft); min-width: 0; width: 100%; }
+  input:focus { outline: 2px solid var(--primary); outline-offset: -1px; background: var(--card); }
+  .err { color: var(--bad); font-size: 13px; min-height: 18px; }
+
+  /* ---- สรุป */
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .stat { padding: 14px 16px; display: grid; gap: 2px; cursor: pointer; text-align: left; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); font-weight: 400; }
+  .stat:hover { border-color: var(--faint); }
+  .stat.on { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+  .stat .n { font-size: 26px; font-weight: 700; line-height: 1.2; }
+  .stat .l { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+  /* ---- ฟอร์มออก license */
+  .issue { display: grid; grid-template-columns: 1.6fr 1.3fr .7fr .7fr 1.6fr auto; gap: 12px; align-items: end; }
+  /* ที่อยู่ร้าน: แถวใต้ฟอร์ม (อัปเดตตามชื่อย่อที่พิมพ์) — ไม่ดันช่องกรอกให้เหลื่อมกัน */
+  .dom-line { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+  .dom-line:empty { display: none; }
+  .dom-line code { font: 12.5px ui-monospace, SFMono-Regular, Consolas, monospace; padding: 4px 10px; border-radius: 999px; background: var(--soft); border: 1px solid var(--line); color: var(--muted); word-break: break-all; }
+  .dom-line code b { color: var(--text); font-weight: 600; }
+
+  /* ---- การ์ดร้าน */
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .toolbar input { max-width: 300px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(236px, 1fr)); gap: 16px; padding: 4px 20px 20px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; cursor: pointer; display: flex; flex-direction: column; transition: transform .12s, box-shadow .12s, border-color .12s; }
+  .tile:hover { transform: translateY(-2px); border-color: var(--faint); box-shadow: 0 8px 24px rgba(20, 30, 50, .10); }
+  .tile:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .tile.off .cover { filter: grayscale(.85); opacity: .75; }
+  .cover { position: relative; aspect-ratio: 16 / 9; display: grid; place-items: center; overflow: hidden;
+    background: linear-gradient(135deg, hsl(var(--h) 70% 62%), hsl(calc(var(--h) + 40) 65% 48%)); }
+  .cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .cover .ini { font-size: 40px; font-weight: 700; color: rgba(255,255,255,.92); text-shadow: 0 2px 10px rgba(0,0,0,.15); }
+  .cover .badge { position: absolute; top: 10px; left: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  .cover .run { position: absolute; top: 10px; right: 10px; background: rgba(15,20,30,.55); color: #fff; font-size: 11.5px; padding: 2px 9px; border-radius: 999px; display: flex; align-items: center; gap: 5px; }
+  .run i { width: 7px; height: 7px; border-radius: 50%; background: #9aa2b1; display: inline-block; } .run.on i { background: #4cd08f; }
+  .tbody { padding: 12px 14px 14px; display: grid; gap: 10px; flex: 1; }
+  .tname { font-size: 15.5px; font-weight: 600; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tname + .sub { margin-top: -9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kv { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+  .kv > span:first-child { color: var(--muted); }
+  .code { font-family: var(--mono); font-weight: 600; font-size: 13.5px; letter-spacing: .4px; }
+  .copyable { cursor: copy; border-radius: 6px; padding: 1px 6px; margin-right: -6px; }
+  .copyable:hover { background: var(--primary-soft); color: var(--primary-text); }
+  .pin { font-family: var(--mono); font-weight: 600; font-size: 13.5px; background: var(--soft); border: 1px dashed var(--line); border-radius: 6px; padding: 0 7px; }
+  .life { display: grid; gap: 5px; }
+  .life .kv b { font-size: 14px; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .b-ok { background: var(--ok-soft); color: var(--ok); } .b-warn { background: var(--warn-soft); color: var(--warn); }
+  .b-bad { background: var(--bad-soft); color: var(--bad); } .b-idle { background: var(--idle-soft); color: var(--idle); }
+  .meter { height: 6px; background: var(--idle-soft); border-radius: 99px; overflow: hidden; }
+  .meter i { display: block; height: 100%; border-radius: 99px; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 16px; grid-column: 1 / -1; }
+
+  /* ---- popup รายละเอียดร้าน */
+  dialog.detail { width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: hidden; }
+  dialog.detail[open] { display: flex; flex-direction: column; }
+  .dhead { display: flex; gap: 16px; align-items: center; padding: 18px 20px; border-bottom: 1px solid var(--line); }
+  .dhead .cover { width: 128px; aspect-ratio: 16 / 10; border-radius: 12px; flex: none; }
+  .dhead .cover .ini { font-size: 30px; }
+  .dtitle { flex: 1; min-width: 0; display: grid; gap: 4px; }
+  .dtitle h3 { margin: 0; font-size: 19px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dtitle .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .x { background: none; color: var(--muted); font-size: 20px; padding: 2px 10px; align-self: flex-start; }
+  .x:hover { background: var(--soft); color: var(--text); }
+  .dbody { overflow: auto; padding: 18px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .box { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 9px; align-content: start; }
+  .box.full { grid-column: 1 / -1; }
+  .box h4 { margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+  .box .kv > span:last-child { text-align: right; min-width: 0; overflow-wrap: anywhere; }
+  .mach { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .mach li { display: flex; align-items: center; gap: 8px; font-size: 13px; background: var(--soft); border-radius: 9px; padding: 7px 8px 7px 10px; }
+  .mach li > div { min-width: 0; flex: 1; } .mach li b { font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mach li .mono { font-size: 11px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+  .acts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .acts .sp { flex: 1; }
+  .hist { display: grid; gap: 2px; max-height: 220px; overflow: auto; font-size: 13px; }
+  .hist div { display: grid; grid-template-columns: 140px 150px 1fr; gap: 10px; padding: 5px 8px; border-radius: 6px; }
+  .hist div:nth-child(odd) { background: var(--soft); }
+  .hist .t { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .stgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .st { background: var(--soft); border-radius: 10px; padding: 10px 12px; display: grid; gap: 1px; min-width: 0; }
+  .st span { font-size: 12px; color: var(--muted); }
+  .st b { font-size: 18px; font-weight: 700; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .st small { font-size: 11.5px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bk { display: grid; gap: 8px; }
+  .bklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; max-height: 196px; overflow: auto; }
+  .bklist li { display: flex; align-items: center; gap: 8px; background: var(--soft); border-radius: 9px; padding: 6px 8px 6px 10px; font-size: 13px; }
+  .bklist.targets { max-height: none; }
+  .bklist li > div { flex: 1; min-width: 0; display: grid; } .bklist b { font-weight: 600; }
+  .btnlink { font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 8px; background: var(--primary-soft); color: var(--primary-text); white-space: nowrap; }
+  .btnlink:hover { text-decoration: none; filter: brightness(.97); }
+  .dfoot { padding: 14px 20px; border-top: 1px solid var(--line); background: var(--soft); }
+
+  /* ---- ประวัติ */
+  details > summary { cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::after { content: '▾'; color: var(--muted); }
+  details[open] > summary::after { content: '▴'; }
+  .ev { margin-top: 12px; display: grid; gap: 2px; max-height: 320px; overflow: auto; font-size: 13px; }
+  .ev div { display: grid; grid-template-columns: 150px 140px 1fr; gap: 10px; padding: 5px 8px; border-radius: 6px; }
+  .ev div:nth-child(odd) { background: var(--soft); }
+  .ev .t { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+  /* ---- หน้าต่าง */
+  dialog { border: 0; border-radius: 16px; padding: 0; width: min(460px, calc(100vw - 32px)); background: var(--card); color: var(--text); box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+  dialog::backdrop { background: rgba(15, 20, 30, .45); }
+  dialog form { padding: 20px 22px; display: grid; gap: 14px; }
+  dialog h3 { margin: 0; font-size: 16px; }
+  dialog .btns { display: flex; justify-content: flex-end; gap: 8px; }
+  .msg { white-space: pre-wrap; background: var(--soft); border: 1px dashed var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+  .bigcode { font-family: var(--mono); font-size: 24px; font-weight: 600; letter-spacing: 1px; text-align: center; padding: 10px; border-radius: 10px; background: var(--ok-soft); color: var(--ok); }
+  .warnbox { background: var(--bad-soft); color: var(--bad); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+
+  .login { max-width: 380px; margin: 14vh auto; padding: 26px; display: grid; gap: 14px; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--head); color: var(--head-text); padding: 9px 16px; border-radius: 10px; font-size: 13px; box-shadow: var(--shadow); opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+
+  @media (max-width: 1100px) {
+    .issue { grid-template-columns: 1fr 1fr; } .issue .wide { grid-column: 1 / -1; }
+    .stats { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 640px) {
+    .bar, main { padding-left: 16px; padding-right: 16px; }
+    .grid { padding: 4px 16px 16px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+    .dbody { grid-template-columns: 1fr; padding: 14px 16px; }
+    .stgrid { grid-template-columns: repeat(2, 1fr); }
+    .dhead { padding: 14px 16px; } .dhead .cover { width: 88px; }
+    .hist div { grid-template-columns: 1fr; gap: 0; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .ev div { grid-template-columns: 1fr; gap: 0; }
+    .toolbar input { max-width: none; }
+    .card-head { flex-wrap: wrap; } .card-head > .sub { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand"><div class="logo">L</div><div><b>แผงควบคุม License</b><small>Clothing POS · ร้านทดลอง</small></div></div>
+    <span class="pill" id="mode"></span>
+    <div class="urlchip" id="urlChip" hidden title="ที่อยู่เซิร์ฟเวอร์ license — ใช้ตั้งในแอปชุดทดลองบนเครื่องอื่น (POS_LICENSE_SERVER)">
+      <span id="publicUrl"></span><button class="small icon" id="copyUrl">คัดลอก</button>
+    </div>
+    <button class="small" id="logout" hidden>ออกจากระบบ</button>
+  </div>
+</header>
+
+<div id="loginView" hidden>
+  <form class="card login" id="loginForm">
+    <h2>เข้าสู่แผงควบคุม</h2>
+    <label>รหัสผ่านผู้ดูแล<input type="password" id="pw" autocomplete="current-password" autofocus></label>
+    <button>เข้าสู่ระบบ</button>
+    <div class="err" id="loginErr"></div>
+    <div class="sub" id="pwHint" hidden>โหมดทดสอบ: รหัสผ่านอยู่ในไฟล์ license-server\data\admin-password.txt</div>
+  </form>
+</div>
+
+<main id="app" hidden>
+  <section class="stats" id="stats"></section>
+
+  <section class="card pad">
+    <div class="card-head"><h2>ออก license ใหม่</h2><span class="sub">นับวันเริ่มเมื่อร้านกรอกในแอปครั้งแรก</span></div>
+    <form class="issue" id="issueForm">
+      <label class="wide">ชื่อร้าน<input id="shop" required maxlength="80" placeholder="เช่น ร้าน A"></label>
+      <label class="wide"><span id="slugLabel">ชื่อย่อร้าน</span><input id="slug" required maxlength="30" placeholder="a" pattern="[a-z0-9]([a-z0-9-]*[a-z0-9])?" title="a-z 0-9 และ - เท่านั้น"></label>
+      <label>จำนวนวัน<input id="days" type="number" min="1" max="3650" value="60" required></label>
+      <label>จำนวนเครื่อง<input id="machines" type="number" min="1" max="50" value="2" required></label>
+      <label class="wide">หมายเหตุ<input id="note" maxlength="300" placeholder="เบอร์โทร / ผู้ติดต่อ"></label>
+      <button id="issueBtn">ออก license</button>
+    </form>
+    <div class="dom-line" id="dom"></div>
+    <div class="err" id="issueErr"></div>
+  </section>
+
+  <section class="card">
+    <div class="pad" style="padding-bottom: 6px">
+      <div class="card-head" style="margin-bottom: 8px">
+        <h2>ร้านทั้งหมด <span class="sub" id="count"></span></h2>
+        <div class="toolbar"><input id="q" type="search" placeholder="ค้นหา ชื่อร้าน · รหัส · ชื่อย่อ · หมายเหตุ"></div>
+      </div>
+    </div>
+    <div class="grid" id="rows"></div>
+  </section>
+
+  <details class="card pad" id="evBox">
+    <summary><h2>ประวัติล่าสุด</h2></summary>
+    <div class="ev" id="events"></div>
+  </details>
+</main>
+
+<!-- หน้าต่างแสดงผล / ยืนยัน (ใช้ร่วมกัน) -->
+<!-- popup รายละเอียดร้าน -->
+<dialog id="detail" class="detail"></dialog>
+<input type="file" id="imgFile" accept="image/png,image/jpeg,image/webp" hidden>
+<dialog id="dlg"><form method="dialog" id="dlgForm"></form></dialog>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const d10 = (s) => (s ? s.slice(0, 10) : '');
+let meta = { mode: '', publicUrl: '', trialDomain: '', downloadUrl: '' };
+let licenses = [];
+let filter = 'all';
+
+// ---------------------------------------------------------------- เรียก API
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401 && path !== '/admin/api/login') { show(false); throw new Error(j.error || 'กรุณาเข้าสู่ระบบ'); }
+  if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j;
+}
+function toast(text) {
+  const t = $('toast');
+  t.textContent = text;
+  t.classList.add('show');
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => t.classList.remove('show'), 1800);
+}
+const copy = (text, what = 'คัดลอกแล้ว') => navigator.clipboard.writeText(text).then(() => toast(what), () => toast('คัดลอกไม่ได้'));
+
+// ---------------------------------------------------------------- หน้าต่าง (แทน prompt/confirm)
+/** opts: { title, html, input:{label,value,type,placeholder}, ok, danger, cancel } → คืนค่าที่กรอก / true · ยกเลิก = null */
+function ask(opts) {
+  const dlg = $('dlg');
+  const f = $('dlgForm');
+  f.innerHTML = `<h3>${esc(opts.title)}</h3>${opts.html || ''}
+    ${opts.input ? `<label>${esc(opts.input.label)}<input id="dlgIn" type="${opts.input.type || 'text'}" value="${esc(opts.input.value ?? '')}" placeholder="${esc(opts.input.placeholder || '')}" autocomplete="off"></label>` : ''}
+    <div class="btns">${opts.cancel === false ? '' : '<button value="" class="ghost">ยกเลิก</button>'}<button value="ok" class="${opts.danger ? 'danger-solid' : ''}" id="dlgOk">${esc(opts.ok || 'ตกลง')}</button></div>`;
+  return new Promise((done) => {
+    dlg.onclose = () => done(dlg.returnValue === 'ok' ? (opts.input ? $('dlgIn').value.trim() : true) : null);
+    dlg.returnValue = '';
+    dlg.showModal();
+    (opts.input ? $('dlgIn') : $('dlgOk')).focus();
+    if (opts.input) $('dlgIn').select();
+  });
+}
+
+// ---------------------------------------------------------------- เข้าสู่ระบบ
+function show(loggedIn) {
+  $('loginView').hidden = loggedIn;
+  $('app').hidden = !loggedIn;
+  $('logout').hidden = !loggedIn;
+  if (!loggedIn) {
+    licenses = [];
+    $('rows').innerHTML = $('events').innerHTML = $('stats').innerHTML = '';
+    if ($('dlg').open) $('dlg').close();
+    if ($('detail').open) $('detail').close();
+    setTimeout(() => $('pw').focus());
+  }
+}
+$('loginForm').onsubmit = async (e) => {
+  e.preventDefault();
+  $('loginErr').textContent = '';
+  try { await api('/admin/api/login', { password: $('pw').value }); $('pw').value = ''; show(true); load(); }
+  catch (err) { $('loginErr').textContent = err.message; }
+};
+$('logout').onclick = async () => { await api('/admin/api/logout', {}).catch(() => {}); show(false); };
+$('copyUrl').onclick = () => copy(meta.publicUrl, 'คัดลอกที่อยู่แล้ว');
+
+// ---------------------------------------------------------------- สถานะ
+function statusOf(l) {
+  if (l.status === 'revoked') return { key: 'bad', label: 'ระงับ', cls: 'b-bad' };
+  if (l.expired) return { key: 'bad', label: 'หมดอายุ', cls: 'b-bad' };
+  if (!l.activated_at) return { key: 'idle', label: 'ยังไม่เปิดใช้', cls: 'b-idle' };
+  if (l.daysLeft <= 7) return { key: 'warn', label: 'ใกล้หมดอายุ', cls: 'b-warn' };
+  return { key: 'ok', label: 'ใช้งานอยู่', cls: 'b-ok' };
+}
+const FILTERS = [
+  ['all', 'ทั้งหมด', 'var(--primary)'],
+  ['ok', 'ใช้งานอยู่', 'var(--ok)'],
+  ['warn', 'ใกล้หมดอายุ', 'var(--warn)'],
+  ['idle', 'ยังไม่เปิดใช้', 'var(--idle)'],
+  ['bad', 'หมดอายุ / ระงับ', 'var(--bad)'],
+];
+function renderStats() {
+  const n = (k) => (k === 'all' ? licenses.length : licenses.filter((l) => statusOf(l).key === k).length);
+  $('stats').innerHTML = FILTERS.map(([k, label, color]) =>
+    `<button class="stat ${filter === k ? 'on' : ''}" data-filter="${k}"><span class="n">${n(k)}</span><span class="l"><i class="dot" style="background:${color}"></i>${label}</span></button>`).join('');
+}
+$('stats').onclick = (e) => {
+  const b = e.target.closest('[data-filter]');
+  if (!b) return;
+  filter = filter === b.dataset.filter ? 'all' : b.dataset.filter;
+  render();
+};
+$('q').oninput = () => render();
+
+// ---------------------------------------------------------------- การ์ดร้าน
+const instBadge = (i) => !i ? '<span class="badge b-idle">ยังไม่สร้าง</span>'
+  : i.state === 'running' ? '<span class="badge b-ok">● ทำงาน</span>'
+  : i.state === 'error' ? '<span class="badge b-bad">ผิดพลาด</span>' : '<span class="badge b-idle">หยุด</span>';
+const MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+/** '2026-10-30 14:05:00' → '30 ต.ค. 2569' (+ เวลา) */
+function thDate(s, time = false) {
+  if (!s) return '—';
+  const [d, t] = s.split(' ');
+  const [y, m, dd] = d.split('-').map(Number);
+  return `${dd} ${MONTHS[m - 1]} ${y + 543}${time && t ? ` ${t.slice(0, 5)}` : ''}`;
+}
+/** สีพื้นหลังรูปปก — คงที่ตามชื่อย่อร้าน */
+const hue = (s) => [...String(s)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+/** ตัวอักษรแรกของชื่อร้าน (ข้ามคำว่า "ร้าน" และสระนำ) */
+const initial = (shop) => (String(shop).replace(/^ร้าน\s*/, '').match(/[ก-ฮA-Za-z0-9]/) || ['?'])[0].toUpperCase();
+function cover(l) {
+  return `<div class="cover" style="--h:${hue(l.slug)}">${l.image ? `<img src="${esc(l.image)}" alt="" loading="lazy">` : `<span class="ini">${esc(initial(l.shop))}</span>`}`;
+}
+function lifeColor(l, st) {
+  return l.status === 'revoked' ? 'var(--idle)' : st.key === 'bad' ? 'var(--bad)' : st.key === 'warn' ? 'var(--warn)' : 'var(--ok)';
+}
+function lifeText(l) {
+  if (!l.activated_at) return `<b>${l.days}</b> วัน <span class="sub">(ยังไม่เริ่มนับ)</span>`;
+  return l.expired ? '<b style="color:var(--bad)">หมดอายุแล้ว</b>' : `เหลือ <b>${l.daysLeft}</b> วัน`;
+}
+function meter(l, st) {
+  const pct = !l.activated_at ? 100 : l.expired ? 0 : Math.max(3, Math.min(100, Math.round((l.daysLeft / Math.max(1, l.days)) * 100)));
+  return `<div class="meter"><i style="width:${pct}%;background:${l.activated_at ? lifeColor(l, st) : 'var(--line)'}"></i></div>`;
+}
+const pinOf = (l) => (l.instance ? `<span class="pin">${esc(l.instance.managerPin)}</span>` : '<span class="sub">สร้างเมื่อเปิดใช้</span>');
+
+function tile(l) {
+  const st = statusOf(l);
+  const run = l.instance?.state === 'running';
+  return `<article class="tile ${st.key === 'bad' ? 'off' : ''}" data-open="${l.id}" tabindex="0" title="ดูรายละเอียด">
+    ${cover(l)}<span class="badge ${st.cls}">${st.label}</span>
+      ${l.instance ? `<span class="run ${run ? 'on' : ''}"><i></i>${run ? 'ร้านเปิด' : 'ร้านปิด'}</span>` : ''}</div>
+    <div class="tbody">
+      <div class="tname">${esc(l.shop)}</div>
+      <div class="sub">${esc(l.slug)} · เครื่อง ${l.machines.length}/${l.max_machines}</div>
+      <div class="kv"><span>License</span><span class="code copyable" data-copy="${esc(l.code)}" title="คลิกเพื่อคัดลอก">${esc(l.code)}</span></div>
+      <div class="life"><div class="kv"><span>อายุคงเหลือ</span><span>${lifeText(l)}</span></div>${meter(l, st)}</div>
+      <div class="kv"><span>PIN เริ่มต้น</span>${pinOf(l)}</div>
+    </div>
+  </article>`;
+}
+
+function render() {
+  renderStats();
+  const q = $('q').value.trim().toLowerCase();
+  const shown = licenses.filter((l) => (filter === 'all' || statusOf(l).key === filter)
+    && (!q || [l.shop, l.code, l.slug, l.note].some((v) => String(v || '').toLowerCase().includes(q))));
+  $('count').textContent = shown.length === licenses.length ? `(${licenses.length})` : `(${shown.length} จาก ${licenses.length})`;
+  $('rows').innerHTML = shown.length ? shown.map(tile).join('')
+    : `<div class="empty">${licenses.length ? 'ไม่พบร้านที่ตรงกับเงื่อนไข' : 'ยังไม่มี license — ออกใบแรกด้านบน'}</div>`;
+  if ($('detail').open) renderDetail();
+}
+
+// ---------------------------------------------------------------- popup รายละเอียด
+let openId = null;
+let shopHist = [];
+let shopData = null; // { state, stats, error, backups } — null = กำลังโหลด
+const num = (n) => Number(n || 0).toLocaleString('th-TH');
+const money = (n) => Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const kb = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
+function statsBox() {
+  const d = shopData;
+  const head = '<h4>ข้อมูลร้าน <span class="sub">นับรวมทุกสาขา</span></h4>';
+  if (!d) return `<section class="box full">${head}<div class="sub">กำลังโหลด…</div></section>`;
+  if (!d.stats) return `<section class="box full">${head}<div class="sub">${esc(d.error || 'ยังไม่ได้สร้างระบบร้าน — ข้อมูลจะแสดงเมื่อร้านเปิดใช้งาน')}</div></section>`;
+  const s = d.stats;
+  const tile = (label, value, sub = '') => `<div class="st"><span>${label}</span><b>${value}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+  return `<section class="box full">${head}
+    <div class="stgrid">
+      ${tile('สินค้าทั้งหมด', num(s.products), `${num(s.variants)} ตัวเลือก (สี/ไซซ์)`)}
+      ${tile('สต็อกคงเหลือ', num(s.stockUnits), 'ชิ้น')}
+      ${tile('บิลขายทั้งหมด', num(s.bills), s.voided ? `ยกเลิก ${num(s.voided)} บิล` : 'ไม่มีบิลยกเลิก')}
+      ${tile('ยอดขายรวม', `฿${money(s.salesTotal)}`, s.creditNotes ? `ใบลดหนี้ ${num(s.creditNotes)} ใบ` : '')}
+      ${tile('วันนี้', `${num(s.todayBills)} บิล`, `฿${money(s.todaySales)}`)}
+      ${tile('ขายล่าสุด', s.lastSaleAt ? thDate(s.lastSaleAt, true) : '—', s.firstSaleAt ? `บิลแรก ${thDate(s.firstSaleAt)}` : 'ยังไม่มีการขาย')}
+      ${tile('พนักงาน', num(s.staff), 'คน')}
+      ${tile('สาขา', num(s.branches), `ฐานข้อมูล ${kb(s.dbBytes)}`)}
+    </div>
+    ${s.shopName && s.shopName !== '' ? `<div class="sub">ชื่อร้านในระบบ POS: ${esc(s.shopName)}</div>` : ''}
+  </section>`;
+}
+function backupBlock(l, running) {
+  const d = shopData;
+  const list = d?.backups || [];
+  const branches = d?.stats?.branchList || [];
+  const bName = (id) => (id == null ? 'ทั้งร้าน' : (branches.find((x) => x.id === id)?.name || `สาขา #${id}`));
+  const dis = running ? '' : 'disabled title="ร้านต้องเปิดอยู่"';
+  const target = (label, sub, branch) => `<li><div><b>${esc(label)}</b><span class="sub">${sub}</span></div>
+      <button class="small" data-act="backup" ${branch == null ? '' : `data-branch="${branch}"`} ${dis}>สำรอง</button></li>`;
+  return `<div class="bk">
+    <h4>สำรองข้อมูล <span class="sub">${running ? '' : 'เปิดร้านก่อนจึงสำรองได้'}</span></h4>
+    <ul class="bklist targets">
+      ${target('ทั้งร้าน (ทุกสาขา)', 'สินค้า · พนักงาน · ตั้งค่า + ข้อมูลทุกสาขา', null)}
+      ${branches.map((b) => target(b.name, `${b.code ? `${esc(b.code)} · ` : ''}${num(b.bills)} บิล${b.lastBillAt ? ` · ล่าสุด ${thDate(b.lastBillAt, true)}` : ''}`, b.id)).join('')}
+    </ul>
+    <div class="sub">สำรองทั้งร้านอัตโนมัติวันละครั้งขณะร้านเปิด · เก็บไฟล์ล่าสุด 20 ไฟล์ · ไฟล์สาขาใช้กู้คืนเฉพาะสาขานั้นในแอป (ตั้งค่า → สำรอง & กู้คืนข้อมูล)</div>
+    <h4 style="margin-top:4px">ไฟล์สำรอง <span class="sub">${list.length} ไฟล์</span></h4>
+    ${!d ? '<div class="sub">กำลังโหลด…</div>' : list.length ? `<ul class="bklist">${list.map((b) => `<li>
+        <div><b>${thDate(b.at, true)}</b><span class="sub">${esc(bName(b.branch))} · ${b.auto ? 'อัตโนมัติ' : 'สำรองเอง'} · ${kb(b.size)}</span></div>
+        <a class="btnlink" href="/admin/api/licenses/${l.id}/backups/${encodeURIComponent(b.file)}" download title="${esc(b.file)}">ดาวน์โหลด</a>
+        <button class="small danger icon" data-act="backup-delete" data-file="${esc(b.file)}" title="ลบไฟล์นี้">ลบ</button></li>`).join('')}</ul>`
+      : '<div class="sub">ยังไม่มีไฟล์สำรอง</div>'}
+  </div>`;
+}
+const KIND = {
+  'license.issue': 'ออก license', 'license.extend': 'ต่ออายุ', 'license.machines': 'เปลี่ยนจำนวนเครื่อง', 'license.revoke': 'ระงับ',
+  'license.restore': 'คืนสถานะ', 'license.image': 'เปลี่ยนรูป', 'license.image-remove': 'ลบรูป', 'machine.remove': 'ลบเครื่อง', 'machine.add': 'เพิ่มเครื่อง',
+  'backup.auto': 'สำรองอัตโนมัติ', 'backup.manual': 'สำรองข้อมูล', 'backup.delete': 'ลบไฟล์สำรอง', 'backup.error': 'สำรองไม่สำเร็จ',
+  'instance.create': 'สร้างระบบร้าน', 'instance.start': 'เปิดร้าน', 'instance.stop': 'หยุดร้าน', 'instance.error': 'ร้านผิดพลาด',
+};
+function renderDetail() {
+  const l = licenses.find((x) => x.id === openId);
+  if (!l) return $('detail').close();
+  const st = statusOf(l);
+  const i = l.instance;
+  const canStart = i && i.state !== 'running' && l.status === 'active' && !l.expired;
+  const mach = l.machines.length
+    ? `<ul class="mach">${l.machines.map((m) => `<li><span>💻</span><div><b>${esc(m.name || 'ไม่มีชื่อ')}</b><span class="mono" title="${esc(m.machine_id)}">${esc(m.machine_id)}</span>
+        <span class="sub">ลงทะเบียน ${thDate(m.first_seen)} · ล่าสุด ${thDate(m.last_seen, true)}</span></div>
+        <button class="small danger" data-act="remove-machine" data-machine="${esc(m.machine_id)}" data-name="${esc(m.name)}" title="ลบเครื่องนี้ (ให้เครื่องใหม่ใช้แทน)">ลบ</button></li>`).join('')}</ul>`
+    : '<div class="sub">ยังไม่มีเครื่องลงทะเบียน</div>';
+  $('detail').innerHTML = `
+    <div class="dhead">
+      ${cover(l)}</div>
+      <div class="dtitle">
+        <h3>${esc(l.shop)}</h3>
+        <div class="row"><span class="badge ${st.cls}">${st.label}</span>${instBadge(i)}<span class="sub">${esc(l.slug)}</span></div>
+        <div class="row"><button class="small ghost" data-act="image">${l.image ? 'เปลี่ยนรูป' : 'ใส่รูปร้าน'}</button>${l.image ? '<button class="small ghost" data-act="image-remove">ลบรูป</button>' : ''}</div>
+      </div>
+      <button class="x" data-act="close" title="ปิด" aria-label="ปิด">✕</button>
+    </div>
+    <div class="dbody">
+      ${statsBox()}
+      <section class="box">
+        <h4>License</h4>
+        <div class="kv"><span>รหัส</span><span class="code copyable" data-copy="${esc(l.code)}" title="คลิกเพื่อคัดลอก">${esc(l.code)}</span></div>
+        <div class="kv"><span>อายุ</span><span>${l.days} วัน</span></div>
+        <div class="kv"><span>คงเหลือ</span><span>${lifeText(l)}</span></div>
+        ${meter(l, st)}
+        <div class="kv"><span>ออกเมื่อ</span><span>${thDate(l.created_at, true)}</span></div>
+        <div class="kv"><span>เปิดใช้เมื่อ</span><span>${thDate(l.activated_at, true)}</span></div>
+        <div class="kv"><span>หมดอายุ</span><span>${thDate(l.expires_at, true)}</span></div>
+        <div class="kv"><span>หมายเหตุ</span><span>${esc(l.note) || '—'}</span></div>
+      </section>
+      <section class="box">
+        <h4>ระบบร้าน ${instBadge(i)}</h4>
+        ${i ? `
+        <div class="kv"><span>PIN ผู้จัดการเริ่มต้น</span><span class="pin copyable" data-copy="${esc(i.managerPin)}" title="คลิกเพื่อคัดลอก">${esc(i.managerPin)}</span></div>
+        <div class="kv"><span>ที่อยู่</span><span><a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.url.replace(/^https?:\/\//, ''))} ↗</a></span></div>
+        <div class="kv"><span>พอร์ต</span><span class="mono">${i.port}</span></div>
+        <div class="kv"><span>สร้างเมื่อ</span><span>${thDate(i.createdAt, true)}</span></div>
+        ${i.error ? `<div class="warnbox">${esc(i.error)}</div>` : ''}
+        <div class="sub">ร้านเปลี่ยน PIN เองได้ในระบบ POS — ค่านี้คือ PIN ตอนสร้างร้าน</div>`
+        : '<div class="sub">ยังไม่ได้สร้าง — ระบบสร้างให้อัตโนมัติเมื่อร้านกรอก license ในแอปครั้งแรก แล้วจะได้ PIN ผู้จัดการเริ่มต้น</div>'}
+      </section>
+      ${i ? `<section class="box full">${backupBlock(l, i.state === 'running')}</section>` : ''}
+      <section class="box full">
+        <h4>เครื่องที่ลงทะเบียน <span>${l.machines.length} / ${l.max_machines}</span></h4>
+        ${mach}
+      </section>
+      <section class="box full">
+        <h4>ประวัติของร้านนี้</h4>
+        <div class="hist">${shopHist.length ? shopHist.map((e) => `<div><span class="t">${esc(e.at)}</span><b>${esc(KIND[e.kind] || e.kind)}</b><span class="sub">${esc(e.detail)}</span></div>`).join('') : '<div class="sub">ยังไม่มี</div>'}</div>
+      </section>
+    </div>
+    <div class="dfoot acts">
+      <button class="small ghost" data-act="extend">ต่ออายุ</button>
+      <button class="small ghost" data-act="machines">จำนวนเครื่อง</button>
+      ${i && i.state === 'running' ? '<button class="small ghost" data-act="stop">หยุดร้าน</button>' : ''}
+      ${canStart ? '<button class="small ghost" data-act="start">เปิดร้าน</button>' : ''}
+      <span class="sp"></span>
+      ${l.status === 'active' ? '<button class="small danger" data-act="revoke">ระงับ</button>' : '<button class="small ghost" data-act="restore">คืนสถานะ</button>'}
+      <button class="small danger-solid" data-act="delete">ลบ license</button>
+    </div>`;
+}
+/** ประวัติ + ข้อมูลร้าน/ไฟล์สำรอง ของร้านที่เปิด popup อยู่ */
+async function loadHistory() {
+  const id = openId;
+  const [h, d] = await Promise.all([
+    api(`/admin/api/licenses/${id}/events`).catch(() => []),
+    api(`/admin/api/licenses/${id}/shop`).catch((e) => ({ stats: null, error: e.message, backups: [] })),
+  ]);
+  if (id === openId) { shopHist = h; shopData = d; }
+}
+async function openDetail(id) {
+  openId = id;
+  shopHist = [];
+  shopData = null;
+  renderDetail();
+  if (!$('detail').open) $('detail').showModal();
+  await loadHistory();
+  if (openId === id && $('detail').open) renderDetail();
+}
+$('rows').onclick = (e) => {
+  const c = e.target.closest('[data-copy]');
+  if (c) return copy(c.dataset.copy, 'คัดลอกแล้ว');
+  const t = e.target.closest('[data-open]');
+  if (t) openDetail(Number(t.dataset.open));
+};
+$('rows').onkeydown = (e) => {
+  const t = e.target.closest('[data-open]');
+  if (t && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openDetail(Number(t.dataset.open)); }
+};
+$('detail').onclick = (e) => { if (e.target === $('detail')) $('detail').close(); }; // คลิกพื้นหลังเพื่อปิด
+$('detail').onclose = () => { openId = null; };
+
+/** ย่อรูปเป็น 640×400 (ตัดให้เต็มกรอบ) → JPEG data URL */
+function shrink(file) {
+  return new Promise((ok, fail) => {
+    const img = new Image();
+    img.onload = () => {
+      const W = 640, H = 400, c = document.createElement('canvas');
+      c.width = W; c.height = H;
+      const r = Math.max(W / img.width, H / img.height);
+      const w = img.width * r, h = img.height * r;
+      const g = c.getContext('2d');
+      g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+      g.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+      URL.revokeObjectURL(img.src);
+      ok(c.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => fail(new Error('เปิดไฟล์รูปไม่ได้'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+$('imgFile').onchange = async () => {
+  const f = $('imgFile').files[0];
+  $('imgFile').value = '';
+  if (!f || openId == null) return;
+  try {
+    await api(`/admin/api/licenses/${openId}/image`, { image: await shrink(f) });
+    toast('บันทึกรูปแล้ว');
+    await load();
+    await loadHistory(); renderDetail();
+  } catch (err) { toast(err.message); }
+};
+
+
+/** ที่อยู่ร้านใต้ช่องชื่อย่อร้าน */
+let domTpl = '';
+function showDom() {
+  const v = $('slug').value.trim().toLowerCase();
+  const esc2 = (t) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  $('dom').innerHTML = domTpl ? `<span>ที่อยู่ร้านทดลอง</span><code>${esc2(domTpl).replace('{slug}', `<b>${esc2(v || 'ชื่อย่อ')}</b>`)}</code>` : '';
+}
+document.addEventListener('input', (e) => { if (e.target && e.target.id === 'slug') showDom(); });
+
+async function load() {
+  const j = await api('/admin/api/licenses');
+  meta = j;
+  licenses = j.licenses;
+  const local = j.mode === 'local';
+  $('mode').textContent = local ? 'โหมดทดสอบ' : `VPS · *.${j.trialDomain}`;
+  $('slugLabel').textContent = local ? 'ชื่อย่อร้าน' : 'โดเมนย่อย';
+  // ที่อยู่ร้าน (แสดงใต้ช่องชื่อย่อ) — แทนที่ {slug} ด้วยค่าที่พิมพ์
+  domTpl = local ? `${j.publicUrl.replace(/^https?:\/\//, '')}/shop/{slug}` : `{slug}.${j.trialDomain}`;
+  showDom();
+  $('urlChip').hidden = !local;
+  $('publicUrl').textContent = j.publicUrl;
+  render();
+  if ($('evBox').open) loadEvents();
+}
+async function loadEvents() {
+  const ev = await api('/admin/api/events');
+  $('events').innerHTML = ev.map((e) => `<div><span class="t">${esc(e.at)}</span><span><b>${esc(e.kind)}</b> ${esc(e.shop || '')}</span><span class="sub">${esc(e.detail)}</span></div>`).join('') || '<div class="sub">ยังไม่มี</div>';
+}
+$('evBox').ontoggle = () => $('evBox').open && loadEvents().catch(() => {});
+
+// ---------------------------------------------------------------- ออก license
+$('shop').oninput = () => {
+  if ($('slug').dataset.touched) return;
+  $('slug').value = $('shop').value.toLowerCase().replace(/^ร้าน\s*/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+};
+$('slug').oninput = () => { $('slug').dataset.touched = '1'; $('slug').value = $('slug').value.toLowerCase(); };
+
+$('issueForm').onsubmit = async (e) => {
+  e.preventDefault();
+  $('issueErr').textContent = '';
+  $('issueBtn').disabled = true;
+  try {
+    const days = +$('days').value, max = +$('machines').value;
+    const r = await api('/admin/api/licenses', { shop: $('shop').value, slug: $('slug').value, days, maxMachines: max, note: $('note').value });
+    const msg = [
+      `รหัสทดลองใช้ Clothing POS: ${r.code}`,
+      `ใช้ได้ ${days} วัน · ${max} เครื่อง (เริ่มนับเมื่อเปิดใช้งาน)`,
+      meta.downloadUrl ? `ดาวน์โหลดโปรแกรม: ${meta.downloadUrl}` : 'ดาวน์โหลดโปรแกรม: (ลิงก์ตัวติดตั้งชุดทดลอง)',
+      ...(meta.mode === 'local' ? [`เซิร์ฟเวอร์ license (ทดสอบ): ${meta.publicUrl}`] : []),
+      'ติดตั้งแล้วเปิดโปรแกรม → กรอกรหัสนี้ → รับ PIN ผู้จัดการ แล้วเริ่มใช้งานได้ทันที',
+    ].join('\n');
+    $('shop').value = $('slug').value = $('note').value = '';
+    showDom();
+    delete $('slug').dataset.touched;
+    load();
+    const again = await ask({
+      title: `ออก license ให้ ${r.slug} แล้ว`,
+      html: `<div class="bigcode">${esc(r.code)}</div><div class="msg" id="dlgMsg">${esc(msg)}</div>`,
+      ok: 'คัดลอกข้อความส่งให้ร้าน', cancel: false,
+    });
+    if (again) copy(msg, 'คัดลอกข้อความแล้ว');
+  } catch (err) { $('issueErr').textContent = err.message; }
+  finally { $('issueBtn').disabled = false; }
+};
+
+// ---------------------------------------------------------------- คำสั่งของแต่ละร้าน
+$('detail').addEventListener('click', async (e) => {
+  const c = e.target.closest('[data-copy]');
+  if (c) return copy(c.dataset.copy, 'คัดลอกแล้ว');
+  const b = e.target.closest('button[data-act]');
+  if (!b) return;
+  const { act } = b.dataset;
+  if (act === 'close') return $('detail').close();
+  if (act === 'image') return $('imgFile').click();
+  const id = openId;
+  const l = licenses.find((x) => x.id === id);
+  if (!l) return;
+  const who = `<div class="sub">${esc(l.shop)} · <span class="mono">${esc(l.code)}</span></div>`;
+  let body = {};
+  if (act === 'extend') {
+    const d = await ask({ title: 'ต่ออายุ license', html: who, input: { label: 'เพิ่มกี่วัน', value: '30', type: 'number' }, ok: 'ต่ออายุ' });
+    if (!d) return; body = { days: +d };
+  } else if (act === 'machines') {
+    const n = await ask({ title: 'จำนวนเครื่องที่ใช้ได้', html: who, input: { label: 'จำนวนเครื่อง (1–50)', value: String(l.max_machines), type: 'number' }, ok: 'บันทึก' });
+    if (!n) return; body = { maxMachines: +n };
+  } else if (act === 'revoke') {
+    if (!await ask({ title: 'ระงับ license นี้?', html: `${who}<div class="sub">ระบบร้านจะหยุดทำงานทันที ข้อมูลยังอยู่ กด "คืนสถานะ" เพื่อใช้ต่อได้</div>`, ok: 'ระงับ', danger: true })) return;
+  } else if (act === 'stop') {
+    if (!await ask({ title: 'หยุดระบบร้านนี้?', html: `${who}<div class="sub">ข้อมูลยังอยู่ · แอปของร้านจะเปิดใหม่ให้เองเมื่อเปิดโปรแกรม</div>`, ok: 'หยุดร้าน' })) return;
+  } else if (act === 'remove-machine') {
+    if (!await ask({ title: 'ลบเครื่องนี้?', html: `${who}<div class="sub">💻 ${esc(b.dataset.name || 'ไม่มีชื่อ')} — เครื่องใหม่จะกรอก license แทนได้</div>`, ok: 'ลบเครื่อง', danger: true })) return;
+    body = { machineId: b.dataset.machine };
+  } else if (act === 'backup-delete') {
+    if (!await ask({ title: 'ลบไฟล์สำรองนี้?', html: `${who}<div class="sub mono">${esc(b.dataset.file)}</div>`, ok: 'ลบไฟล์', danger: true })) return;
+    body = { file: b.dataset.file };
+  } else if (act === 'backup') {
+    b.textContent = 'กำลังสำรอง…';
+    if (b.dataset.branch) body = { branch: Number(b.dataset.branch) };
+  } else if (act === 'image-remove') {
+    if (!await ask({ title: 'ลบรูปร้านนี้?', html: who, ok: 'ลบรูป', danger: true })) return;
+    body = { image: '' };
+  } else if (act === 'delete') {
+    const typed = await ask({
+      title: 'ลบ license ถาวร?', danger: true, ok: 'ลบ license',
+      html: `${who}<div class="warnbox">ลบรหัสนี้ เครื่องที่ลงทะเบียน และปิดระบบร้าน — ย้อนกลับไม่ได้<br>${meta.mode === 'local' ? 'ข้อมูลร้านจะถูกย้ายไปเก็บที่ license-server\\data\\trials\\_deleted' : 'ข้อมูลร้านจะถูกย้ายไปเก็บที่ /var/lib/pos-trial/_deleted'}</div>`,
+      input: { label: `พิมพ์ "${l.slug}" เพื่อยืนยัน`, placeholder: l.slug },
+    });
+    if (typed === null) return;
+    if (typed !== l.slug) return toast('ชื่อย่อร้านไม่ตรง — ยกเลิกการลบ');
+    body = { confirm: typed };
+  }
+  b.disabled = true;
+  try {
+    await api(`/admin/api/licenses/${id}/${act === 'image-remove' ? 'image' : act}`, body);
+    toast(act === 'delete' ? 'ลบ license แล้ว' : act === 'backup' ? 'สำรองข้อมูลแล้ว' : act === 'backup-delete' ? 'ลบไฟล์สำรองแล้ว' : 'บันทึกแล้ว');
+    if (act === 'delete') $('detail').close();
+    await load();
+    if ($('detail').open) { await loadHistory(); renderDetail(); }
+  } catch (err) {
+    await ask({ title: 'ทำรายการไม่สำเร็จ', html: `<div class="warnbox">${esc(err.message)}</div>`, cancel: false });
+    b.disabled = false;
+  }
+});
+
+// คำใบ้ที่อยู่ไฟล์รหัสผ่าน แสดงเฉพาะตอนเปิดบนเครื่องตัวเอง (ไม่แสดงบน VPS / ลิงก์สาธารณะ)
+$('pwHint').hidden = !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+api('/admin/api/licenses').then(() => { show(true); load(); }).catch(() => show(false));
+setInterval(() => { if (!$('app').hidden && !$('dlg').open && document.visibilityState === 'visible') load().catch(() => {}); }, 15000);
+</script>
+</body>
+</html>

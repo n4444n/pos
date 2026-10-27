@@ -4,7 +4,8 @@
 // หมายเหตุ: ไม่ตัดสต็อก เพื่อไม่ให้สต็อกตัวอย่างหมด
 import { db, tx } from './db.ts';
 import './auth.ts'; // ให้มีรายชื่อพนักงาน/PIN ก่อน
-import { round2, vatOf } from './common.ts';
+import { getVatRate, round2, vatOf } from './common.ts';
+import './tax.ts'; // อัตรา VAT จากตารางอัตรา VAT
 
 const DAYS = Number(process.argv.find((a) => a.startsWith('--days='))?.split('=')[1] ?? 60);
 const force = process.argv.includes('--force');
@@ -50,8 +51,8 @@ const insShift = db.prepare(
 );
 const insOrder = db.prepare(
   `INSERT INTO orders_all (order_no, customer_name, salesperson, order_type, subtotal, discount, vat, total, promo_code,
-                       payment_method, cash_received, change_due, status, created_at, shift_id)
-   VALUES (?, NULL, ?, 'หน้าร้าน', ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+                       payment_method, cash_received, change_due, status, created_at, shift_id, vat_rate, vat_base)
+   VALUES (?, NULL, ?, 'หน้าร้าน', ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
 );
 const insItem = db.prepare(
   'INSERT INTO order_items (order_id, variant_id, product_name, sku, size, color, qty, unit_price, line_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -102,7 +103,7 @@ tx(() => {
       const orderNo = `INV-${String(d.getFullYear()).slice(2)}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${String(i + 1).padStart(4, '0')}`;
       const oid = Number(
         insOrder.run(orderNo, pick(staff.length ? staff : ['ผู้จัดการ']), subtotal, discount, vatOf(total), total, promo, method,
-          method === 'cash' ? total : null, voided ? 'void' : 'paid', created, shiftId).lastInsertRowid,
+          method === 'cash' ? total : null, voided ? 'void' : 'paid', created, shiftId, round2(getVatRate() * 100), round2(total - vatOf(total))).lastInsertRowid,
       );
       for (const x of items) insItem.run(oid, x.v.id, x.v.name, x.v.sku, x.v.size, x.v.color, x.qty, x.v.price, round2(x.v.price * x.qty));
       insPay.run(shiftId, oid, 'sale', method, total, created);

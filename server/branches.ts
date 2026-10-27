@@ -11,6 +11,8 @@ export interface Branch {
   code: string;
   address: string;
   vatRegistered: boolean;
+  /** สาขาตามทะเบียนภาษี: '00000' = สำนักงานใหญ่ · '00001' = สาขาที่ 00001 · '' = ยังไม่ระบุ */
+  taxBranchNo: string;
   phone: string;
   photo: string;
   isMain: boolean;
@@ -18,7 +20,7 @@ export interface Branch {
   createdAt: string;
 }
 
-const COLS = `b.id, b.name, b.code, b.address, b.vat_registered AS vat, b.phone, b.photo, b.is_main AS isMain, b.created_at AS createdAt,
+const COLS = `b.id, b.name, b.code, b.address, b.vat_registered AS vat, b.tax_branch_no AS taxBranchNo, b.phone, b.photo, b.is_main AS isMain, b.created_at AS createdAt,
   (SELECT COUNT(*) FROM staff_branches sb JOIN staff s ON s.id = sb.staff_id WHERE sb.branch_id = b.id AND s.active = 1 AND s.role = 'staff') AS staffCount`;
 type Row = Omit<Branch, 'vatRegistered' | 'isMain'> & { vat: number; isMain: number };
 const toBranch = (r: Row): Branch => ({ ...r, vatRegistered: !!r.vat, isMain: !!r.isMain });

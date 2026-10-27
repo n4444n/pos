@@ -1,12 +1,16 @@
 // ค่าคงที่และ helper ที่ใช้ร่วมกันระหว่างโมดูล server
 
-/** อัตรา VAT ปัจจุบัน (ราคาสินค้ารวม VAT แล้ว) — ตั้งได้ที่ ตั้งค่า → วิธีชำระเงิน & ค่าธรรมเนียม */
-let vatRate = 0.07;
+/**
+ * อัตรา VAT (%) ที่มีผลวันนี้ — มาจากตารางอัตรา VAT (ตั้งค่า → ภาษี) ผ่าน tax.ts · ไม่มีค่าตายตัวในโค้ด
+ * null = ยังไม่ได้ตั้งอัตราที่ครอบคลุมวันนี้
+ */
+let rateToday: () => number | null = () => null;
 /** สาขาปัจจุบันจดทะเบียน VAT หรือไม่ (ตั้งโดย branches.ts) */
 let vatOn: () => boolean = () => true;
-export const getVatRate = () => (vatOn() ? vatRate : 0);
-export function setVatRate(r: number) {
-  vatRate = Number.isFinite(r) && r >= 0 && r <= 0.3 ? r : 0.07;
+/** อัตรา VAT แบบทศนิยม (0.07 = 7%) ของสาขาปัจจุบัน · ไม่จด VAT / ยังไม่ตั้งอัตรา = 0 */
+export const getVatRate = () => (vatOn() ? (rateToday() ?? 0) / 100 : 0);
+export function setVatRateProvider(fn: () => number | null) {
+  rateToday = fn;
 }
 export function setVatSwitch(fn: () => boolean) {
   vatOn = fn;

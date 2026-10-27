@@ -1,3 +1,4 @@
+// สต็อก: กำหนดคุณสมบัติของ SKU (สี · ไซซ์ · อื่น ๆ สูงสุด 3)
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ATTR_PRESETS, COLOR_SWATCHES, guessHex, MAX_ATTRS, SIZE_PRESETS, uid, type DAttr } from '../../stockDraft';

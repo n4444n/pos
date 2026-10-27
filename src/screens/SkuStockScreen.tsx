@@ -1,3 +1,4 @@
+// หน้า สต็อกสินค้า (คุณสมบัติ): สต็อก/ราคาต่อ SKU ของสาขา · ป้ายบาร์โค้ด
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { api, imageSrc } from '../api';

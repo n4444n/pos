@@ -1,3 +1,4 @@
+// แถบบนของหน้าขาย (วันที่ · บิลพัก · กะ · ปุ่มต่าง ๆ)
 import { memo, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { thaiDate, thaiTime } from '../format';

@@ -1,3 +1,4 @@
+// สต็อก: เลือก/ย่อรูปสินค้าก่อนอัปโหลด
 import { createElement, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api, imageSrc } from '../../api';

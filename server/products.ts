@@ -25,7 +25,7 @@ interface Attr { type: AttrType; name: string; options: { value: string; hex?: s
 interface ProductRow {
   id: number; sku: string; barcode: string | null; name: string; categoryId: string; price: number; cost: number | null;
   art: string; tint: string; imageUrl: string | null; active: number; note: string | null; lowStock: number;
-  attrs: string | null; createdAt: string; updatedAt: string | null;
+  attrs: string | null; createdAt: string; updatedAt: string | null; vatExempt: number;
 }
 interface VariantRow {
   id: number; productId: number; sku: string; barcode: string | null; size: string; color: string; colorHex: string; extra: string;
@@ -33,7 +33,8 @@ interface VariantRow {
 }
 
 const P_COLS = `p.id, p.sku, p.barcode, p.name, p.category_id AS categoryId, p.price, p.cost, p.art, p.tint,
-  p.image_url AS imageUrl, p.active, p.note, p.low_stock AS lowStock, p.attrs, p.created_at AS createdAt, p.updated_at AS updatedAt`;
+  p.image_url AS imageUrl, p.active, p.note, p.low_stock AS lowStock, p.attrs, p.created_at AS createdAt, p.updated_at AS updatedAt,
+  p.vat_exempt AS vatExempt`;
 const V_COLS = `v.id, v.product_id AS productId, v.sku, v.barcode, v.size, v.color, v.color_hex AS colorHex, v.extra, v.stock,
   v.price, v.cost, v.active, v.sort`;
 
@@ -60,6 +61,7 @@ function present(p: ProductRow, me: Me, variants: VariantRow[]) {
   return {
     ...p,
     active: !!p.active,
+    vatExempt: !!p.vatExempt,
     cost: manager ? p.cost : undefined,
     attrs: (p.attrs ? JSON.parse(p.attrs) : []) as Attr[],
     variants: variants.map((v) => ({
@@ -170,6 +172,8 @@ export interface ProductIn {
   code?: string;
   name?: string; categoryId?: string; barcode?: string; imageUrl?: string | null; art?: string; tint?: string;
   active?: boolean; lowStock?: number; note?: string; attrs?: Attr[]; variants?: VariantIn[];
+  /** ยกเว้น VAT (ไม่ส่งมา = คงค่าเดิม · สินค้าใหม่ = เสีย VAT) */
+  vatExempt?: boolean;
 }
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -327,9 +331,9 @@ export function saveProduct(id: number | null, body: ProductIn, me: Me, opts: { 
       const tmpSku = 'P' + Date.now().toString(36).toUpperCase() + randomBytes(2).toString('hex').toUpperCase();
       pid = Number(
         db.prepare(
-          `INSERT INTO products (sku, barcode, name, category_id, price, cost, art, tint, image_url, active, note, low_stock, attrs, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${now})`,
-        ).run(tmpSku, barcode, name.slice(0, 120), categoryId, minPrice, minCost, art, tint, imageUrl, body.active === false ? 0 : 1, note, lowStock, JSON.stringify(attrs)).lastInsertRowid,
+          `INSERT INTO products (sku, barcode, name, category_id, price, cost, art, tint, image_url, active, note, low_stock, attrs, vat_exempt, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${now})`,
+        ).run(tmpSku, barcode, name.slice(0, 120), categoryId, minPrice, minCost, art, tint, imageUrl, body.active === false ? 0 : 1, note, lowStock, JSON.stringify(attrs), body.vatExempt === true ? 1 : 0).lastInsertRowid,
       );
       // รหัสสินค้า = ที่กำหนดเอง หรือ P000123
       db.prepare('UPDATE products SET sku = ? WHERE id = ?').run(code || `P${String(pid).padStart(6, '0')}`, pid);
@@ -338,8 +342,9 @@ export function saveProduct(id: number | null, body: ProductIn, me: Me, opts: { 
       if (!cur) throw new HttpError(404, 'ไม่พบสินค้า');
       db.prepare(
         `UPDATE products SET sku = ?, barcode = ?, name = ?, category_id = ?, price = ?, cost = ?, art = ?, tint = ?, image_url = ?, active = ?,
-                note = ?, low_stock = ?, attrs = ?, updated_at = ${now} WHERE id = ?`,
-      ).run(code || cur.sku, barcode, name.slice(0, 120), categoryId, minPrice, minCost, art, tint, imageUrl, body.active === false ? 0 : 1, note, lowStock, JSON.stringify(attrs), pid);
+                note = ?, low_stock = ?, attrs = ?, vat_exempt = ?, updated_at = ${now} WHERE id = ?`,
+      ).run(code || cur.sku, barcode, name.slice(0, 120), categoryId, minPrice, minCost, art, tint, imageUrl, body.active === false ? 0 : 1, note, lowStock, JSON.stringify(attrs),
+        typeof body.vatExempt === 'boolean' ? (body.vatExempt ? 1 : 0) : cur.vatExempt, pid);
     }
 
     const existing = q.variants.all(pid) as VariantRow[];
@@ -752,7 +757,7 @@ export function stockCommand(body: { mode?: string; lines?: { code?: string; qty
 }
 
 // ---------------- จัดการหลายสินค้าพร้อมกัน ----------------
-export type BulkAction = 'activate' | 'deactivate' | 'category' | 'zero' | 'delete';
+export type BulkAction = 'activate' | 'deactivate' | 'category' | 'zero' | 'delete' | 'vat' | 'exempt';
 
 /**
  * activate/deactivate = เปิด/ปิดแสดงขาย · category = ย้ายหมวดหมู่ · zero = ล้างสต็อกเป็น 0 · delete = ลบสินค้า
@@ -760,7 +765,7 @@ export type BulkAction = 'activate' | 'deactivate' | 'category' | 'zero' | 'dele
  */
 export function bulkProducts(body: { ids?: number[]; action?: string; categoryId?: string }, me: Me) {
   if (me.role !== 'manager') throw new HttpError(403, 'เฉพาะผู้จัดการเท่านั้น', 'NO_PERMISSION');
-  const action = (['activate', 'deactivate', 'category', 'zero', 'delete'] as const).find((a) => a === body.action);
+  const action = (['activate', 'deactivate', 'category', 'zero', 'delete', 'vat', 'exempt'] as const).find((a) => a === body.action);
   if (!action) throw new HttpError(422, 'ไม่รู้จักคำสั่ง');
   const ids = [...new Set((Array.isArray(body.ids) ? body.ids : []).map(Number).filter((n) => Number.isInteger(n) && n > 0))].slice(0, 1000);
   if (!ids.length) throw new HttpError(422, 'ยังไม่ได้เลือกสินค้า');
@@ -781,6 +786,11 @@ export function bulkProducts(body: { ids?: number[]; action?: string; categoryId
           break;
         case 'category':
           db.prepare(`UPDATE products SET category_id = ?, updated_at = ${now} WHERE id = ?`).run(body.categoryId, id);
+          break;
+        // เสีย VAT / ยกเว้น VAT (มีผลกับบิลใหม่ — บิลเดิมเก็บค่าตอนขายไว้แล้ว)
+        case 'vat':
+        case 'exempt':
+          db.prepare(`UPDATE products SET vat_exempt = ?, updated_at = ${now} WHERE id = ?`).run(action === 'exempt' ? 1 : 0, id);
           break;
         case 'zero': {
           const vs = q.variants.all(id) as VariantRow[];

@@ -10,6 +10,27 @@ const fs = require('node:fs');
 const os = require('node:os');
 const escpos = require('./escpos.cjs');
 const path = require('node:path');
+const crypto = require('node:crypto');
+const { execFileSync } = require('node:child_process');
+
+// ---------------------------------------------------------------- ชุดทดลอง (license)
+// ตัวติดตั้งชุดทดลองมีไฟล์ trial.json {"licenseServer": "https://license.sh0p.tech"} (build ด้วย npm run dist:trial)
+// → เปิดครั้งแรกขึ้นหน้า "เปิดใช้งาน" ให้กรอก license → ได้ที่อยู่ระบบของร้าน + PIN ผู้จัดการ
+// โหมดพัฒนา: npm run start:trial (ใช้ trial.json) · เปลี่ยนเซิร์ฟเวอร์: ตั้ง POS_LICENSE_SERVER=http://localhost:3100
+// (ตอนพัฒนา npm start ปกติไม่อ่าน trial.json — ตัวติดตั้งหลักไม่มีไฟล์นี้)
+const TRIAL = (() => {
+  const dev = process.argv.includes('--trial') || process.env.POS_TRIAL === '1';
+  if (!app.isPackaged && !dev) return null;
+  try {
+    return JSON.parse(fs.readFileSync(path.join(__dirname, 'trial.json'), 'utf8'));
+  } catch {
+    return dev ? {} : null;
+  }
+})();
+// POS_LICENSE_SERVER ใช้ได้เฉพาะตอนพัฒนา — ตัวติดตั้งจริงใช้ค่าใน trial.json เท่านั้น (กันชี้ไปเซิร์ฟเวอร์ปลอม)
+const LICENSE_SERVER = String((!app.isPackaged && process.env.POS_LICENSE_SERVER) || TRIAL?.licenseServer || '').replace(/\/+$/, '');
+// แยกโฟลเดอร์ตั้งค่า (%APPDATA%\Clothing POS Trial) — ไม่ทับแอปร้านหลักที่ติดตั้งในเครื่องเดียวกัน
+if (TRIAL) app.setName('Clothing POS Trial');
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -41,8 +62,10 @@ const DEFAULTS = {
   // ---- เครื่องพิมพ์บาร์โค้ด (ป้ายติดสินค้า) — แยกจากเครื่องพิมพ์ใบเสร็จ
   labelPrinter: '', //     ชื่อเครื่องพิมพ์ป้ายใน Windows ('' = ถามทุกครั้ง)
   labelSilent: true, //    true = พิมพ์ทันทีไม่ถาม (เมื่อเลือกเครื่องไว้แล้ว)
+  // ---- ชุดทดลอง
+  license: null, //        { code, shop, expiresAt, route } หลังเปิดใช้งานสำเร็จ (route = ชื่อร้านหลังประตูเดียวของโหมดทดสอบ)
+  machineId: '', //        รหัสเครื่อง (สำรอง เมื่ออ่าน MachineGuid ของ Windows ไม่ได้)
 };
-let config = loadConfig();
 
 function loadConfig() {
   try {
@@ -82,6 +105,16 @@ function sanitize(c) {
     silent: c.silent !== false,
     labelPrinter: String(c.labelPrinter || '').slice(0, 200),
     labelSilent: c.labelSilent !== false,
+    license:
+      c.license && /^POS-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(c.license.code)
+        ? {
+            code: c.license.code,
+            shop: String(c.license.shop || '').slice(0, 80),
+            expiresAt: c.license.expiresAt ? String(c.license.expiresAt).slice(0, 19) : null,
+            route: /^[a-z0-9-]{1,30}$/.test(String(c.license.route || '')) ? String(c.license.route) : '',
+          }
+        : null,
+    machineId: /^[\w-]{8,128}$/.test(String(c.machineId || '')) ? String(c.machineId) : '',
   };
 }
 function saveConfig(next) {
@@ -90,6 +123,9 @@ function saveConfig(next) {
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
   return config;
 }
+// โหลดหลังประกาศ num/sanitize แล้ว — เดิมเรียกก่อน `const num` → ReferenceError ถูกกลืนใน catch
+// ทำให้ทุกครั้งที่เปิดโปรแกรมได้ค่าเริ่มต้นเสมอ (ลืมเครื่องพิมพ์/เซิร์ฟเวอร์ที่ตั้งไว้)
+let config = loadConfig();
 const serverOrigin = () => new URL(config.serverUrl).origin;
 
 // ---------------------------------------------------------------- กุญแจแอป (ใช้ได้เฉพาะโปรแกรมนี้)
@@ -103,19 +139,100 @@ const APP_KEY = (() => {
   }
 })();
 const appHeaders = () => (APP_KEY ? { 'X-POS-App': APP_KEY } : {});
-function installAppKey() {
-  if (!APP_KEY) return;
-  // ทุกคำขอไปยังเซิร์ฟเวอร์ (หน้าเว็บ API รูป หน้าพิมพ์) แนบกุญแจ — เฉพาะเซิร์ฟเวอร์ที่ตั้งไว้เท่านั้น
+// ngrok (ทดสอบ) แทรกหน้าเตือนก่อนเข้าเว็บ — header นี้ข้ามหน้าเตือน
+const NGROK_HOST = /\.ngrok(-free)?\.(app|dev|io)$/i;
+const NGROK_HEADERS = { 'ngrok-skip-browser-warning': '1' };
+/** ทุกคำขอไปยังเซิร์ฟเวอร์ร้าน (หน้าเว็บ API รูป หน้าพิมพ์) แนบกุญแจแอป + ชื่อร้าน (ชุดทดลองผ่านประตูเดียว) */
+function installRequestHeaders() {
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['https://*/*', 'http://*/*'] }, (d, cb) => {
-    let same = false;
+    let u = null;
     try {
-      same = new URL(d.url).origin === serverOrigin();
+      u = new URL(d.url);
     } catch {}
-    if (same) d.requestHeaders['X-POS-App'] = APP_KEY;
+    if (u && u.origin === serverOrigin()) {
+      if (APP_KEY) d.requestHeaders['X-POS-App'] = APP_KEY;
+      if (TRIAL && config.license?.route) {
+        d.requestHeaders['X-POS-Shop'] = config.license.route;
+        d.requestHeaders['X-POS-Machine'] = machineId(); // ประตูของร้านทดลองตรวจว่าเครื่องนี้ยังลงทะเบียนอยู่ทุกคำขอ
+      }
+    }
+    if (u && NGROK_HOST.test(u.hostname)) Object.assign(d.requestHeaders, NGROK_HEADERS);
     cb({ requestHeaders: d.requestHeaders });
   });
+  // ชุดทดลอง: ประตูตอบว่า license/เครื่องใช้ไม่ได้แล้ว (เช่น ผู้ดูแลลบเครื่องนี้) → ตรวจ license แล้วพากลับหน้าเปิดใช้งาน
+  if (TRIAL) {
+    session.defaultSession.webRequest.onHeadersReceived({ urls: ['https://*/*', 'http://*/*'] }, (d, cb) => {
+      const h = d.responseHeaders || {};
+      if (Object.keys(h).some((k) => k.toLowerCase() === 'x-pos-license')) recheckLicense();
+      cb({});
+    });
+  }
 }
-const updatesUrl = () => `${config.serverUrl}/updates/`;
+// ชุดทดลอง: อัปเดตจากเซิร์ฟเวอร์ license (แยกจากแอปร้านหลัก)
+const updatesUrl = () => (TRIAL && LICENSE_SERVER ? `${LICENSE_SERVER}/updates/` : `${config.serverUrl}/updates/`);
+
+// ---------------------------------------------------------------- license (ชุดทดลอง)
+/** รหัสเครื่อง: MachineGuid ของ Windows (คงที่แม้ลงโปรแกรมใหม่) → hash · อ่านไม่ได้ → สุ่มแล้วจำไว้ */
+function machineId() {
+  let raw = '';
+  if (process.platform === 'win32') {
+    try {
+      const out = execFileSync('reg', ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid'], { encoding: 'utf8', windowsHide: true, timeout: 5000 });
+      raw = (/MachineGuid\s+REG_SZ\s+([\w-]+)/i.exec(out) || [])[1] || '';
+    } catch {}
+  }
+  if (raw) return crypto.createHash('sha256').update(`clothing-pos:${raw}`).digest('hex').slice(0, 40);
+  if (!config.machineId) saveConfig({ machineId: crypto.randomUUID() });
+  return config.machineId;
+}
+const machineName = () => os.hostname().slice(0, 80);
+
+async function licenseCall(endpoint, code) {
+  if (!LICENSE_SERVER) return { ok: false, error: 'ยังไม่ได้ตั้งเซิร์ฟเวอร์ license (trial.json)', code: 'CONFIG' };
+  try {
+    const res = await net.fetch(`${LICENSE_SERVER}/api/${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...NGROK_HEADERS },
+      body: JSON.stringify({ code, machineId: machineId(), machineName: machineName() }),
+      signal: AbortSignal.timeout(endpoint === 'activate' ? 150_000 : 10_000),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || !j.ok) return { ok: false, error: j.error || `เซิร์ฟเวอร์ license ตอบ ${res.status}`, code: j.code || `HTTP${res.status}` };
+    return j;
+  } catch (e) {
+    return { ok: false, error: `ติดต่อเซิร์ฟเวอร์ license ไม่ได้ — ตรวจอินเทอร์เน็ต (${e.message})`, code: 'NETWORK' };
+  }
+}
+/** ได้คำตอบจาก license → จำที่อยู่ระบบของร้าน (แอปเปิดหน้า PIN ของร้านนี้ทุกครั้ง) */
+function rememberLicense(r) {
+  saveConfig({ serverUrl: r.url, license: { code: r.code || config.license?.code, shop: r.shop, expiresAt: r.expiresAt, route: r.route || '' } });
+  refreshTitle();
+}
+function showActivate(reason = '') {
+  if (win) win.loadFile(path.join(__dirname, 'activate.html'), { query: reason ? { reason } : {} });
+}
+// หมดอายุ / ระงับ / ไม่รู้จักเครื่อง → กลับไปหน้าเปิดใช้งาน · เน็ตหลุด → ใช้ต่อ (หน้าออฟไลน์จัดการเอง)
+const LICENSE_BLOCKING = new Set(['EXPIRED', 'REVOKED', 'NOT_FOUND', 'MACHINE_UNKNOWN', 'MACHINE_LIMIT']);
+/** ตรวจ license อีกครั้ง (ระหว่างใช้งาน) — ถูกระงับ/หมดอายุ/ลบเครื่อง → หน้าเปิดใช้งานทันที · เน็ตหลุด = ใช้ต่อ */
+let rechecking = false;
+async function recheckLicense() {
+  if (!TRIAL || !config.license || rechecking) return;
+  rechecking = true;
+  try {
+    const r = await licenseCall('check', config.license.code);
+    if (r.ok) rememberLicense(r);
+    else if (LICENSE_BLOCKING.has(r.code) && win && !win.webContents.getURL().startsWith('file:')) showActivate(r.error);
+  } finally {
+    rechecking = false;
+  }
+}
+async function startTrial() {
+  if (!config.license) return showActivate();
+  const r = await licenseCall('check', config.license.code);
+  if (r.ok) rememberLicense(r);
+  else if (LICENSE_BLOCKING.has(r.code)) return showActivate(r.error);
+  openServer();
+}
 
 // ---------------------------------------------------------------- หน้าต่างหลัก
 let win = null;
@@ -152,18 +269,39 @@ function createWindow() {
     return { action: 'deny' };
   });
   wc.on('will-navigate', (e, url) => {
-    if (url.startsWith('file:') || isServerUrl(url)) return;
+    if (isAppFile(url) || isServerUrl(url)) return;
     e.preventDefault();
     if (/^https?:/i.test(url)) shell.openExternal(url);
   });
   // เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ → หน้าออฟไลน์ (ลองใหม่อัตโนมัติ)
+  // ชุดทดลอง: ระบบร้านถูกปิดเพราะหมดอายุ/ระงับ → แจ้งเรื่อง license แทนหน้าออฟไลน์
+  const showOffline = async (err) => {
+    if (TRIAL && config.license) {
+      const r = await licenseCall('check', config.license.code);
+      if (!r.ok && LICENSE_BLOCKING.has(r.code)) return showActivate(r.error);
+    }
+    win?.loadFile(path.join(__dirname, 'offline.html'), { query: { url: config.serverUrl, err } });
+  };
   wc.on('did-fail-load', (_e, code, desc, url, isMainFrame) => {
     if (!isMainFrame || code === -3 /* ABORTED */ || url.startsWith('file:')) return;
-    win.loadFile(path.join(__dirname, 'offline.html'), { query: { url: config.serverUrl, err: `${desc} (${code})` } });
+    showOffline(`${desc} (${code})`);
+  });
+  // ชุดทดลองผ่านประตูเดียว / ngrok: ร้านปิดอยู่ตอบเป็นหน้า 502–504 แทนการเชื่อมต่อไม่ได้
+  wc.on('did-navigate', (_e, url, status) => {
+    if (TRIAL && status >= 502 && status <= 504 && isServerUrl(url)) showOffline(`HTTP ${status}`);
   });
 
   win.loadFile(path.join(__dirname, 'splash.html'));
-  setTimeout(openServer, 300);
+  setTimeout(() => (TRIAL ? startTrial() : openServer()), 300);
+}
+/** หน้าภายในแอปเท่านั้น (ไฟล์ในโฟลเดอร์โปรแกรม) — หน้าเว็บจากเซิร์ฟเวอร์พาไปไฟล์อื่นในเครื่องไม่ได้ */
+function isAppFile(url) {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'file:' && path.resolve(require('url').fileURLToPath(u)).startsWith(path.resolve(__dirname) + path.sep);
+  } catch {
+    return false;
+  }
 }
 function isServerUrl(url) {
   try {
@@ -428,7 +566,7 @@ const TEST_PAGE = (pw, opts = config) => `<!doctype html><html lang="th"><head><
 
 // ---------------------------------------------------------------- IPC
 const fromServer = (e) => isServerUrl(e.senderFrame?.url ?? '');
-const fromShell = (e) => (e.senderFrame?.url ?? '').startsWith('file:');
+const fromShell = (e) => isAppFile(e.senderFrame?.url ?? '');
 
 // ---------------------------------------------------------------- หัวหน้าต่าง
 // Clothing POS - Version: 1.0.3 | ร้าน <ชื่อร้าน>, <สาขา> | <IP เครื่องนี้>
@@ -455,6 +593,10 @@ function windowTitle() {
   if (shop) parts.push(`ร้าน ${shop}`);
   const ip = localIp();
   if (ip) parts.push(ip);
+  if (TRIAL && config.license?.expiresAt) {
+    const left = Math.max(0, Math.ceil((new Date(config.license.expiresAt.replace(' ', 'T')) - Date.now()) / 86_400_000));
+    parts.push(`ทดลอง เหลือ ${left} วัน`);
+  }
   return parts.join(' | ');
 }
 
@@ -568,7 +710,16 @@ ipcMain.handle('shell:save-config', (e, c) => {
   openServer(); // โหลดใหม่ให้หน้า POS ใช้ขนาดกระดาษ/เซิร์ฟเวอร์ใหม่
   return saved;
 });
-ipcMain.on('shell:retry', (e) => fromShell(e) && openServer());
+ipcMain.on('shell:retry', (e) => fromShell(e) && (TRIAL ? startTrial() : openServer()));
+// ---- หน้าเปิดใช้งาน (ชุดทดลอง)
+ipcMain.handle('shell:license-state', (e) => (fromShell(e) && TRIAL ? { code: config.license?.code || '', shop: config.license?.shop || '', machineName: machineName(), licenseServer: LICENSE_SERVER } : null));
+ipcMain.handle('shell:activate', async (e, code) => {
+  if (!fromShell(e) || !TRIAL) return deny;
+  const r = await licenseCall('activate', String(code || ''));
+  if (r.ok) rememberLicense(r);
+  return r;
+});
+ipcMain.on('shell:start-pos', (e) => fromShell(e) && config.license && openServer());
 ipcMain.on('shell:open-settings', (e) => fromShell(e) && openSettings());
 ipcMain.on('shell:close-settings', (e) => fromShell(e) && settingsWin?.close());
 
@@ -691,6 +842,21 @@ Menu.setApplicationMenu(
         { label: 'ตั้งค่าเครื่องนี้ (เครื่องพิมพ์ / กระดาษ / เซิร์ฟเวอร์)', accelerator: 'CmdOrCtrl+,', click: openSettings },
         { label: 'โหลดหน้าใหม่', accelerator: 'F5', click: openServer },
         { label: 'ตรวจสอบอัปเดต', click: checkNow },
+        ...(TRIAL
+          ? [
+              {
+                label: 'ข้อมูล license',
+                click: () =>
+                  dialog.showMessageBox(win, {
+                    type: 'info',
+                    title: 'license',
+                    message: config.license ? `${config.license.shop}` : 'ยังไม่ได้เปิดใช้งาน',
+                    detail: config.license ? `รหัส: ${config.license.code}\nใช้ได้ถึง: ${config.license.expiresAt || '-'}\nระบบร้าน: ${config.serverUrl}\nเครื่อง: ${machineName()}` : '',
+                  }),
+              },
+              { label: 'เปลี่ยน license', click: () => showActivate() },
+            ]
+          : []),
         { type: 'separator' },
         { label: 'เครื่องมือนักพัฒนา', accelerator: 'F12', role: 'toggleDevTools' },
         { label: `เกี่ยวกับ (เวอร์ชัน ${app.getVersion()})`, click: () => dialog.showMessageBox(win, { type: 'info', title: 'Clothing POS', message: `Clothing POS ${app.getVersion()}`, detail: `เซิร์ฟเวอร์: ${config.serverUrl}\nพัฒนาต้นแบบโดย n4444n` }) },
@@ -709,8 +875,9 @@ app.on('second-instance', () => {
   }
 });
 app.whenReady().then(() => {
-  installAppKey();
+  installRequestHeaders();
   createWindow();
   setupUpdater();
+  if (TRIAL) setInterval(recheckLicense, 2 * 60_000); // ระงับ/ต่ออายุ/ลบเครื่องในแผงควบคุม มีผลภายใน 2 นาทีแม้เปิดค้างไว้
 });
 app.on('window-all-closed', () => app.quit());

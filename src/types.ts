@@ -1,3 +1,4 @@
+// ชนิดข้อมูลหลักที่ใช้ร่วมกัน (สินค้า · บิล · กะ · เอกสารภาษี …) — ตรงกับที่เซิร์ฟเวอร์ส่งมา
 export interface Category {
   id: string;
   name: string;
@@ -25,6 +26,8 @@ export interface Product {
   imageUrl: string | null;
   lowStock?: number;
   attrs?: Attr[];
+  /** สินค้ายกเว้น VAT */
+  vatExempt?: boolean;
 }
 
 export interface Variant {
@@ -57,6 +60,8 @@ export interface Bootstrap {
   orderTypes: string[];
   vatRate: number;
   nextOrderNo: string;
+  /** เครื่อง POS ของเครื่องนี้ (ตั้งค่า → ภาษี → เครื่องนี้) */
+  terminal?: PosTerminal | null;
   /** กะที่เปิดอยู่ (null = ยังไม่เปิดกะ) */
   shift: ShiftBrief | null;
   stockAlerts?: StockSummary;
@@ -89,7 +94,12 @@ export interface OrderItem {
   qty: number;
   unitPrice: number;
   lineTotal: number;
+  /** ยกเว้น VAT (ค่า ณ ตอนขาย) */
+  vatExempt?: boolean;
 }
+
+/** เครื่อง POS · rdNo = หมายเลขเครื่องที่ได้รับอนุมัติจากกรมสรรพากร */
+export interface PosTerminal { id?: number; code: string; rdNo: string; name?: string }
 
 export interface Order {
   id: number;
@@ -111,6 +121,12 @@ export interface Order {
   changeDue: number | null;
   createdAt?: string;
   items: OrderItem[];
+  /** อัตรา VAT (%) ที่ใช้ในบิลนี้ · ฐานภาษี · มูลค่ายกเว้น VAT */
+  vatRate?: number | null;
+  vatBase?: number | null;
+  exemptAmount?: number;
+  /** เครื่อง POS ที่ออกบิล */
+  terminal?: PosTerminal | null;
 }
 
 // ---------------- ประวัติการขาย ----------------
@@ -151,6 +167,8 @@ export interface HistoryFilter {
 }
 
 export interface DetailItem extends OrderItem {
+  /** id รายการในบิล (ใช้เลือกสินค้าที่รับคืนในใบลดหนี้) */
+  itemId?: number;
   variantId: number;
   productId: number | null;
   colorHex: string | null;
@@ -159,7 +177,8 @@ export interface DetailItem extends OrderItem {
 
 export interface OrderEdit {
   id: number;
-  kind: 'edit' | 'void';
+  /** credit = ออกใบลดหนี้ (รับคืนสินค้า) */
+  kind: 'edit' | 'void' | 'credit';
   editedAt: string;
   staff: string;
   reason: string;
@@ -177,8 +196,46 @@ export interface OrderDetail extends Omit<Order, 'items'> {
   updatedAt: string | null;
   editCount: number;
   voidReason: string | null;
+  /** ยกเลิกเมื่อ / ผู้ทำรายการ / ผู้อนุมัติ (บิลไม่ถูกลบ) */
+  voidedAt?: string | null;
+  voidedBy?: string | null;
+  voidApprover?: string | null;
   items: DetailItem[];
   edits: OrderEdit[];
+  /** ใบกำกับภาษีเต็มรูปของบิลนี้ (รวมใบที่ยกเลิก) */
+  taxInvoices?: TaxInvoiceRow[];
+  /** ใบลดหนี้ (รับคืนสินค้า) */
+  creditNotes?: (CreditNoteRow & { items: CreditNoteItem[] })[];
+  /** จำนวนที่คืนแล้วต่อรายการ (itemId → ชิ้น) */
+  returned?: Record<string, number>;
+}
+
+// ---------------- เอกสารภาษีหลังการขาย ----------------
+export interface TaxInvoiceRow {
+  id: number; orderId: number; docNo: string; buyerName: string; buyerAddress: string; buyerTaxId: string; buyerBranch: string;
+  vatRate: number; vatBase: number; vat: number; exempt: number; total: number; issuedAt: string; issuedBy: string;
+  status: 'active' | 'cancelled'; cancelReason: string | null; cancelledAt: string | null; cancelledBy: string | null;
+}
+export interface CreditNoteItem {
+  orderItemId: number; variantId: number | null; name: string; sku: string | null; size: string | null; color: string | null; extra: string | null;
+  qty: number; unitPrice: number; lineTotal: number; vatExempt: boolean | number;
+}
+export interface CreditNoteRow {
+  id: number; orderId: number; docNo: string; reason: string; refundMethod: PaymentMethod; gross: number; total: number;
+  vatRate: number; vatBase: number; vat: number; exempt: number; issuedAt: string; issuedBy: string; approver: string;
+}
+/** ผู้ขาย (หัวเอกสาร) */
+export interface TaxSeller { name: string; shopName: string; taxId: string; branch: string; branchName: string; address: string; phone: string }
+/** ใบกำกับภาษีเต็มรูปพร้อมพิมพ์ */
+export interface TaxInvoiceDoc extends TaxInvoiceRow {
+  buyerBranchText: string; orderNo: string; orderDate: string; subtotal: number; discount: number; fee: number;
+  items: (OrderItem & { vatExempt: boolean })[]; seller: TaxSeller;
+}
+/** ใบลดหนี้พร้อมพิมพ์ */
+export interface CreditNoteDoc extends CreditNoteRow {
+  orderNo: string; orderDate: string; orderTotal: number; orderVat: number; priorCredits?: number; taxInvoiceNo: string | null;
+  buyer: { name: string; address: string; taxId: string; branch: string } | null;
+  items: CreditNoteItem[]; seller: TaxSeller;
 }
 
 export interface EditPreview {
@@ -333,6 +390,8 @@ export interface StockRow {
   imageUrl: string | null;
   active: boolean;
   lowStock: number;
+  /** ยกเว้น VAT (0/1 จาก server) */
+  vatExempt?: boolean | number;
   skuCount: number;
   skuActive: number;
   stock: number;
@@ -373,6 +432,8 @@ export interface ProductFull {
   tint: string;
   imageUrl: string | null;
   active: boolean;
+  /** ยกเว้น VAT */
+  vatExempt?: boolean;
   note: string | null;
   lowStock: number;
   attrs: Attr[];

@@ -1,3 +1,4 @@
+// ป้ายสถานะบิล (ชำระแล้ว / แก้ไขแล้ว / ยกเลิก)
 import { StyleSheet, Text, View } from 'react-native';
 import { STATUS_LABEL, STATUS_TONE } from '../../format';
 import { font, radius } from '../../theme';

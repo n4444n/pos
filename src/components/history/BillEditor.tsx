@@ -1,3 +1,4 @@
+// แก้ไขบิล / เปลี่ยนสินค้า (สาขาที่ไม่ล็อกการแก้ไข) — เก็บ/คืนส่วนต่าง
 import { sellableStock } from '../../appSettings';
 import { useEffect, useMemo, useState } from 'react';
 import {

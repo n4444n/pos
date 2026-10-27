@@ -1,3 +1,4 @@
+// หน้าขาย: แถบหมวดหมู่สินค้า
 import { memo, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useDragScroll } from '../dragScroll';

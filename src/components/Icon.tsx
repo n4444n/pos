@@ -1,3 +1,4 @@
+// ไอคอน (Ionicons) ที่ใช้ทั้งแอป
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ComponentProps } from 'react';
 

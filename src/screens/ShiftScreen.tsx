@@ -1,3 +1,4 @@
+// หน้า กะการขาย (เปิด/ปิดกะ · ประวัติกะ)
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { api } from '../api';

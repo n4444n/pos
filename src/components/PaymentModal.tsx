@@ -1,3 +1,4 @@
+// หน้าขาย: หน้าต่างชำระเงิน (เลือกวิธีชำระ · รับเงินสด/ทอน · ค่าธรรมเนียม)
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { baht, bahtShort, MONEY_RE, moneyInput, PAYMENT_LABEL } from '../format';
@@ -31,7 +32,6 @@ export function PaymentModal({ visible, total: base, initial, mode, onClose, onC
   const firstId = methods[0]?.id ?? 'cash';
   const [method, setMethod] = useState<PaymentMethod>(firstId);
   const [cash, setCash] = useState('');
-  const cfg = methods.find((m) => m.id === method);
   // ค่าธรรมเนียมของวิธีที่เลือก — ถ้าลูกค้าจ่าย บวกเพิ่มในยอดที่ต้องชำระ
   const fee = feeOf(method, base);
   const total = Math.round((base + (fee?.customer ? fee.fee : 0)) * 100) / 100;

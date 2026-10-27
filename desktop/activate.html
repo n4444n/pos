@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><title>เปิดใช้งาน Clothing POS</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #eef1f6; --card: #fff; --text: #1b1f27; --muted: #6b7280; --faint: #9aa1ad; --line: #e6e9ef; --soft: #f6f8fb;
+    --primary: #2f6bff; --primary-soft: #e8efff; --ok: #12804f; --ok-soft: #e6f5ed; --warn: #a75d00; --warn-soft: #fff3df;
+    --bad: #c93434; --bad-soft: #fcebea; --shadow: 0 1px 2px rgba(20,30,50,.05), 0 12px 40px rgba(20,30,50,.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161d; --card: #1b2029; --text: #e6e9ef; --muted: #9aa3b4; --faint: #6d7688; --line: #2b3240; --soft: #222833;
+      --primary: #6d8ff5; --primary-soft: #232d48; --ok: #4cc58a; --ok-soft: #173326; --warn: #f0ad4e; --warn-soft: #3a2c14;
+      --bad: #f07171; --bad-soft: #3a1d1f; --shadow: 0 12px 40px rgba(0,0,0,.35);
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; }
+  body { font: 15px/1.6 'Leelawadee UI', 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); }
+  .wrap { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 32px 16px; }
+  .card { width: 100%; max-width: 460px; background: var(--card); border-radius: 20px; box-shadow: var(--shadow); overflow: hidden; }
+  .body { padding: 30px 30px 22px; display: grid; gap: 18px; }
+  .view { display: grid; gap: 18px; }
+
+  /* หัว */
+  .head { display: flex; align-items: center; gap: 14px; }
+  .logo { flex: none; width: 48px; height: 48px; border-radius: 14px; background: var(--primary); color: #fff; display: grid; place-items: center; }
+  .logo svg { width: 26px; height: 26px; }
+  .badge-ok { background: var(--ok-soft); color: var(--ok); }
+  h1 { margin: 0; font-size: 20px; line-height: 1.35; font-weight: 700; }
+  .sub { margin: 2px 0 0; color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+
+  /* ช่องกรอก */
+  label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+  .code { width: 100%; font: 600 22px/1 Consolas, 'Cascadia Mono', monospace; letter-spacing: 2px; text-align: center; padding: 15px 12px;
+    color: var(--text); background: var(--soft); border: 1.5px solid var(--line); border-radius: 14px; text-transform: uppercase; }
+  .code::placeholder { color: var(--faint); letter-spacing: 2px; }
+  .code:focus { outline: none; border-color: var(--primary); background: var(--card); box-shadow: 0 0 0 4px var(--primary-soft); }
+  .hint { margin-top: 6px; font-size: 12px; color: var(--faint); }
+
+  button { font: inherit; border: 0; cursor: pointer; }
+  .primary { width: 100%; height: 50px; border-radius: 14px; background: var(--primary); color: #fff; font-size: 15.5px; font-weight: 700; }
+  .primary:hover { filter: brightness(1.05); }
+  .primary:disabled { opacity: .6; cursor: progress; }
+  .ghost { background: var(--soft); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; font-size: 13px; }
+  .ghost:hover { border-color: var(--faint); }
+
+  .note { display: flex; gap: 10px; align-items: flex-start; padding: 11px 13px; border-radius: 12px; font-size: 13.5px; line-height: 1.55; }
+  .note::before { flex: none; font-weight: 700; }
+  .warn { background: var(--warn-soft); color: var(--warn); } .warn::before { content: '!'; }
+  .err { background: var(--bad-soft); color: var(--bad); } .err::before { content: '×'; }
+
+  /* กำลังเตรียม */
+  .spin { width: 48px; height: 48px; border-radius: 50%; border: 4px solid var(--primary-soft); border-top-color: var(--primary); animation: r 0.9s linear infinite; flex: none; }
+  @keyframes r { to { transform: rotate(360deg); } }
+  .steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; font-size: 13.5px; color: var(--muted); }
+  .steps li { display: flex; gap: 10px; align-items: center; }
+  .steps i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); flex: none; }
+  .steps li.on { color: var(--text); } .steps li.on i { background: var(--primary); }
+
+  /* สำเร็จ */
+  .rows { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 11px 14px; font-size: 14px; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row > span { color: var(--muted); }
+  .row b { font-weight: 600; text-align: right; word-break: break-all; }
+  .chip { display: inline-block; margin-left: 6px; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--ok-soft); color: var(--ok); }
+  .chip.warn { background: var(--warn-soft); color: var(--warn); }
+  .chip.warn::before { content: none; }
+  .pin { border-radius: 14px; padding: 14px 16px; background: var(--primary-soft); display: grid; gap: 4px; text-align: center; }
+  .pin small { color: var(--muted); font-size: 12.5px; }
+  .pin b { font: 700 30px/1.3 Consolas, 'Cascadia Mono', monospace; letter-spacing: 6px; color: var(--primary); }
+  .pin-note { font-size: 13px; color: var(--muted); text-align: center; }
+
+  .foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 30px; border-top: 1px solid var(--line); background: var(--soft); color: var(--faint); font-size: 12px; }
+</style></head>
+<body><div class="wrap"><div class="card">
+  <div class="body">
+
+    <!-- กรอก license -->
+    <form id="formView" class="view">
+      <div class="head">
+        <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 6l2 4 2-1v12h8V9l2 1 2-4-4-3c-.5 1.5-2 2.5-4 2.5S8.5 4.5 8 3z"/></svg></div>
+        <div><h1>เปิดใช้งาน Clothing POS</h1><p class="sub">กรอกรหัส license ที่ได้รับจากผู้ขาย</p></div>
+      </div>
+      <div class="note warn" id="reason" hidden></div>
+      <div>
+        <label for="code">รหัส license</label>
+        <input class="code" id="code" placeholder="POS-XXXX-XXXX" maxlength="16" autocomplete="off" spellcheck="false" autofocus>
+        <div class="hint">พิมพ์ตัวเล็ก/ไม่ใส่ขีดก็ได้ ระบบจัดรูปแบบให้</div>
+      </div>
+      <div class="note err" id="error" hidden></div>
+      <button class="primary" id="go">เปิดใช้งาน</button>
+    </form>
+
+    <!-- กำลังสร้างระบบร้าน -->
+    <div id="waitView" class="view" hidden>
+      <div class="head">
+        <div class="spin"></div>
+        <div><h1>กำลังเตรียมระบบร้าน…</h1><p class="sub">ครั้งแรกใช้เวลาประมาณ 10–60 วินาที ไม่ต้องปิดโปรแกรม</p></div>
+      </div>
+      <ul class="steps">
+        <li class="on"><i></i>ตรวจรหัส license</li>
+        <li class="on"><i></i>ลงทะเบียนเครื่องนี้</li>
+        <li class="on"><i></i>เปิดระบบของร้านบนเซิร์ฟเวอร์</li>
+      </ul>
+    </div>
+
+    <!-- สำเร็จ -->
+    <div id="doneView" class="view" hidden>
+      <div class="head">
+        <div class="logo badge-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></div>
+        <div><h1 id="doneTitle">พร้อมใช้งานแล้ว</h1><p class="sub" id="doneSub"></p></div>
+      </div>
+      <div class="rows">
+        <div class="row"><span>ร้าน</span><b id="dShop"></b></div>
+        <div class="row"><span>ใช้ได้ถึง</span><b><span id="dExp"></span><span class="chip" id="dLeft"></span></b></div>
+        <div class="row"><span>เครื่องที่ใช้</span><b id="dMach"></b></div>
+      </div>
+      <div class="pin" id="pinBox" hidden>
+        <small>PIN ผู้จัดการเริ่มต้น — จดไว้ แล้วเปลี่ยนได้ที่เมนู "พนักงาน"</small>
+        <b id="dPin"></b>
+      </div>
+      <p class="pin-note" id="pinNote" hidden>เข้าสู่ระบบด้วย PIN พนักงานที่ร้านตั้งไว้</p>
+      <button class="primary" id="start">เริ่มใช้งาน</button>
+    </div>
+
+  </div>
+  <div class="foot"><span id="machine"></span><button class="ghost" id="settings" type="button">ตั้งค่าเครื่องนี้</button></div>
+</div></div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const shell = window.desktopShell;
+  const views = ['formView', 'waitView', 'doneView'];
+  const view = (v) => views.forEach((id) => ($(id).hidden = id !== v));
+  const q = new URLSearchParams(location.search);
+
+  if (q.get('reason')) { $('reason').textContent = q.get('reason'); $('reason').hidden = false; }
+  shell.licenseState().then((s) => {
+    if (!s) return;
+    $('machine').textContent = `${s.machineName} · แอป v${shell.version}`;
+    if (s.code) $('code').value = s.code;
+  });
+
+  // พิมพ์แบบไหนก็ได้ (ตัวเล็ก / ไม่มีขีด / วางทั้งข้อความ) → จัดรูปแบบ POS-XXXX-XXXX ให้เอง
+  // ตัวรหัสไม่มีตัว O → "P", "PO" คือกำลังพิมพ์คำนำหน้า POS อยู่
+  $('code').oninput = (e) => {
+    let s = $('code').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (s === 'P' || s === 'PO') return void ($('code').value = s);
+    if (s.startsWith('POS')) s = s.slice(3);
+    s = s.slice(0, 8);
+    // ลบจนเหลือแค่คำนำหน้า → ล้างช่อง (ไม่ค้าง "POS-")
+    if (!s) return void ($('code').value = e.inputType && e.inputType.startsWith('delete') ? '' : 'POS-');
+    $('code').value = `POS-${s.slice(0, 4)}${s.length > 4 ? '-' + s.slice(4) : ''}`;
+  };
+
+  const TH_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  const thaiDate = (s) => { const [y, m, d] = s.slice(0, 10).split('-').map(Number); return `${d} ${TH_MONTHS[m - 1]} ${y + 543}`; };
+
+  $('formView').onsubmit = async (e) => {
+    e.preventDefault();
+    $('error').hidden = true;
+    if (!/^POS-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test($('code').value)) {
+      $('error').textContent = 'รหัสต้องเป็นรูปแบบ POS-XXXX-XXXX';
+      $('error').hidden = false;
+      return;
+    }
+    view('waitView');
+    const r = await shell.activate($('code').value);
+    if (!r.ok) {
+      view('formView');
+      $('error').textContent = r.error;
+      $('error').hidden = false;
+      $('code').focus();
+      return;
+    }
+    $('doneTitle').textContent = r.created ? 'สร้างระบบร้านเรียบร้อย' : 'เปิดใช้งานเครื่องนี้แล้ว';
+    $('doneSub').textContent = r.created ? 'เปิดโปรแกรมครั้งหน้าจะเข้าหน้า PIN ของร้านทันที' : 'เครื่องนี้จะจำระบบของร้านไว้ เปิดครั้งหน้าเข้าได้ทันที';
+    $('dShop').textContent = r.shop;
+    $('dExp').textContent = r.expiresAt ? thaiDate(r.expiresAt) : '-';
+    $('dLeft').textContent = r.expiresAt ? `เหลือ ${r.daysLeft} วัน` : '';
+    $('dLeft').hidden = !r.expiresAt;
+    $('dLeft').classList.toggle('warn', r.daysLeft <= 7);
+    $('dMach').textContent = `${r.machines} จาก ${r.maxMachines} เครื่อง`;
+    // PIN ผู้จัดการได้เฉพาะตอนสร้างร้านครั้งแรก
+    $('dPin').textContent = r.managerPin || '';
+    $('pinBox').hidden = !r.managerPin;
+    $('pinNote').hidden = !!r.managerPin;
+    view('doneView');
+    $('start').focus();
+  };
+  $('start').onclick = () => shell.startPos();
+  $('settings').onclick = () => shell.openSettings();
+</script>
+</body></html>

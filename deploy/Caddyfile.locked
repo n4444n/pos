@@ -37,3 +37,6 @@
 		}
 	}
 }
+
+# ระบบ license + ร้านทดลอง (deploy/license-setup.sh) — ไม่มีไฟล์ก็ไม่เป็นไร
+import /etc/caddy/conf.d/*.caddy

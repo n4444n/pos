@@ -1,3 +1,4 @@
+// แสดงบาร์โค้ดบนจอ (Code 128 / EAN-13)
 import { memo, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';

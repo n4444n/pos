@@ -1,3 +1,4 @@
+// กะ: รายละเอียดกะที่ปิดแล้ว
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api';

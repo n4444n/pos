@@ -5,7 +5,7 @@ import { db, withBranch } from './db.ts';
 import { getSettings, publicSettings, type Settings } from './settings.ts';
 import { listBranches } from './branches.ts';
 import {
-  EVENTS, eventByName, eventMeta, flexMessage, plainText, sampleVars, type EventKey, type NotifyItem,
+  COMMON_PLACEHOLDERS, EVENTS, eventByName, eventMeta, flexMessage, plainText, sampleVars, type EventKey, type NotifyItem,
 } from './notify.ts';
 
 export type EventName =
@@ -197,7 +197,7 @@ export function notifyCatalog() {
   const c = commonVars();
   return EVENTS.map((e) => ({
     key: e.key, name: e.name, label: e.label, desc: e.desc, hasItems: e.hasItems,
-    placeholders: [['shop', 'ชื่อร้าน'], ['branch', 'ชื่อสาขา'], ['branchCode', 'รหัสสาขา'], ['date', 'วันที่'], ['time', 'เวลา'], ['staff', 'พนักงาน'], ...e.placeholders],
+    placeholders: [...COMMON_PLACEHOLDERS, ...e.placeholders],
     sample: { ...sampleVars(e.key), shop: c.shop, branch: c.branch, branchCode: c.branchCode },
     sampleItems: e.sampleItems,
     defaultTemplate: e.template,

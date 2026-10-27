@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+// หน้า ประวัติการขาย (ค้นหา · กรอง · เปิดรายละเอียดบิล)
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
 } from 'react-native';

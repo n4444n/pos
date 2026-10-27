@@ -43,7 +43,8 @@ interface EventMeta {
   template: CardTemplate;
 }
 
-const COMMON: [string, string][] = [
+/** ตัวแปรที่ใช้ได้ทุกเหตุการณ์ ({shop} {branch} …) — แสดงในหน้าตั้งค่าการแจ้งเตือน */
+export const COMMON_PLACEHOLDERS: [string, string][] = [
   ['shop', 'ชื่อร้าน'], ['branch', 'ชื่อสาขา'], ['branchCode', 'รหัสสาขา'], ['date', 'วันที่'], ['time', 'เวลา'], ['staff', 'พนักงาน'],
 ];
 const COMMON_SAMPLE = { shop: 'ร้านเสื้อผ้า ABC', branch: 'สาขาภูเก็ต', branchCode: 'B02', date: '11 ต.ค. 2569', time: '15:42', staff: 'มายด์' };
@@ -160,10 +161,8 @@ export const EVENTS: EventMeta[] = [
     }),
   },
 ];
-export const EVENT_KEYS = EVENTS.map((e) => e.key);
 export const eventByName = (name: string) => EVENTS.find((e) => e.name === name);
 export const eventMeta = (key: EventKey) => EVENTS.find((e) => e.key === key)!;
-export const ALL_PLACEHOLDERS = (key: EventKey) => [...COMMON, ...eventMeta(key).placeholders];
 export const sampleVars = (key: EventKey) => ({ ...COMMON_SAMPLE, ...eventMeta(key).sample });
 
 export const DEFAULT_STYLE: CardStyle = { color: '#2F6BFF', logoUrl: '', buttonLabel: '', buttonUrl: '', size: 'mega' };

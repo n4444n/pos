@@ -13,8 +13,10 @@ data/
 .pin-secret
 uploads/
 desktop/release/
+desktop/release-trial/
 desktop/runtime/
 # กุญแจแอป — ห้ามขึ้น GitHub (repo เป็นสาธารณะ)
 desktop/app-key.txt
 # ผลจากเครื่องพิมพ์จำลอง
 printer-output/
+*.log

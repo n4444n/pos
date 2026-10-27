@@ -1,3 +1,4 @@
+// สต็อก: เพิ่ม/แก้ไขสินค้า (รายละเอียด · ราคา · ตัวเลือก · รูป · ยกเว้น VAT)
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { api } from '../../api';
@@ -214,6 +215,20 @@ export function ProductEditor({ productId, categories, onCategoriesChanged, onCl
         </View>
       </Pressable>
 
+      {/* ภาษีมูลค่าเพิ่ม: สินค้าเสีย VAT / ยกเว้น VAT (มีผลกับบิลใหม่) */}
+      <FieldLabel>ภาษีมูลค่าเพิ่ม (VAT)</FieldLabel>
+      <View style={s.vatSeg}>
+        {([[false, 'เสีย VAT', 'ราคาขายรวม VAT แล้ว'], [true, 'ยกเว้น VAT', 'ไม่คิด VAT ในบิล']] as const).map(([v, label, hint]) => {
+          const on = draft.vatExempt === v;
+          return (
+            <Pressable key={label} onPress={() => patch({ vatExempt: v })} style={[s.vatBtn, on && s.vatOn]} accessibilityRole="radio" accessibilityState={{ checked: on }}>
+              <Text style={[s.label, on && { color: colors.primary }]}>{label}</Text>
+              <Text style={s.small}>{hint}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
       <FieldLabel>ภาพสินค้า</FieldLabel>
       <ImagePicker imageUrl={draft.imageUrl} art={draft.art} tint={draft.tint} onChange={(v) => patch(v)} />
 
@@ -428,6 +443,9 @@ const s = StyleSheet.create({
   inputWarn: { borderColor: '#F3C4C6' },
   textarea: { height: 96, paddingTop: 10, textAlignVertical: 'top' },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, marginTop: 10, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.line },
+  vatSeg: { flexDirection: 'row', gap: 8 },
+  vatBtn: { flex: 1, paddingVertical: 8, paddingHorizontal: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: '#fff', gap: 2 },
+  vatOn: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   track: { width: 42, height: 24, borderRadius: 12, backgroundColor: colors.line, padding: 3 },
   trackOn: { backgroundColor: colors.success },
   knob: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#fff' },

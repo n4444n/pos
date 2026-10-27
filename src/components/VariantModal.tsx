@@ -1,3 +1,4 @@
+// หน้าขาย: เลือกสี/ไซซ์ของสินค้าก่อนใส่ตะกร้า
 import { allowNegativeStock, sellableStock } from '../appSettings';
 import { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
