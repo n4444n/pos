@@ -9,9 +9,7 @@
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win nsis --x64 --publish never",
-    "dist:trial": "electron-builder --config electron-builder.trial.cjs --win nsis --x64 --publish never",
-    "start:trial": "electron . --trial"
+    "dist": "electron-builder --win nsis --x64 --publish never"
   },
   "dependencies": {
     "electron-updater": "^6.6.2"

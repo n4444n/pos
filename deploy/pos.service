@@ -10,6 +10,7 @@ Group=pos
 WorkingDirectory=/opt/pos
 Environment=NODE_ENV=production
 Environment=PORT=3000
+Environment=POS_HOST=127.0.0.1
 Environment=TZ=Asia/Bangkok
 Environment=DB_PATH=/var/lib/pos/pos.db
 Environment=WEB_DIR=/opt/pos/dist

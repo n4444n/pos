@@ -120,7 +120,7 @@ API key สิทธิ์ `sync` และ `settings.stock.sync` (ระบบ�
 | `server.ts` | API ของแอป (`/api/activate`, `/api/check`) · แผงควบคุม `/admin` · หมดอายุ → ปิดร้าน |
 | `store.ts` | ฐานข้อมูล license (`licenses`, `instances`, `machines`, `events`) |
 | `provision.ts` | สร้าง/เปิด/ปิดร้าน: บนเครื่อง (child process) หรือ VPS (`deploy/pos-trial-ctl.sh`) |
-| `gateway.ts` | โหมดทดสอบ: ทุกร้านอยู่หลังพอร์ต 3100 (`/shop/<ชื่อย่อ>`) · ตรวจเครื่องทุกคำขอ |
+| `gateway.ts` | ประตูเดียวเข้าทุกร้าน: แยกร้านด้วย header `X-POS-Shop` · ตรวจ license + เครื่องทุกคำขอ · ผู้ดูแลเปิดดูร้านด้วย cookie ที่มีลายเซ็น |
 | `shopdata.ts` | ข้อมูลร้าน (จำนวนสินค้า/บิล/ยอดขาย) + สำรองข้อมูลร้าน ทั้งร้าน/รายสาขา (กดเอง + อัตโนมัติวันละครั้ง · เก็บ 20 ไฟล์) ผ่าน API ภายในของร้าน `server/internal.ts` (token = HMAC ต่อร้าน) |
 | `http.ts` | ตัวช่วย HTTP · กันเดารหัส · ล็อกงานทีละร้าน |
 | `admin.html` | หน้าแผงควบคุม (ไฟล์เดียว) |

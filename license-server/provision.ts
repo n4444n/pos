@@ -1,7 +1,7 @@
 // สร้าง/เปิด/ปิด instance ของร้านทดลอง
-//   PROVISIONER=systemd (VPS)  → เรียก sudo pos-trial-ctl (สร้างโฟลเดอร์ข้อมูล + Caddy + systemd pos-trial@<slug>)
+//   PROVISIONER=systemd (VPS)  → เรียก sudo pos-trial-ctl (สร้างโฟลเดอร์ข้อมูล + systemd pos-trial@<slug>)
 //   PROVISIONER=local (ทดสอบ)  → รันเซิร์ฟเวอร์ POS เป็น child process บนเครื่องนี้ (localhost:<port>)
-//                                เข้าผ่านประตูเดียวของเซิร์ฟเวอร์ license (gateway.ts) — เปิดผ่าน ngrok ได้
+// ทั้งสองแบบ: ทุกร้านอยู่หลังประตูเดียวของเซิร์ฟเวอร์ license (gateway.ts) ไม่มีโดเมนแยกต่อร้าน
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, renameSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -44,6 +44,7 @@ export async function waitHealthy(port: number, timeoutMs = 60_000) {
 class SystemdProvisioner implements Provisioner {
   readonly mode = 'systemd' as const;
   private ctl: string;
+  /** ที่อยู่ของแอป (APP_BASE) เช่น https://pos.sh0p.tech */
   private domain: string;
   private tokenFor: TokenFor;
   constructor(ctl: string, domain: string, tokenFor: TokenFor) {
@@ -51,8 +52,9 @@ class SystemdProvisioner implements Provisioner {
     this.domain = domain;
     this.tokenFor = tokenFor;
   }
-  shopUrl(slug: string) {
-    return `https://${slug}.${this.domain}`;
+  /** ทุกร้านอยู่หลังโดเมนเดียว — ลิงก์นี้ใช้เปิดดูร้านจากแผงควบคุม (ต้องมี token ต่อท้าย) */
+  shopUrl(slug: string, base: string) {
+    return `${this.domain || base}/shop/${slug}`;
   }
   private run(args: string[], stdin = '') {
     return new Promise<void>((ok, fail) => {
@@ -162,7 +164,7 @@ class LocalProvisioner implements Provisioner {
 export function makeProvisioner(tokenFor: TokenFor): Provisioner & { stopAll?: () => void } {
   const mode = process.env.PROVISIONER ?? 'local';
   if (mode === 'systemd') {
-    return new SystemdProvisioner(process.env.TRIAL_CTL ?? '/usr/local/bin/pos-trial-ctl', process.env.TRIAL_DOMAIN ?? 'trial.sh0p.tech', tokenFor);
+    return new SystemdProvisioner(process.env.TRIAL_CTL ?? '/usr/local/bin/pos-trial-ctl', (process.env.APP_BASE ?? '').replace(/\/+$/, ''), tokenFor);
   }
   return new LocalProvisioner(
     resolve(process.env.POS_DIR ?? '..'),

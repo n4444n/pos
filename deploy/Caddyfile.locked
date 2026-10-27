@@ -1,14 +1,17 @@
 # Caddy — ล็อกให้ใช้ได้เฉพาะแอป Clothing POS (.exe)
 # ติดตั้งด้วย: bash /opt/pos/deploy/app-lock.sh on   ({$POS_DOMAIN} / {$POS_APP_KEY} / {$POS_DL_HASH} ถูกแทนที่ตอนติดตั้ง)
+# ทุกร้านอยู่หลังประตูเดียวพอร์ต 3100 — แยกร้านด้วย header X-POS-Shop (เซิร์ฟเวอร์ license ตรวจ license + เครื่องซ้ำอีกชั้น)
 {$POS_DOMAIN} {
 	encode gzip
 
 	route {
-		# ผ่านได้เฉพาะ: แอปที่มีกุญแจ (X-POS-App) · ระบบภายนอกที่ใช้ API key (เซิร์ฟเวอร์ตรวจ key เอง) · หน้าดาวน์โหลด (มีรหัสผ่านของตัวเอง)
+		# ผ่านได้เฉพาะ: แอปที่มีกุญแจ (X-POS-App) · ระบบภายนอกที่ใช้ API key · ลิงก์ "เปิดระบบร้าน" จากแผงควบคุม (/shop/…)
+		# · เบราว์เซอร์ที่ถือ cookie ดูร้าน (มีลายเซ็นของเซิร์ฟเวอร์ ปลอมเองไม่ได้) · หน้าดาวน์โหลด (มีรหัสผ่านของตัวเอง)
 		@blocked {
 			not header X-POS-App "{$POS_APP_KEY}"
 			not header X-API-Key *
-			not path /download/*
+			not header Cookie *pos_shop=*
+			not path /download/* /shop/*
 		}
 		respond @blocked "Clothing POS - ใช้งานได้เฉพาะผ่านโปรแกรมที่ติดตั้งในร้าน" 403 {
 			close
@@ -33,10 +36,7 @@
 		}
 
 		handle {
-			reverse_proxy 127.0.0.1:3000
+			reverse_proxy 127.0.0.1:3100
 		}
 	}
 }
-
-# ระบบ license + ร้านทดลอง (deploy/license-setup.sh) — ไม่มีไฟล์ก็ไม่เป็นไร
-import /etc/caddy/conf.d/*.caddy
