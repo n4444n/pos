@@ -112,53 +112,59 @@ push ขึ้น main แล้ว GitHub build `.exe` บน Windows ของ
 
 ห้ามเก็บไฟล์ .exe ไว้ใน GitHub (repo เป็นสาธารณะ และไฟล์มีกุญแจแอป) — workflow ส่งขึ้น VPS เท่านั้น
 
-## ร้านทดลอง: license + สร้างระบบร้านอัตโนมัติ
-ออก license จากแผงควบคุม → ร้านติดตั้ง `.exe` ชุดทดลอง (ตัวเดียวกันทุกร้าน) → กรอก license → ระบบสร้างร้านให้เอง
+## ทุกร้านหลังโดเมนเดียว — แยกด้วย license
+ทุกเครื่อง (ร้านของเรา + ร้านลูกค้า) ใช้ **ตัวติดตั้งเดียวกัน** และเข้า **โดเมนเดียวกัน** (`https://pos.sh0p.tech`)
+แอปแนบ `X-POS-Shop: <ชื่อย่อร้าน>` + `X-POS-Machine: <รหัสเครื่อง>` ไปทุกคำขอ → ประตู (พอร์ต 3100) ส่งต่อไปเซิร์ฟเวอร์ของร้านนั้น
 
 ```
-คุณ (แผงควบคุม)            ร้านทดลอง (แอป)              VPS (เซิร์ฟเวอร์ license)
-ออก license ร้าน A          ติดตั้ง .exe ชุดทดลอง
-60 วัน · 2 เครื่อง  ──────▶  กรอก POS-XXXX-XXXX  ───────▶  ตรวจ license · ยังไม่มีร้าน?
-                                                         → จองพอร์ต 3101 · /var/lib/pos-trial/a
-                                                         → Caddy a.trial.sh0p.tech · pos-trial@a
-                            ได้ URL + PIN ผู้จัดการ  ◀────  → ลงทะเบียนเครื่องนี้
-                            แอปจำไว้ → เปิดหน้า PIN
+แอป .exe  ── X-POS-Shop: a ──▶ Caddy (กุญแจแอป) ──▶ ประตู :3100 ──┬─▶ ร้านหลัก :3000  (pos.service)
+                                                  ตรวจ license     ├─▶ ร้าน a    :3101  (pos-trial@a)
+เบราว์เซอร์ ───────────────────▶ 403              ตรวจเครื่อง       └─▶ ร้าน b    :3102  (pos-trial@b)
 ```
+
+- **เปิดผ่าน URL ไม่ได้** — Caddy ตอบ 403 ถ้าไม่มีกุญแจแอป และประตูตอบ 403 ถ้าไม่มี `X-POS-Shop` ที่ถูกต้อง
+- **ผู้ดูแลเปิดดูร้านได้** — กด "เปิดในแท็บใหม่" ในแผงควบคุม → ลิงก์ `/shop/<ร้าน>?t=…` ใช้ครั้งเดียว อายุ 2 นาที
+  → ตั้ง cookie ที่มีลายเซ็นของเซิร์ฟเวอร์ (ปลอมเองไม่ได้) เปิดดูได้ 8 ชั่วโมง
+- **ร้านหลักอยู่ในระบบ license ด้วย** (ชื่อย่อ `main`) แต่ไม่มีวันหมดอายุ และระงับ/หยุด/ลบจากแผงควบคุมไม่ได้
+- เซิร์ฟเวอร์ของทุกร้านฟังเฉพาะ `127.0.0.1` (`POS_HOST`) — เข้าตรงจากภายนอกไม่ได้
 
 | ส่วน | ไฟล์ |
 |---|---|
-| เซิร์ฟเวอร์ license + แผงควบคุม | `license-server/server.ts` (+ `store.ts`, `provision.ts`, `admin.html`) → บริการ `pos-license` พอร์ต 3100 |
-| สร้าง/เปิด/ปิดร้าน (root) | `deploy/pos-trial-ctl.sh` → `/usr/local/bin/pos-trial-ctl` (เรียกผ่าน sudo เฉพาะคำสั่งนี้) |
-| ร้านละ 1 บริการ | `deploy/pos-trial@.service` → `pos-trial@a` ใช้โค้ด `/opt/pos` ชุดเดียวกับร้านหลัก · ข้อมูล `/var/lib/pos-trial/a` |
-| HTTPS | `deploy/license.caddy` → `/etc/caddy/conf.d/` · ร้านละไฟล์ `/etc/caddy/trials/<ร้าน>.caddy` |
-| แอปชุดทดลอง | `desktop/trial.json` + `desktop/activate.html` · build ด้วย `npm run dist:trial` |
+| เซิร์ฟเวอร์ license + ประตู + แผงควบคุม | `license-server/` (`server.ts` · `gateway.ts` · `store.ts` · `provision.ts` · `admin.html`) → บริการ `pos-license` พอร์ต 3100 |
+| สร้าง/เปิด/ปิดร้านลูกค้า (root) | `deploy/pos-trial-ctl.sh` → `/usr/local/bin/pos-trial-ctl` (เรียกผ่าน sudo เฉพาะคำสั่งนี้) |
+| ร้านลูกค้าละ 1 บริการ | `deploy/pos-trial@.service` → `pos-trial@a` ใช้โค้ด `/opt/pos` ชุดเดียวกับร้านหลัก · ข้อมูล `/var/lib/pos-trial/a` |
+| HTTPS | `deploy/Caddyfile[.locked]` (โดเมนแอป) · `deploy/license.caddy` → `/etc/caddy/conf.d/` (โดเมนแผงควบคุม) |
+| แอป | ตัวติดตั้งเดียว `cd desktop && npm run dist` · หน้าเปิดใช้งาน `desktop/activate.html` |
 
 ### ติดตั้งบน VPS (ครั้งเดียว)
-1. DNS ของ `sh0p.tech`: `A license → <IP ของ VPS>` และ `A *.trial → <IP ของ VPS>`
+1. DNS ของ `sh0p.tech`: `A license → <IP ของ VPS>`
 2. อัปเดตโค้ด (`pos-update`) แล้วรัน
    ```bash
-   bash /opt/pos/deploy/license-setup.sh license.sh0p.tech trial.sh0p.tech
+   bash /opt/pos/deploy/license-setup.sh license.sh0p.tech pos.sh0p.tech
    ```
    สคริปต์ถามรหัสผ่านแผงควบคุม (เปลี่ยนภายหลัง: `license-setup.sh --password`)
+   และสร้าง license ของร้านหลักให้อัตโนมัติ (แสดงรหัสตอนจบ)
 3. เปิด `https://license.sh0p.tech/admin`
 
-### ตัวติดตั้งชุดทดลอง
-บนเครื่อง build: `cd desktop && npm run dist:trial` → `release-trial\ClothingPOS-Trial-Setup-<เวอร์ชัน>.exe` + `latest.yml`
-อัปโหลดไปที่ VPS `/var/www/pos-trial-updates/` แล้วคัดลอกเป็นชื่อคงที่ `ClothingPOS-Trial-Setup.exe` (ลิงก์ที่ส่งให้ร้าน)
-```powershell
-scp desktop\release-trial\ClothingPOS-Trial-Setup-*.exe desktop\release-trial\latest.yml root@<IP ของ VPS>:/var/www/pos-trial-updates/
-ssh root@<IP ของ VPS> "cd /var/www/pos-trial-updates && cp -f $(ls -t ClothingPOS-Trial-Setup-*.exe | head -1) ClothingPOS-Trial-Setup.exe"
-```
-แอปชุดทดลองอัปเดตตัวเองจาก `https://license.sh0p.tech/updates/` (แยกจากแอปร้านหลัก) · ลงคู่กับแอปหลักในเครื่องเดียวกันได้
+### ย้ายระบบโดยร้านไม่สะดุด
+ตอนติดตั้งครั้งแรก `LEGACY_MAIN=1` — แอปรุ่นเก่า (ยังไม่กรอก license) ยังเข้าร้านหลักได้ ทำตามลำดับนี้
+
+1. `bash /opt/pos/deploy/app-lock.sh on` — ปิดกั้นเบราว์เซอร์ (ต้องทำก่อน เพราะช่วงนี้ประตูยังรับคำขอที่ไม่มี license)
+2. อัปเดตแอปทุกเครื่องในร้าน แล้วกรอก license ของร้านหลัก (ดูในแผงควบคุม)
+3. `bash /opt/pos/deploy/license-setup.sh --legacy off` — บังคับให้ทุกแอปต้องมี license
+
+### ตัวติดตั้ง (ตัวเดียวทุกร้าน)
+GitHub Actions สร้างให้อัตโนมัติทุกครั้งที่ push ขึ้น main แล้วส่งขึ้น `/var/www/pos-updates/`
+ร้านลูกค้าดาวน์โหลดจาก `https://pos.sh0p.tech/download/` (มีรหัสผ่าน) · แอปที่ติดตั้งแล้วอัปเดตเองจาก `/updates/`
 
 ### กติกา
 - **อายุนับจากวันที่ร้านกรอก license ครั้งแรก** (ไม่ใช่วันที่ออก) · ครบกำหนด → ระบบปิดร้านให้ภายใน 5 นาที, แอปขึ้นหน้า "หมดอายุ"
 - ต่ออายุ: ยังไม่หมด → ต่อจากวันหมดเดิม · หมดแล้ว → นับใหม่จากวันนี้ · ข้อมูลร้านยังอยู่ กด "เปิดร้าน" หรือให้ร้านเปิดแอปใหม่
-- เครื่องเกินจำนวน → ปฏิเสธ · ลบเครื่องเก่าในแผงควบคุม (✕) แล้วเครื่องใหม่ใช้แทนได้ · รหัสเครื่อง = MachineGuid ของ Windows (ลงโปรแกรมใหม่ก็เป็นเครื่องเดิม)
-- PIN ผู้จัดการเริ่มต้นสุ่มให้ทุกร้าน (แสดงในแอปและแผงควบคุม) · พนักงานตัวอย่างไม่มี PIN เดาง่าย (`POS_NO_DEMO_PINS=1`)
-- ระงับ license → ปิดร้านทันที · คืนสถานะ → เปิดร้านได้อีก
-- `pos-update` รีสตาร์ตร้านทดลองทุกร้านด้วย (ใช้โค้ดเดียวกัน)
-- ร้านทดลองยังไม่ล็อกแบบ "เฉพาะแอป" (X-POS-App) — เปิดผ่านเบราว์เซอร์ได้ แต่ต้องมี PIN
+- เครื่องเกินจำนวน → ปฏิเสธ · ลบเครื่องเก่าในแผงควบคุม แล้วเครื่องใหม่ใช้แทนได้ · รหัสเครื่อง = MachineGuid ของ Windows (ลงโปรแกรมใหม่ก็เป็นเครื่องเดิม)
+- PIN ผู้จัดการเริ่มต้นสุ่มให้ร้านใหม่ (แสดงในแอปและแผงควบคุม) · ร้านหลักใช้ PIN เดิมของร้าน
+- ระงับ license → ปิดร้านทันที · คืนสถานะ → เปิดร้านได้อีก · แอปตรวจซ้ำทุก 2 นาที
+- `pos-update` รีสตาร์ตทุกร้านด้วย (ใช้โค้ดเดียวกัน)
+- ระบบภายนอกที่ใช้ `X-API-Key` และไม่ได้ส่ง `X-POS-Shop` → เข้าร้านหลัก (ร้านตรวจ key เอง)
 
 | ต้องการ | คำสั่งบน VPS |
 |---|---|

@@ -1,12 +1,21 @@
 // ฐานข้อมูล license + instance ของร้านทดลอง (node:sqlite — ไม่มี dependency ภายนอก)
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { randomInt } from 'node:crypto';
+import { createHmac, randomBytes, randomInt } from 'node:crypto';
 
 export const DB_PATH = resolve(process.env.LICENSE_DB ?? 'data/license.db');
 mkdirSync(dirname(DB_PATH), { recursive: true });
 export const db = new DatabaseSync(DB_PATH);
+
+// ความลับของเซิร์ฟเวอร์ (ไฟล์อยู่ข้างฐานข้อมูล) — ใช้ลงลายเซ็น cookie "ดูร้าน" และ token API ภายในของร้าน
+const SECRET_FILE = resolve(dirname(DB_PATH), 'internal-secret.txt');
+const SECRET = (() => {
+  if (!existsSync(SECRET_FILE)) writeFileSync(SECRET_FILE, `${randomBytes(32).toString('hex')}\n`, { mode: 0o600 });
+  return readFileSync(SECRET_FILE, 'utf8').trim();
+})();
+/** ลายเซ็นของข้อความ (ปลอมไม่ได้ถ้าไม่มีไฟล์ความลับ) */
+export const sign = (label: string) => createHmac('sha256', SECRET).update(label).digest('hex');
 
 db.exec(`
   PRAGMA journal_mode = WAL;

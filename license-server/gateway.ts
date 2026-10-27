@@ -1,38 +1,48 @@
-// ประตูเดียวเข้าทุกร้าน (โหมดทดสอบ) — เปิดผ่าน ngrok ได้ด้วยลิงก์เดียว
+// ประตูเดียวเข้าทุกร้าน — ทุกร้านอยู่หลังโดเมนเดียว (เช่น https://pos.sh0p.tech)
 //
 //   แอป .exe     ส่ง header  X-POS-Shop: <slug> + X-POS-Machine: <รหัสเครื่อง>
 //                → ตรวจทุกคำขอว่าเครื่องยังลงทะเบียนกับ license ร้านนี้ (ลบเครื่องในแผงควบคุม = ใช้ไม่ได้ทันที)
-//   เบราว์เซอร์   เฉพาะผู้ดูแลที่เข้าสู่ระบบแผงควบคุมแล้ว: เปิด /shop/<slug> → จำร้านไว้ใน cookie → หน้า POS ของร้านนั้น
-//                (ใช้ตรวจร้านจากแผงควบคุม · คนทั่วไปเปิดผ่านเบราว์เซอร์ไม่ได้)
+//   เบราว์เซอร์   เข้าไม่ได้ ยกเว้นผู้ดูแลกด "เปิดระบบร้าน" ในแผงควบคุม → ลิงก์ /shop/<slug>?t=<token ใช้ครั้งเดียว>
+//                → ตั้ง cookie ที่มีลายเซ็นของเซิร์ฟเวอร์ (ปลอมเองไม่ได้) → เปิดหน้า POS ของร้านนั้นได้ 8 ชั่วโมง
 //
 // ร้านที่ถูกระงับ/หมดอายุ/หยุดอยู่ → ตอบ 503 (แอปเช็ก license แล้วพากลับหน้าเปิดใช้งาน)
-// บน VPS (PROVISIONER=systemd) ไม่ใช้ส่วนนี้ — แต่ละร้านมีโดเมนย่อยของตัวเองผ่าน Caddy
 import { request, type IncomingMessage, type ServerResponse } from 'node:http';
-import { db, getInstance, getLicenseBySlug, isExpired, SLUG_RE } from './store.ts';
+import { db, getInstance, getLicenseBySlug, isExpired, sign, SLUG_RE } from './store.ts';
 import { clientIp, cookie, json, redirect, SEC_HEADERS } from './http.ts';
 
 export const SHOP_HEADER = 'x-pos-shop';
 export const MACHINE_HEADER = 'x-pos-machine';
 const SHOP_COOKIE = 'pos_shop';
+const VIEW_MS = 8 * 60 * 60 * 1000; // อายุของ cookie "ดูร้าน"
 
-/** ร้านที่คำขอนี้ต้องการ: แอป (header + รหัสเครื่อง) หรือผู้ดูแลผ่านเบราว์เซอร์ (cookie) */
-export function shopOf(req: IncomingMessage): { slug: string; machine: string } | null {
+/** cookie ดูร้าน = <slug>.<หมดอายุ>.<ลายเซ็น> */
+const viewCookie = (slug: string, exp: number) => `${slug}.${exp}.${sign(`view:${slug}:${exp}`)}`;
+function viewCookieSlug(raw: string): string {
+  const m = /^([a-z0-9-]{1,30})\.(\d{13})\.([a-f0-9]{64})$/.exec(raw);
+  if (!m || Number(m[2]) < Date.now()) return '';
+  return m[3] === sign(`view:${m[1]}:${m[2]}`) ? m[1] : '';
+}
+
+export interface ShopReq { slug: string; machine: string; view: boolean }
+
+/** ร้านที่คำขอนี้ต้องการ: แอป (header + รหัสเครื่อง) หรือผู้ดูแลที่กด "เปิดระบบร้าน" (cookie มีลายเซ็น) */
+export function shopOf(req: IncomingMessage): ShopReq | null {
   const h = String(req.headers[SHOP_HEADER] ?? '');
-  if (h) return SLUG_RE.test(h) ? { slug: h, machine: String(req.headers[MACHINE_HEADER] ?? '') } : null;
-  const c = cookie(req, SHOP_COOKIE);
-  return SLUG_RE.test(c) ? { slug: c, machine: '' } : null;
+  if (h) return SLUG_RE.test(h) ? { slug: h, machine: String(req.headers[MACHINE_HEADER] ?? ''), view: false } : null;
+  const c = viewCookieSlug(cookie(req, SHOP_COOKIE));
+  return c ? { slug: c, machine: '', view: true } : null;
 }
 
 const machineOk = db.prepare('SELECT 1 FROM machines WHERE license_id = ? AND machine_id = ?');
 
-/** /shop/<slug> → จำร้านใน cookie แล้วไปหน้าแรกของร้าน · /shop/ → ลืมร้าน กลับแผงควบคุม */
-export function selectShop(req: IncomingMessage, res: ServerResponse, slug: string, admin: boolean) {
-  if (slug && !admin) return redirect(res, '/admin'); // เปิดร้านผ่านเบราว์เซอร์ = เฉพาะผู้ดูแล
+/** /shop/<slug> (ผู้ดูแลยืนยันแล้ว) → ตั้ง cookie แล้วไปหน้าแรกของร้าน · /shop/ → ลืมร้าน */
+export function selectShop(req: IncomingMessage, res: ServerResponse, slug: string, home = '/admin') {
   const secure = String(req.headers['x-forwarded-proto'] ?? '') === 'https' ? '; Secure' : '';
   if (!slug || !SLUG_RE.test(slug)) {
-    return redirect(res, '/admin', { 'Set-Cookie': `${SHOP_COOKIE}=; Path=/; Max-Age=0` });
+    return redirect(res, home, { 'Set-Cookie': `${SHOP_COOKIE}=; Path=/; Max-Age=0` });
   }
-  redirect(res, '/', { 'Set-Cookie': `${SHOP_COOKIE}=${slug}; Path=/; SameSite=Lax; HttpOnly; Max-Age=2592000${secure}` });
+  const v = viewCookie(slug, Date.now() + VIEW_MS);
+  redirect(res, '/', { 'Set-Cookie': `${SHOP_COOKIE}=${v}; Path=/; SameSite=Lax; HttpOnly; Max-Age=${VIEW_MS / 1000}${secure}` });
 }
 
 function unavailable(req: IncomingMessage, res: ServerResponse, message: string, code: string, status = 503) {
@@ -42,14 +52,14 @@ function unavailable(req: IncomingMessage, res: ServerResponse, message: string,
 <title>ระบบร้านปิดอยู่</title>
 <body style="font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:90vh;margin:0;background:#f4f6fb;color:#1e293b">
 <div style="text-align:center;max-width:420px;padding:24px"><h2>ระบบร้านปิดอยู่</h2><p>${message}</p>
-<p><a href="/shop/">เลือกร้านอื่น / แผงควบคุม</a></p></div></body>`);
+<p><a href="/shop/">ออกจากหน้านี้</a></p></div></body>`);
 }
 
 /**
  * ส่งคำขอต่อไปเซิร์ฟเวอร์ POS ของร้าน (สตรีมทั้งสองทาง — รองรับไฟล์ใหญ่และ server-sent events)
  * admin = ผู้ดูแลที่เข้าสู่ระบบแผงควบคุมแล้ว (เปิดผ่านเบราว์เซอร์ได้โดยไม่ต้องมีรหัสเครื่อง)
  */
-export function proxyToShop(req: IncomingMessage, res: ServerResponse, shop: { slug: string; machine: string }, admin: boolean) {
+export function proxyToShop(req: IncomingMessage, res: ServerResponse, shop: ShopReq, admin = shop.view) {
   const { slug } = shop;
   const l = getLicenseBySlug(slug);
   const inst = getInstance(slug);

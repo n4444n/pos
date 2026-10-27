@@ -860,7 +860,8 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
+// POS_HOST=127.0.0.1 (บน VPS) = รับเฉพาะคำขอที่ผ่านประตูของเซิร์ฟเวอร์ license · ไม่ตั้ง = ทุกเครือข่าย (ใช้ในร้าน/LAN)
+server.listen(PORT, process.env.POS_HOST || undefined, () => {
   console.log(`\n  Clothing POS — พัฒนาต้นแบบโดย n4444n (MIT + Attribution)`);
   console.log(`\n  POS server ready → http://localhost:${PORT}`);
   console.log(`  Database        → ${DB_PATH}`);

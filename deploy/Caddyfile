@@ -1,5 +1,6 @@
 # Caddy — ออกใบรับรอง HTTPS ให้อัตโนมัติ
 # {$POS_DOMAIN} / {$POS_DL_HASH} ถูกแทนที่ตอนติดตั้ง (deploy/app-lock.sh) — บล็อก DOWNLOAD ถูกตัดออกถ้ายังไม่ตั้งรหัสดาวน์โหลด
+# ทุกร้าน (ร้านหลัก + ร้านทดลอง) อยู่หลังประตูเดียวของเซิร์ฟเวอร์ license พอร์ต 3100 — แยกร้านด้วย header X-POS-Shop
 {$POS_DOMAIN} {
 	encode gzip
 
@@ -23,7 +24,7 @@
 		}
 
 		handle {
-			reverse_proxy 127.0.0.1:3000
+			reverse_proxy 127.0.0.1:3100
 		}
 	}
 }

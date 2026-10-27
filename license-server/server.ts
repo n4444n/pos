@@ -4,18 +4,19 @@
 //   แผงควบคุม   /admin             ออก license (ร้าน · จำนวนวัน · จำนวนเครื่อง) · ต่ออายุ · ระงับ · ดูเครื่อง/สถานะร้าน
 //   แอป .exe    POST /api/activate กรอก license → ยังไม่มีร้าน? จองพอร์ต + สร้าง + เปิดบริการ → ตอบที่อยู่ + PIN
 //               POST /api/check    ตรวจทุกครั้งที่เปิดแอป (หมดอายุ / ถูกระงับ → แอปกลับไปหน้าเปิดใช้งาน)
-//   ร้านทดลอง   ทุกคำขออื่น         ส่งต่อไปเซิร์ฟเวอร์ POS ของร้าน (gateway.ts) — โหมดทดสอบเท่านั้น
+//   ทุกร้าน     ทุกคำขออื่น         ส่งต่อไปเซิร์ฟเวอร์ POS ของร้าน ตาม header X-POS-Shop (gateway.ts)
 //
-// ทุกอย่างอยู่หลังพอร์ตเดียว (3100) → เปิดผ่าน ngrok ได้ด้วยลิงก์เดียว: ngrok http 3100
+// ทุกอย่างอยู่หลังพอร์ตเดียว (3100): โดเมนแอป (เช่น pos.sh0p.tech) = ประตูเข้าร้าน + API ของแอป
+// โดเมนผู้ดูแล (ADMIN_DOMAIN เช่น license.sh0p.tech) = แผงควบคุมเท่านั้น · โหมดทดสอบใช้โดเมนเดียวกันทั้งหมด
 // ครบกำหนด → ปิดบริการของร้านให้อัตโนมัติ (ข้อมูลยังอยู่ ต่ออายุแล้วเปิดใหม่ได้)
-import { createServer, type IncomingMessage } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createReadStream, existsSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { randomBytes, randomInt, timingSafeEqual, createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   db, DB_PATH, daysLeft, freePort, getInstance, getLicense, getLicenseById, isExpired, localStamp, logEvent, machinesOf, newCode,
-  normalizeCode, parseStamp, SLUG_RE, slugOk, tx, type Instance, type License,
+  getLicenseBySlug, normalizeCode, parseStamp, SLUG_RE, slugOk, tx, type Instance, type License,
 } from './store.ts';
 import { makeProvisioner } from './provision.ts';
 import { archiveBackups, BACKUP_ROOT, backupPath, backupShop, listBackups, needsAutoBackup, shopStats, tokenFor } from './shopdata.ts';
@@ -29,6 +30,20 @@ const PORT_MIN = Number(process.env.TRIAL_PORT_MIN ?? 3101);
 const PORT_MAX = Number(process.env.TRIAL_PORT_MAX ?? 3999);
 const prov = makeProvisioner(tokenFor);
 const LOCAL = prov.mode === 'local';
+/** โดเมนของแผงควบคุม (ว่าง = โหมดทดสอบ ใช้โดเมนเดียวกับแอป) */
+const ADMIN_DOMAIN = (process.env.ADMIN_DOMAIN ?? '').toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+/** ที่อยู่ที่แอปใช้เข้าร้านทุกร้าน (เช่น https://pos.sh0p.tech) — ว่าง = ใช้ที่อยู่ของคำขอ (โหมดทดสอบ) */
+const APP_BASE = (process.env.APP_BASE ?? '').replace(/\/+$/, '');
+/** ร้านของเจ้าของระบบ: ใช้บริการ pos.service พอร์ต 3000 (ไม่ถูกสร้าง/ลบโดยแผงควบคุม) */
+const MAIN_SLUG = (process.env.MAIN_SLUG ?? '').toLowerCase();
+const MAIN_PORT = Number(process.env.MAIN_PORT ?? 3000);
+/** ช่วงย้ายระบบ: แอปรุ่นเก่า (ไม่ส่ง X-POS-Shop) ให้เข้าร้านหลักได้ — ปิดเมื่ออัปเดตแอปครบทุกเครื่อง */
+const LEGACY_MAIN = process.env.LEGACY_MAIN === '1' && !!MAIN_SLUG;
+const isMain = (slug: string) => !!MAIN_SLUG && slug === MAIN_SLUG;
+const appBase = (base: string) => APP_BASE || base;
+/** คำขอนี้เข้ามาทางโดเมนแผงควบคุมหรือไม่ (ไม่ได้ตั้ง ADMIN_DOMAIN = ทุกโดเมนถือเป็นแผงควบคุม) */
+const onAdminDomain = (req: IncomingMessage) =>
+  !ADMIN_DOMAIN || String(req.headers['x-forwarded-host'] ?? req.headers.host ?? '').split(':')[0].toLowerCase() === ADMIN_DOMAIN;
 
 /** รหัสผ่านแผงควบคุม: ADMIN_PASSWORD (VPS ต้องตั้ง) · โหมดทดสอบไม่ตั้ง → สุ่มครั้งแรกเก็บใน data/admin-password.txt (แก้ไฟล์เพื่อเปลี่ยนได้) */
 const PASSWORD_FILE = join(dirname(DB_PATH), 'admin-password.txt');
@@ -64,6 +79,11 @@ function provisionFailed(l: License, e: unknown, what: string): never {
 /** ให้ร้านมีระบบที่ทำงานอยู่ — ยังไม่มี: จองพอร์ต + สร้าง · หยุดอยู่: เปิด */
 async function ensureInstance(l: License): Promise<{ inst: Instance; created: boolean }> {
   const existing = getInstance(l.slug);
+  // ร้านหลักมีบริการของตัวเองอยู่แล้ว (pos.service) — แผงควบคุมไม่สร้าง/ไม่เปิดให้
+  if (isMain(l.slug)) {
+    if (!existing) throw new HttpError(500, 'ยังไม่ได้ตั้งค่าร้านหลัก', 'MAIN');
+    return { inst: existing, created: false };
+  }
   if (!existing) {
     const port = freePort(PORT_MIN, PORT_MAX);
     const pin = newPin();
@@ -79,6 +99,7 @@ async function ensureInstance(l: License): Promise<{ inst: Instance; created: bo
 }
 
 async function stopInstance(l: License, why: string) {
+  if (isMain(l.slug)) return; // ร้านหลักปิดจากแผงควบคุมไม่ได้
   const inst = getInstance(l.slug);
   if (!inst || inst.state === 'stopped') return;
   try {
@@ -113,13 +134,13 @@ const isKnownMachine = (licenseId: number, machineId: string) =>
 
 /**
  * ข้อมูลที่แอปใช้เปิดระบบร้าน
- *   url   = ที่อยู่ที่แอปเปิด (VPS: โดเมนย่อยของร้าน · ทดสอบ: ที่อยู่เซิร์ฟเวอร์ license เอง)
- *   route = ชื่อร้านที่แอปแนบใน header X-POS-Shop (เฉพาะโหมดทดสอบ — ผ่าน gateway)
+ *   url   = ที่อยู่ที่แอปเปิด (โดเมนเดียวกันทุกร้าน)
+ *   route = ชื่อย่อร้านที่แอปแนบใน header X-POS-Shop ทุกคำขอ (ประตูใช้แยกว่าเป็นร้านไหน)
  */
 const appInfo = (l: License, base: string) => ({
   shop: l.shop,
-  url: LOCAL ? base : prov.shopUrl(l.slug, base),
-  route: LOCAL ? l.slug : '',
+  url: appBase(base),
+  route: l.slug,
   expiresAt: l.expires_at,
   daysLeft: daysLeft(l),
   maxMachines: l.max_machines,
@@ -187,9 +208,10 @@ function listLicenses(base: string) {
       image: image ? `/admin/api/licenses/${l.id}/image?v=${encodeURIComponent(l.image_at)}` : '', // รูปโหลดแยก (รายการเบา)
       expired: isExpired(row),
       daysLeft: daysLeft(row),
+      main: isMain(l.slug),
       machines: machinesOf(l.id),
       instance: inst
-        ? { port: inst.port, url: prov.shopUrl(l.slug, base), state: inst.state, error: inst.error, managerPin: inst.manager_pin, createdAt: inst.created_at }
+        ? { port: inst.port, url: prov.shopUrl(l.slug, appBase(base)), state: inst.state, error: inst.error, managerPin: inst.manager_pin, createdAt: inst.created_at }
         : null,
     };
   });
@@ -207,14 +229,17 @@ function createLicense(b: Record<string, unknown>, base: string) {
   const code = newCode();
   const r = db.prepare('INSERT INTO licenses (code, shop, slug, days, max_machines, note) VALUES (?, ?, ?, ?, ?, ?)').run(code, shop, slug, days, max, str(b.note, 300));
   logEvent(Number(r.lastInsertRowid), 'license.issue', `${shop} · ${days} วัน · ${max} เครื่อง`);
-  return { code, slug, url: prov.shopUrl(slug, base) };
+  return { code, slug, url: prov.shopUrl(slug, appBase(base)) };
 }
 
 const IMAGE_MAX = 280_000;
 
+const MAIN_BLOCKED = new Set(['delete', 'revoke', 'stop', 'start']);
+
 async function adminAction(id: number, action: string, b: Record<string, unknown>) {
   const l = getLicenseById(id);
   if (!l) throw new HttpError(404, 'ไม่พบ license');
+  if (isMain(l.slug) && MAIN_BLOCKED.has(action)) throw new HttpError(400, 'ร้านหลักของระบบ — ระงับ/หยุด/ลบจากแผงควบคุมไม่ได้', 'MAIN');
   switch (action) {
     case 'extend': {
       const days = int(b.days ?? 30, 1, 3650);
@@ -289,10 +314,38 @@ async function adminAction(id: number, action: string, b: Record<string, unknown
   }
 }
 
+/**
+ * ร้านของเจ้าของระบบเข้าระบบ license ด้วย (แยกร้านด้วย header เหมือนร้านอื่น)
+ * ต่างจากร้านทดลอง: บริการเป็น pos.service พอร์ต 3000 · ไม่มีวันหมดอายุจริง · ระงับ/ลบจากแผงควบคุมไม่ได้
+ */
+function ensureMainShop() {
+  if (!MAIN_SLUG) return;
+  const exists = getLicenseBySlug(MAIN_SLUG);
+  const DAYS = 36500;
+  tx(() => {
+    if (!exists) {
+      const now = localStamp();
+      db.prepare(
+        `INSERT INTO licenses (code, shop, slug, days, max_machines, note, activated_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(newCode(), process.env.MAIN_NAME || 'ร้านหลัก', MAIN_SLUG, DAYS, int(process.env.MAIN_MACHINES ?? 10, 1, 50), 'ร้านของเจ้าของระบบ', now, addDays(now, DAYS));
+      logEvent(getLicenseBySlug(MAIN_SLUG)!.id, 'license.issue', `ร้านหลัก · พอร์ต ${MAIN_PORT}`);
+    }
+    // แถว instance ชี้ไปบริการที่มีอยู่แล้ว (ไม่สร้างใหม่) — PIN ว่าง = ใช้ PIN เดิมของร้าน
+    db.prepare(
+      `INSERT INTO instances (slug, port, manager_pin, state) VALUES (?, ?, '', 'running')
+       ON CONFLICT (slug) DO UPDATE SET port = excluded.port, state = 'running', error = ''`,
+    ).run(MAIN_SLUG, MAIN_PORT);
+  });
+  const l = getLicenseBySlug(MAIN_SLUG)!;
+  console.log(`  ร้านหลัก      → ${l.shop} (${MAIN_SLUG}) พอร์ต ${MAIN_PORT} · license ${l.code}`);
+}
+
 // ---------------------------------------------------------------- ครบกำหนด → ปิดร้าน
 async function sweep() {
   const rows = db.prepare("SELECT l.* FROM licenses l JOIN instances i ON i.slug = l.slug WHERE i.state = 'running'").all() as unknown as License[];
   for (const l of rows) {
+    if (isMain(l.slug)) continue;
     if (l.status === 'revoked' || isExpired(l)) await serial(l.slug, () => stopInstance(l, l.status === 'revoked' ? 'revoked' : 'expired'));
     // สำรองข้อมูลอัตโนมัติวันละครั้ง (เฉพาะร้านที่เปิดอยู่)
     else if (needsAutoBackup(l.slug)) {
@@ -319,6 +372,22 @@ async function shopInfo(l: License) {
   }
 }
 
+// ---------------------------------------------------------------- เปิดดูร้านจากแผงควบคุม
+// แผงควบคุมอยู่คนละโดเมนกับร้าน จึงออก token ใช้ครั้งเดียว อายุ 2 นาที แลกเป็น cookie ที่โดเมนของร้าน
+const viewTokens = new Map<string, { slug: string; exp: number }>();
+function viewLink(l: License, base: string) {
+  const t = randomBytes(18).toString('hex');
+  viewTokens.set(t, { slug: l.slug, exp: Date.now() + 120_000 });
+  return `${appBase(base)}/shop/${l.slug}?t=${t}`;
+}
+/** ใช้ token แล้วทิ้ง — คืนชื่อย่อร้านถ้ายังใช้ได้ */
+function useViewToken(t: string, slug: string) {
+  const v = viewTokens.get(t);
+  if (!v) return false;
+  viewTokens.delete(t);
+  return v.exp > Date.now() && v.slug === slug;
+}
+
 // ---------------------------------------------------------------- HTTP
 const ADMIN_HTML = readFileSync(join(HERE, 'admin.html'));
 const ADMIN_CSP =
@@ -343,7 +412,7 @@ async function handleAdminApi(req: IncomingMessage, p: string, base: string, ip:
   }
   requireAdmin(req);
   if (req.method === 'GET' && p === '/admin/api/licenses') {
-    const meta = { mode: prov.mode, publicUrl: base, trialDomain: process.env.TRIAL_DOMAIN ?? '', downloadUrl: process.env.DOWNLOAD_URL ?? '' };
+    const meta = { mode: prov.mode, publicUrl: base, appBase: appBase(base), mainSlug: MAIN_SLUG, legacyMain: LEGACY_MAIN, downloadUrl: process.env.DOWNLOAD_URL ?? '' };
     return { status: 200, body: { ...meta, licenses: listLicenses(base) } };
   }
   if (req.method === 'POST' && p === '/admin/api/licenses') return { status: 201, body: createLicense(await readBody(req), base) };
@@ -351,6 +420,11 @@ async function handleAdminApi(req: IncomingMessage, p: string, base: string, ip:
     return { status: 200, body: db.prepare('SELECT e.*, l.shop FROM events e LEFT JOIN licenses l ON l.id = e.license_id ORDER BY e.id DESC LIMIT 100').all() };
   }
   const m = /^\/admin\/api\/licenses\/(\d+)\/([a-z-]+)$/.exec(p);
+  if (req.method === 'GET' && m && m[2] === 'view') {
+    const l = getLicenseById(Number(m[1]));
+    if (!l) throw new HttpError(404, 'ไม่พบ license');
+    return { status: 200, body: { url: viewLink(l, base) } };
+  }
   if (req.method === 'GET' && m && m[2] === 'shop') {
     const l = getLicenseById(Number(m[1]));
     if (!l) throw new HttpError(404, 'ไม่พบ license');
@@ -367,54 +441,66 @@ async function handleAdminApi(req: IncomingMessage, p: string, base: string, ip:
 }
 
 const server = createServer(async (req, res) => {
-  const p = new URL(req.url ?? '/', 'http://x').pathname;
+  const url = new URL(req.url ?? '/', 'http://x');
+  const p = url.pathname;
   const ip = clientIp(req);
   const base = publicBase(req);
+  const adminSide = onAdminDomain(req);
   try {
-    // ---- แผงควบคุม
-    if (req.method === 'GET' && (p === '/admin' || p === '/admin/')) {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': ADMIN_CSP, ...SEC_HEADERS });
-      return res.end(ADMIN_HTML);
+    if (adminSide) {
+      // ---- แผงควบคุม (โดเมนผู้ดูแล)
+      if (req.method === 'GET' && (p === '/admin' || p === '/admin/')) {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': ADMIN_CSP, ...SEC_HEADERS });
+        return res.end(ADMIN_HTML);
+      }
+      const im = req.method === 'GET' ? /^\/admin\/api\/licenses\/(\d+)\/image$/.exec(p) : null;
+      if (im) {
+        requireAdmin(req);
+        const row = db.prepare('SELECT image FROM licenses WHERE id = ?').get(Number(im[1])) as { image: string } | undefined;
+        const mm = row && /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(row.image);
+        if (!mm) throw new HttpError(404, 'ไม่มีรูป');
+        res.writeHead(200, { 'Content-Type': mm[1], 'Cache-Control': 'private, max-age=86400', ...SEC_HEADERS });
+        return res.end(Buffer.from(mm[2], 'base64'));
+      }
+      const dl = req.method === 'GET' ? /^\/admin\/api\/licenses\/(\d+)\/backups\/([\w.-]+)$/.exec(p) : null;
+      if (dl) {
+        requireAdmin(req);
+        const l = getLicenseById(Number(dl[1]));
+        const path = l && backupPath(l.slug, dl[2]);
+        if (!path) throw new HttpError(404, 'ไม่พบไฟล์สำรอง');
+        res.writeHead(200, {
+          'Content-Type': 'application/vnd.sqlite3', 'Content-Length': statSync(path).size,
+          'Content-Disposition': `attachment; filename="${dl[2]}"`, 'Cache-Control': 'no-store', ...SEC_HEADERS,
+        });
+        return createReadStream(path).pipe(res);
+      }
+      if (p.startsWith('/admin/api/')) {
+        const r = await handleAdminApi(req, p, base, ip);
+        return json(res, r.status, r.body, r.cookie ? { 'Set-Cookie': r.cookie } : {});
+      }
     }
-    const im = req.method === 'GET' ? /^\/admin\/api\/licenses\/(\d+)\/image$/.exec(p) : null;
-    if (im) {
-      requireAdmin(req);
-      const row = db.prepare('SELECT image FROM licenses WHERE id = ?').get(Number(im[1])) as { image: string } | undefined;
-      const mm = row && /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(row.image);
-      if (!mm) throw new HttpError(404, 'ไม่มีรูป');
-      res.writeHead(200, { 'Content-Type': mm[1], 'Cache-Control': 'private, max-age=86400', ...SEC_HEADERS });
-      return res.end(Buffer.from(mm[2], 'base64'));
-    }
-    const dl = req.method === 'GET' ? /^\/admin\/api\/licenses\/(\d+)\/backups\/([\w.-]+)$/.exec(p) : null;
-    if (dl) {
-      requireAdmin(req);
-      const l = getLicenseById(Number(dl[1]));
-      const path = l && backupPath(l.slug, dl[2]);
-      if (!path) throw new HttpError(404, 'ไม่พบไฟล์สำรอง');
-      res.writeHead(200, {
-        'Content-Type': 'application/vnd.sqlite3', 'Content-Length': statSync(path).size,
-        'Content-Disposition': `attachment; filename="${dl[2]}"`, 'Cache-Control': 'no-store', ...SEC_HEADERS,
-      });
-      return createReadStream(path).pipe(res);
-    }
-    if (p.startsWith('/admin/api/')) {
-      const r = await handleAdminApi(req, p, base, ip);
-      return json(res, r.status, r.body, r.cookie ? { 'Set-Cookie': r.cookie } : {});
-    }
-    // ---- API ของแอป
+
+    // ---- API ของแอป (เปิดใช้งาน / ตรวจ license)
     if (req.method === 'POST' && p === '/api/activate') return json(res, 200, await activate(await readBody(req), ip, base));
     if (req.method === 'POST' && p === '/api/check') return json(res, 200, await check(await readBody(req), ip, base));
+    if (req.method === 'GET' && p === '/api/health') return json(res, 200, { ok: true, mode: prov.mode });
 
-    // ---- ร้านทดลอง (โหมดทดสอบ: ทุกร้านอยู่หลังพอร์ตนี้)
-    if (LOCAL) {
-      // ลิงก์เปิดร้าน: /shop/<ชื่อย่อ> (แบบเดิม /s/<ชื่อย่อ> ยังใช้ได้) · /shop/ = ลืมร้าน กลับแผงควบคุม
+    // ---- ประตูเข้าร้าน (โดเมนของแอป — โหมดทดสอบใช้โดเมนเดียวกับแผงควบคุม)
+    if (!ADMIN_DOMAIN || !adminSide) {
+      // ลิงก์ "เปิดระบบร้าน" จากแผงควบคุม: /shop/<ชื่อย่อ>?t=<token> · /shop/ = ออกจากหน้าร้าน
       const pick = /^\/(?:shop|s)(?:\/([^/]*))?\/?$/.exec(p);
-      if (req.method === 'GET' && pick) return selectShop(req, res, pick[1] ?? '', isAdmin(req));
-      const shop = shopOf(req);
-      if (shop) return proxyToShop(req, res, shop, !shop.machine && isAdmin(req));
+      if (req.method === 'GET' && pick) {
+        const slug = pick[1] ?? '';
+        const ok = !slug || (ADMIN_DOMAIN ? useViewToken(url.searchParams.get('t') ?? '', slug) : isAdmin(req));
+        return selectShop(req, res, ok ? slug : '', adminHome());
+      }
+      // ไม่มี X-POS-Shop: ระบบภายนอกที่ใช้ API key → ร้านหลัก (ร้านตรวจ key เอง) · ช่วงย้ายระบบ → แอปรุ่นเก่าเข้าร้านหลักได้
+      const toMain = !!MAIN_SLUG && (LEGACY_MAIN || !!req.headers['x-api-key']);
+      const shop = shopOf(req) ?? (toMain ? { slug: MAIN_SLUG, machine: '', view: true } : null);
+      if (shop) return proxyToShop(req, res, shop, shop.view || (!shop.machine && isAdmin(req)));
+      return appOnly(res); // เบราว์เซอร์ที่ไม่ได้มาจากแผงควบคุม
     }
 
-    if (req.method === 'GET' && p === '/api/health') return json(res, 200, { ok: true, mode: prov.mode });
     if (req.method === 'GET' && p === '/') {
       res.writeHead(302, { Location: '/admin' });
       return res.end();
@@ -426,6 +512,19 @@ const server = createServer(async (req, res) => {
     json(res, status, { ok: false, error: e instanceof Error ? e.message : 'Server error', code: e instanceof HttpError ? e.code : '' });
   }
 });
+
+/** ที่อยู่แผงควบคุม (ใช้เป็นลิงก์กลับหลังออกจากหน้าร้าน) */
+const adminHome = () => (ADMIN_DOMAIN ? `https://${ADMIN_DOMAIN}/admin` : '/admin');
+
+/** เปิดผ่านเบราว์เซอร์ตรง ๆ ไม่ได้ — ใช้ได้เฉพาะในแอป (ผู้ดูแลเปิดดูร้านได้จากแผงควบคุม) */
+function appOnly(res: ServerResponse) {
+  res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', ...SEC_HEADERS });
+  res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Clothing POS</title>
+<body style="font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:90vh;margin:0;background:#f4f6fb;color:#1e293b">
+<div style="text-align:center;max-width:420px;padding:24px"><h2>Clothing POS</h2>
+<p>ระบบนี้ใช้งานผ่านโปรแกรมที่ติดตั้งในร้านเท่านั้น</p></div></body>`);
+}
 
 // เปิดใหม่ (โหมดทดสอบ): ร้านที่เคยทำงานอยู่ → เปิดกลับมา · systemd เปิดเองอยู่แล้ว
 async function resume() {
@@ -442,6 +541,7 @@ server.listen(PORT, process.env.LICENSE_HOST ?? '127.0.0.1', async () => {
   console.log(`  ฐานข้อมูล    → ${DB_PATH}`);
   console.log(`  ไฟล์สำรองร้าน → ${BACKUP_ROOT}`);
   console.log(`  สร้างร้านแบบ → ${prov.mode}\n`);
+  ensureMainShop();
   await resume();
   await sweep();
   setInterval(() => {

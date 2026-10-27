@@ -47,6 +47,8 @@ if [ -f /etc/systemd/system/pos-license.service ]; then
   install -m 644 deploy/pos-trial@.service /etc/systemd/system/pos-trial@.service
   install -m 644 deploy/pos-license.service /etc/systemd/system/pos-license.service
   systemctl daemon-reload
+  install -m 755 deploy/app-lock.sh /usr/local/bin/pos-app-lock
+  bash deploy/app-lock.sh reapply   # แม่แบบ Caddy อาจเปลี่ยน (ประตูเข้าร้าน)
   systemctl restart pos-license
   for u in $(systemctl list-units --state=active --no-legend --plain 'pos-trial@*' | awk '{print $1}'); do systemctl restart "$u"; done
 fi

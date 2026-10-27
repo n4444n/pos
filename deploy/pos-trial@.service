@@ -16,6 +16,7 @@ Environment=TZ=Asia/Bangkok
 Environment=DB_PATH=/var/lib/pos-trial/%i/pos.db
 Environment=WEB_DIR=/opt/pos/dist
 Environment=POS_NO_DEMO_PINS=1
+Environment=POS_HOST=127.0.0.1
 # PORT + POS_MANAGER_PIN
 EnvironmentFile=/etc/pos-trial/%i.env
 ExecStart=/usr/bin/node --experimental-strip-types --disable-warning=ExperimentalWarning server/index.ts

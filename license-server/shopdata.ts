@@ -1,17 +1,11 @@
 // ข้อมูลร้าน + สำรองข้อมูลของร้านทดลอง
 // ถามเซิร์ฟเวอร์ POS ของร้านผ่าน API ภายใน http://127.0.0.1:<พอร์ต>/api/internal/* (ร้านต้องเปิดอยู่)
 // token ของแต่ละร้าน = HMAC(ความลับของเซิร์ฟเวอร์ license, ชื่อย่อร้าน) — ส่งให้ร้านตอนเปิด (env POS_INTERNAL_TOKEN)
-import { createHmac, randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { DB_PATH, localStamp } from './store.ts';
+import { DB_PATH, localStamp, sign } from './store.ts';
 
-const SECRET_FILE = join(dirname(DB_PATH), 'internal-secret.txt');
-const SECRET = (() => {
-  if (!existsSync(SECRET_FILE)) writeFileSync(SECRET_FILE, `${randomBytes(32).toString('hex')}\n`, { mode: 0o600 });
-  return readFileSync(SECRET_FILE, 'utf8').trim();
-})();
-export const tokenFor = (slug: string) => createHmac('sha256', SECRET).update(`pos-internal:${slug}`).digest('hex');
+export const tokenFor = (slug: string) => sign(`pos-internal:${slug}`);
 
 /** โฟลเดอร์เก็บไฟล์สำรอง: <BACKUP_DIR>/<ร้าน>/<ร้าน>-YYYYMMDD-HHMMSS[-b<สาขา>][-auto].db (-b = เฉพาะสาขา) */
 export const BACKUP_ROOT = resolve(process.env.BACKUP_DIR ?? join(dirname(DB_PATH), 'backups'));

@@ -202,10 +202,13 @@
   <div class="bar">
     <div class="brand"><div class="logo">L</div><div><b>แผงควบคุม License</b><small>Clothing POS · ร้านทดลอง</small></div></div>
     <span class="pill" id="mode"></span>
-    <div class="urlchip" id="urlChip" hidden title="ที่อยู่เซิร์ฟเวอร์ license — ใช้ตั้งในแอปชุดทดลองบนเครื่องอื่น (POS_LICENSE_SERVER)">
+    <div class="urlchip" id="urlChip" hidden title="ที่อยู่ที่ทุกร้านใช้เข้าระบบ (ตั้งไว้ในแอปแล้ว)">
       <span id="publicUrl"></span><button class="small icon" id="copyUrl">คัดลอก</button>
     </div>
     <button class="small" id="logout" hidden>ออกจากระบบ</button>
+  </div>
+  <div class="bar" id="legacyWarn" hidden style="padding-top:0">
+    <span class="badge b-warn">ช่วงย้ายระบบ: แอปรุ่นเก่าที่ยังไม่กรอก license ยังเข้าร้านหลักได้ — ปิดเมื่ออัปเดตครบทุกเครื่อง (LEGACY_MAIN=0)</span>
   </div>
 </header>
 
@@ -374,6 +377,7 @@ function lifeColor(l, st) {
   return l.status === 'revoked' ? 'var(--idle)' : st.key === 'bad' ? 'var(--bad)' : st.key === 'warn' ? 'var(--warn)' : 'var(--ok)';
 }
 function lifeText(l) {
+  if (l.main) return '<b>ไม่มีวันหมดอายุ</b>';
   if (!l.activated_at) return `<b>${l.days}</b> วัน <span class="sub">(ยังไม่เริ่มนับ)</span>`;
   return l.expired ? '<b style="color:var(--bad)">หมดอายุแล้ว</b>' : `เหลือ <b>${l.daysLeft}</b> วัน`;
 }
@@ -381,7 +385,7 @@ function meter(l, st) {
   const pct = !l.activated_at ? 100 : l.expired ? 0 : Math.max(3, Math.min(100, Math.round((l.daysLeft / Math.max(1, l.days)) * 100)));
   return `<div class="meter"><i style="width:${pct}%;background:${l.activated_at ? lifeColor(l, st) : 'var(--line)'}"></i></div>`;
 }
-const pinOf = (l) => (l.instance ? `<span class="pin">${esc(l.instance.managerPin)}</span>` : '<span class="sub">สร้างเมื่อเปิดใช้</span>');
+const pinOf = (l) => (l.main ? '<span class="sub">PIN เดิมของร้าน</span>' : l.instance ? `<span class="pin">${esc(l.instance.managerPin)}</span>` : '<span class="sub">สร้างเมื่อเปิดใช้</span>');
 
 function tile(l) {
   const st = statusOf(l);
@@ -391,7 +395,7 @@ function tile(l) {
       ${l.instance ? `<span class="run ${run ? 'on' : ''}"><i></i>${run ? 'ร้านเปิด' : 'ร้านปิด'}</span>` : ''}</div>
     <div class="tbody">
       <div class="tname">${esc(l.shop)}</div>
-      <div class="sub">${esc(l.slug)} · เครื่อง ${l.machines.length}/${l.max_machines}</div>
+      <div class="sub">${l.main ? '★ ร้านหลัก · ' : ''}${esc(l.slug)} · เครื่อง ${l.machines.length}/${l.max_machines}</div>
       <div class="kv"><span>License</span><span class="code copyable" data-copy="${esc(l.code)}" title="คลิกเพื่อคัดลอก">${esc(l.code)}</span></div>
       <div class="life"><div class="kv"><span>อายุคงเหลือ</span><span>${lifeText(l)}</span></div>${meter(l, st)}</div>
       <div class="kv"><span>PIN เริ่มต้น</span>${pinOf(l)}</div>
@@ -504,8 +508,8 @@ function renderDetail() {
       <section class="box">
         <h4>ระบบร้าน ${instBadge(i)}</h4>
         ${i ? `
-        <div class="kv"><span>PIN ผู้จัดการเริ่มต้น</span><span class="pin copyable" data-copy="${esc(i.managerPin)}" title="คลิกเพื่อคัดลอก">${esc(i.managerPin)}</span></div>
-        <div class="kv"><span>ที่อยู่</span><span><a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.url.replace(/^https?:\/\//, ''))} ↗</a></span></div>
+        <div class="kv"><span>PIN ผู้จัดการเริ่มต้น</span>${l.main ? '<span class="sub">ใช้ PIN เดิมของร้าน</span>' : `<span class="pin copyable" data-copy="${esc(i.managerPin)}" title="คลิกเพื่อคัดลอก">${esc(i.managerPin)}</span>`}</div>
+        <div class="kv"><span>เปิดดูร้านนี้</span><button class="small ghost" data-act="open">เปิดในแท็บใหม่ ↗</button></div>
         <div class="kv"><span>พอร์ต</span><span class="mono">${i.port}</span></div>
         <div class="kv"><span>สร้างเมื่อ</span><span>${thDate(i.createdAt, true)}</span></div>
         ${i.error ? `<div class="warnbox">${esc(i.error)}</div>` : ''}
@@ -523,13 +527,14 @@ function renderDetail() {
       </section>
     </div>
     <div class="dfoot acts">
+      ${l.main ? '<span class="sub">ร้านหลักของระบบ — ระงับ / หยุด / ลบ จากแผงควบคุมไม่ได้</span>' : `
       <button class="small ghost" data-act="extend">ต่ออายุ</button>
       <button class="small ghost" data-act="machines">จำนวนเครื่อง</button>
       ${i && i.state === 'running' ? '<button class="small ghost" data-act="stop">หยุดร้าน</button>' : ''}
       ${canStart ? '<button class="small ghost" data-act="start">เปิดร้าน</button>' : ''}
       <span class="sp"></span>
       ${l.status === 'active' ? '<button class="small danger" data-act="revoke">ระงับ</button>' : '<button class="small ghost" data-act="restore">คืนสถานะ</button>'}
-      <button class="small danger-solid" data-act="delete">ลบ license</button>
+      <button class="small danger-solid" data-act="delete">ลบ license</button>`}
     </div>`;
 }
 /** ประวัติ + ข้อมูลร้าน/ไฟล์สำรอง ของร้านที่เปิด popup อยู่ */
@@ -600,7 +605,7 @@ let domTpl = '';
 function showDom() {
   const v = $('slug').value.trim().toLowerCase();
   const esc2 = (t) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-  $('dom').innerHTML = domTpl ? `<span>ที่อยู่ร้านทดลอง</span><code>${esc2(domTpl).replace('{slug}', `<b>${esc2(v || 'ชื่อย่อ')}</b>`)}</code>` : '';
+  $('dom').innerHTML = domTpl ? `<code>${esc2(domTpl).replace('{slug}', `<b>${esc2(v || 'ชื่อย่อ')}</b>`)}</code>` : '';
 }
 document.addEventListener('input', (e) => { if (e.target && e.target.id === 'slug') showDom(); });
 
@@ -608,14 +613,14 @@ async function load() {
   const j = await api('/admin/api/licenses');
   meta = j;
   licenses = j.licenses;
-  const local = j.mode === 'local';
-  $('mode').textContent = local ? 'โหมดทดสอบ' : `VPS · *.${j.trialDomain}`;
-  $('slugLabel').textContent = local ? 'ชื่อย่อร้าน' : 'โดเมนย่อย';
-  // ที่อยู่ร้าน (แสดงใต้ช่องชื่อย่อ) — แทนที่ {slug} ด้วยค่าที่พิมพ์
-  domTpl = local ? `${j.publicUrl.replace(/^https?:\/\//, '')}/shop/{slug}` : `{slug}.${j.trialDomain}`;
+  $('mode').textContent = j.mode === 'local' ? 'โหมดทดสอบ' : 'VPS';
+  $('slugLabel').textContent = 'ชื่อย่อร้าน';
+  // ทุกร้านใช้ที่อยู่เดียวกัน — ชื่อย่อเป็นตัวแยกร้าน (แอปแนบไปกับทุกคำขอ)
+  domTpl = 'รหัสแยกร้าน {slug}';
   showDom();
-  $('urlChip').hidden = !local;
-  $('publicUrl').textContent = j.publicUrl;
+  $('urlChip').hidden = false;
+  $('publicUrl').textContent = String(j.appBase || j.publicUrl).replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  $('legacyWarn').hidden = !j.legacyMain;
   render();
   if ($('evBox').open) loadEvents();
 }
@@ -642,8 +647,7 @@ $('issueForm').onsubmit = async (e) => {
     const msg = [
       `รหัสทดลองใช้ Clothing POS: ${r.code}`,
       `ใช้ได้ ${days} วัน · ${max} เครื่อง (เริ่มนับเมื่อเปิดใช้งาน)`,
-      meta.downloadUrl ? `ดาวน์โหลดโปรแกรม: ${meta.downloadUrl}` : 'ดาวน์โหลดโปรแกรม: (ลิงก์ตัวติดตั้งชุดทดลอง)',
-      ...(meta.mode === 'local' ? [`เซิร์ฟเวอร์ license (ทดสอบ): ${meta.publicUrl}`] : []),
+      meta.downloadUrl ? `ดาวน์โหลดโปรแกรม: ${meta.downloadUrl}` : 'ดาวน์โหลดโปรแกรม: (ลิงก์ตัวติดตั้ง)',
       'ติดตั้งแล้วเปิดโปรแกรม → กรอกรหัสนี้ → รับ PIN ผู้จัดการ แล้วเริ่มใช้งานได้ทันที',
     ].join('\n');
     $('shop').value = $('slug').value = $('note').value = '';
@@ -669,6 +673,19 @@ $('detail').addEventListener('click', async (e) => {
   const { act } = b.dataset;
   if (act === 'close') return $('detail').close();
   if (act === 'image') return $('imgFile').click();
+  if (act === 'open') {
+    // แผงควบคุมอยู่คนละโดเมนกับร้าน — ขอลิงก์ใช้ครั้งเดียวจากเซิร์ฟเวอร์ แล้วเปิดแท็บใหม่
+    const w = window.open('', '_blank');
+    try {
+      const r = await api(`/admin/api/licenses/${openId}/view`);
+      if (w) w.location = r.url;
+      else location.href = r.url;
+    } catch (err) {
+      if (w) w.close();
+      toast(err.message);
+    }
+    return;
+  }
   const id = openId;
   const l = licenses.find((x) => x.id === id);
   if (!l) return;
