@@ -22,6 +22,8 @@ apply() { # $1 = template
   sed -e "s/{\$POS_DOMAIN}/$d/g" -e "s/{\$POS_APP_KEY}/$k/g" -e "s|{\$POS_DL_HASH}|$h|g" "$1" > "$tmp"
   # ยังไม่ตั้งรหัสดาวน์โหลด → ไม่เปิดหน้าดาวน์โหลด
   [ -n "$h" ] || sed -i '/# DOWNLOAD-BEGIN/,/# DOWNLOAD-END/d' "$tmp"
+  # โดเมนอื่นที่ติดตั้งเพิ่ม (แผงควบคุม license) อยู่ใน conf.d — ต้องคงบรรทัด import ไว้เสมอ ไม่งั้นโดเมนนั้นหายไปทั้งใบรับรอง
+  if compgen -G '/etc/caddy/conf.d/*.caddy' >/dev/null; then printf '\nimport /etc/caddy/conf.d/*.caddy\n' >> "$tmp"; fi
   caddy validate --config "$tmp" --adapter caddyfile >/dev/null
   cp "$CADDYFILE" "$CADDYFILE.bak"
   install -m 640 -o root -g caddy "$tmp" "$CADDYFILE"

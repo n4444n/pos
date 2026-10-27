@@ -99,9 +99,9 @@ step "Caddy: $APP_DOMAIN (ประตูเข้าทุกร้าน) + $L
 rm -f /etc/caddy/trials/*.caddy
 sed -i '/import \/etc\/caddy\/trials/d' /etc/caddy/conf.d/license.caddy 2>/dev/null || true
 sed -e "s/{\$LICENSE_DOMAIN}/$LICENSE_DOMAIN/g" "$APP_DIR/deploy/license.caddy" > /etc/caddy/conf.d/license.caddy
-grep -q 'import /etc/caddy/conf.d/' "$CADDYFILE" || printf '\nimport /etc/caddy/conf.d/*.caddy\n' >> "$CADDYFILE"
-# โดเมนของแอปต้องชี้ไปที่ประตู (พอร์ต 3100) — สร้างใหม่จากแม่แบบ คงสถานะล็อกเดิมไว้
+# โดเมนของแอปต้องชี้ไปที่ประตู (พอร์ต 3100) — สร้างใหม่จากแม่แบบ คงสถานะล็อกเดิมไว้ (ใส่บรรทัด import conf.d ให้ด้วย)
 bash "$APP_DIR/deploy/app-lock.sh" reapply
+grep -q 'import /etc/caddy/conf.d/' "$CADDYFILE" || printf '\nimport /etc/caddy/conf.d/*.caddy\n' >> "$CADDYFILE"
 caddy validate --config "$CADDYFILE" --adapter caddyfile
 systemctl reload caddy
 
