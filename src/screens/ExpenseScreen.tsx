@@ -13,7 +13,7 @@ import { Sheet } from '../components/Sheet';
 import { resizeToDataUrl } from '../components/stock/ImagePicker';
 import { ToastView } from '../components/ToastView';
 import { baht, isoDate, signedBaht, thaiDate, thaiDateTime } from '../format';
-import { useSession } from '../session';
+import { can, useSession } from '../session';
 import type { Toast } from '../store/usePos';
 import { colors, font, radius } from '../theme';
 
@@ -56,7 +56,7 @@ interface Props {
 
 export function ExpenseScreen({ onNavigate, onDrawerChanged }: Props) {
   const { me } = useSession();
-  const manager = me.role === 'manager';
+  const manager = can(me, 'expenses', 'edit'); // สิทธิ์แก้ไขตามบทบาท (ตั้งที่ พนักงาน → การจัดการสิทธิ์)
   const { width } = useWindowDimensions();
   const showSidebar = width >= 1100;
   const mobile = width < 768;
@@ -754,7 +754,7 @@ function ExpenseForm({ edit, initialSource, categories, manager, openShift, draw
         {edit ? (
           <Text style={s.hint}>
             บันทึกโดย {edit.staff} · {thaiDateTime(edit.createdAt)}{edit.shiftNo ? ` · กะ #${edit.shiftNo}` : ''}{edit.updatedAt !== edit.createdAt ? ` · แก้ไขล่าสุด ${thaiDateTime(edit.updatedAt)}` : ''}
-            {!manager ? ' · แก้ไข/ยกเลิกได้เฉพาะผู้จัดการ' : ''}
+            {!manager ? ' · แก้ไข/ยกเลิกต้องมีสิทธิ์แก้ไข' : ''}
           </Text>
         ) : null}
         {error ? <Text style={[s.td, { color: colors.danger }]}>{error}</Text> : null}

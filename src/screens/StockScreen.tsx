@@ -10,7 +10,7 @@ import { ProductEditor } from '../components/stock/ProductEditor';
 import { Sheet } from '../components/Sheet';
 import { ToastView } from '../components/ToastView';
 import { baht, n0, priceRange, thaiDate } from '../format';
-import { useSession } from '../session';
+import { can, useSession } from '../session';
 import { useAppSettings } from '../appSettings';
 import type { Toast } from '../store/usePos';
 import { categoryChip, colors, font, radius } from '../theme';
@@ -35,7 +35,7 @@ interface Props {
 export function StockScreen({ onNavigate, onStockChanged }: Props) {
   const { width } = useWindowDimensions();
   const { me } = useSession();
-  const manager = me.role === 'manager';
+  const manager = can(me, 'stock', 'edit'); // สิทธิ์แก้ไขตามบทบาท (ตั้งที่ พนักงาน → การจัดการสิทธิ์)
   // สาขาย่อย: รายการสินค้ามาจากสาขาหลัก (แก้ได้เฉพาะสต็อก/ราคาของสาขา)
   const isMain = useAppSettings().branch.isMain;
   const showSidebar = width >= 1100;
@@ -329,7 +329,7 @@ export function StockScreen({ onNavigate, onStockChanged }: Props) {
               ) : null}
               {rows?.map((r) => {
                 const chip = categoryChip[r.categoryId] ?? categoryChip.acc;
-                const open = () => (manager ? setEditing(r.id) : notify('info', 'เฉพาะผู้จัดการเท่านั้นที่แก้ไขสินค้าได้'));
+                const open = () => (manager ? setEditing(r.id) : notify('info', 'บทบาทของคุณดูได้อย่างเดียว — แก้ไขสินค้าไม่ได้'));
                 const thumb = (
                   <View style={s.thumb}>
                     {r.imageUrl ? <Image source={{ uri: imageSrc(r.imageUrl, 'low') }} style={s.thumbImg} /> : <GarmentArt art={r.art} color={r.tint} size={34} />}
@@ -346,7 +346,7 @@ export function StockScreen({ onNavigate, onStockChanged }: Props) {
                 );
                 const toggle = (
                   <Pressable
-                    onPress={() => (manager ? toggleActive(r) : notify('info', 'เฉพาะผู้จัดการเท่านั้น'))}
+                    onPress={() => (manager ? toggleActive(r) : notify('info', 'บทบาทของคุณดูได้อย่างเดียว'))}
                     style={[s.track, r.active && s.trackOn]}
                     accessibilityRole="switch"
                     accessibilityState={{ checked: r.active }}

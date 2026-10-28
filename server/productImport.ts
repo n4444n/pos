@@ -7,6 +7,7 @@ import { db, tx } from './db.ts';
 import { HttpError } from './common.ts';
 import { createCategory, getProduct, saveProduct, variantLabel, type ProductIn } from './products.ts';
 import type { Me } from './auth.ts';
+import { requirePerm as requireFeature } from './perms.ts';
 
 export interface ImportRow {
   line?: number; code?: string; barcode?: string; qty?: number | string; name?: string;
@@ -41,7 +42,7 @@ class Rollback extends Error {
 }
 
 export function importProducts(body: { rows?: ImportRow[] } & Opts, me: Me) {
-  if (me.role !== 'manager') throw new HttpError(403, 'เฉพาะผู้จัดการเท่านั้น', 'NO_PERMISSION');
+  requireFeature(me, 'stock', 'edit');
   const rows = Array.isArray(body.rows) ? body.rows : [];
   if (!rows.length) throw new HttpError(422, 'ไม่พบรายการสินค้าในไฟล์');
   if (rows.length > 20000) throw new HttpError(422, 'ไฟล์ใหญ่เกินไป (สูงสุด 20,000 แถว)');
