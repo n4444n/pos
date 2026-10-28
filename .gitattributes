@@ -1,0 +1,3 @@
+# ไฟล์ .bat ต้องขึ้นบรรทัดแบบ Windows (CRLF) ไม่งั้น cmd.exe อ่านผิด
+*.bat text eol=crlf
+*.sh  text eol=lf
