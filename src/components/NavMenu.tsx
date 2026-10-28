@@ -24,7 +24,7 @@ export const canOpen = (me: Me, r: Route) => can(me, ROUTE_FEATURE[r]);
 export const firstRoute = (me: Me): Route =>
   (['sales', 'history', 'shifts', 'expenses', 'promos', 'stock', 'shipments', 'dashboard', 'staff', 'settings'] as Route[]).find((r) => canOpen(me, r)) ?? 'sales';
 
-/** หน้าที่อยู่ใต้เมนู "รายงาน" (เฉพาะผู้จัดการ) */
+/** หน้าที่อยู่ใต้เมนู "รายงาน" (แสดงตามสิทธิ์ของบทบาท) */
 export const REPORT_ROUTES: Route[] = ['dashboard', 'salesReport', 'billReport', 'productReport', 'taxReport'];
 // เปิด/ปิดกลุ่มเมนู (รายงาน / สต็อกสินค้า) — จำไว้ระหว่างเปลี่ยนหน้า (แต่ละหน้ามี sidebar ของตัวเอง)
 const groupOpen: Partial<Record<string, boolean>> = {};

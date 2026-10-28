@@ -163,7 +163,7 @@ export function StockCommand({ manager, compact, notify, onApplied }: Props) {
               {mode === m.id ? <Icon name="checkmark" size={18} color={colors.primary} /> : null}
             </Pressable>
           ))}
-          {!manager ? <Text style={s.hint}>เพิ่ม/ลบ และปรับสต็อกใหม่ ใช้ได้เฉพาะผู้จัดการ</Text> : null}
+          {!manager ? <Text style={s.hint}>เพิ่ม/ลบ และปรับสต็อกใหม่ ต้องมีสิทธิ์แก้ไขสต็อก</Text> : null}
         </View>
       </Sheet>
 

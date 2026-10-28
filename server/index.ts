@@ -16,7 +16,7 @@ import {
 import { apiKeyOf, authenticateKey, createKey, listKeys, revokeKey } from './apikeys.ts';
 import { createBranch, currentBranchInfo, deleteBranches, getBranch, listBranches, nextCode, resetBranchPrices, updateBranch } from './branches.ts';
 import {
-  approveManager, approveVoid, authenticate, clientIp, createStaff, listStaff, login, logout, PIN_LENGTH, requireFeature, switchBranch, tokenOf, updateStaff,
+  allBranchRole, approveManager, approveVoid, authenticate, clientIp, createStaff, listStaff, login, logout, PIN_LENGTH, requireFeature, switchBranch, tokenOf, updateStaff,
   type Me,
 } from './auth.ts';
 import { discountFor, HttpError, ORDER_TYPES, PAYMENT_METHODS, round2, getVatRate, type Promo } from './common.ts';
@@ -69,7 +69,7 @@ const q = {
   ),
   // พนักงานของสาขานี้ + ผู้จัดการ (เลือกเป็นผู้ขายได้)
   staff: db.prepare(
-    `SELECT id, name, role FROM staff s WHERE active = 1 AND (role = 'manager'
+    `SELECT id, name, role FROM staff s WHERE active = 1 AND (role IN ('admin', 'manager')
        OR EXISTS (SELECT 1 FROM staff_branches sb WHERE sb.staff_id = s.id AND sb.branch_id = (SELECT branch_id FROM temp.ctx)))
      ORDER BY role DESC, id`,
   ),
@@ -763,7 +763,7 @@ const server = createServer(async (req, res) => {
           from: sp.get('from') ?? undefined, to: sp.get('to') ?? undefined, category: sp.get('category') ?? undefined,
           source: sp.get('source') ?? undefined, q: sp.get('q') ?? undefined, voided: sp.get('voided') ?? undefined,
         };
-        if (sp.get('branch') === 'all' && me.role === 'manager') setBranch(0);
+        if (sp.get('branch') === 'all' && allBranchRole(me.role)) setBranch(0);
         if (path === '/api/expenses') return json(req, res, 200, listExpenses(f));
         res.setHeader('Content-Disposition', `attachment; filename="expenses-${f.from ?? ''}-${f.to ?? ''}.csv"`);
         return send(req, res, 200, expensesCsv(f), 'text/csv; charset=utf-8');

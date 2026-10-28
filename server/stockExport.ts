@@ -6,6 +6,7 @@ import { currentBranch, db } from './db.ts';
 import { round2 } from './common.ts';
 import { currentBranchInfo, listBranches } from './branches.ts';
 import type { Me } from './auth.ts';
+import { can } from './perms.ts';
 import { buildXlsx, type Col, type SheetSpec } from './xlsx.ts';
 
 /** หัวคอลัมน์ชีตแรก — ต้องตรงกับชื่อที่ ImportProductsSheet รู้จัก (src/components/stock/ImportProductsSheet.tsx) */
@@ -35,7 +36,7 @@ const isoDay = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d
 const statusOf = (r: Row) => (!r.pActive || !r.vActive ? 'ปิดขาย' : r.stock <= 0 ? 'หมด' : r.stock <= r.lowStock ? 'ใกล้หมด' : 'มีสินค้า');
 
 export function stockXlsx(me: Me): Buffer {
-  const manager = me.role === 'manager';
+  const manager = can(me, 'stock', 'edit');
   const since = new Date();
   since.setDate(since.getDate() - 29);
   const rows = db

@@ -4,6 +4,7 @@ import type { IncomingMessage } from 'node:http';
 import { db, mainBranchId } from './db.ts';
 import { HttpError } from './common.ts';
 import type { Me } from './auth.ts';
+import { permsOf, type Role } from './perms.ts';
 import { getSettings } from './settings.ts';
 
 db.exec(`
@@ -85,8 +86,10 @@ export function authenticateKey(key: string, method: string, req: IncomingMessag
   const wanted = String(req.headers['x-branch'] ?? '').trim().toUpperCase();
   const b = wanted ? all.find((x) => x.code.toUpperCase() === wanted) : null;
   if (wanted && !b) throw new HttpError(404, `ไม่พบสาขารหัส ${wanted}`);
+  // key อ่านอย่างเดียว = สิทธิ์พนักงานขาย · key เขียนได้ = สิทธิ์ผู้ดูแลระบบ
+  const role: Role = row.scope === 'read' ? 'sales' : 'admin';
   return {
-    id: 0, keyId: row.id, name: `API: ${row.name}`, role: row.scope === 'read' ? 'staff' : 'manager', canVoid: false,
+    id: 0, keyId: row.id, name: `API: ${row.name}`, role, perms: permsOf(role), canVoid: false,
     branchId: b?.id ?? mainBranchId(), branchIds: all.map((x) => x.id),
   };
 }

@@ -11,6 +11,7 @@ const minStock = () => (allowNegativeStock() ? -999999 : 0);
 /** ปรับยอดตามส่วนต่าง: ไม่แตะยอดถ้าไม่ได้แก้ (ยอดติดลบเดิมไม่ถูกปัดเป็น 0) */
 const applyDelta = (cur: number, delta: number) => (delta === 0 ? cur : Math.max(minStock(), cur + delta));
 import type { Me } from './auth.ts';
+import { can, requirePerm as requireFeature } from './perms.ts';
 import { getSettings } from './settings.ts';
 
 export const UPLOAD_DIR = join(dirname(DB_PATH), 'uploads');
@@ -57,7 +58,7 @@ export function variantLabel(v: { color: string; size: string; extra?: string })
 }
 
 function present(p: ProductRow, me: Me, variants: VariantRow[]) {
-  const manager = me.role === 'manager';
+  const manager = can(me, 'stock', 'edit'); // เห็นต้นทุน = คนที่แก้สต็อกได้
   return {
     ...p,
     active: !!p.active,
@@ -107,7 +108,7 @@ export function listProducts(f: { q?: string; category?: string; status?: string
     id: r.id, sku: r.sku, barcode: r.barcode, name: r.name, categoryId: r.categoryId, category: r.category, art: r.art,
     tint: r.tint, imageUrl: r.imageUrl, active: !!r.active, lowStock: r.lowStock, skuCount: r.skuCount, skuActive: r.skuActive ?? 0,
     stock: r.stock, outCount: r.outCount ?? 0, lowCount: r.lowCount ?? 0, minPrice: r.minPrice ?? r.price, maxPrice: r.maxPrice ?? r.price,
-    stockValue: me.role === 'manager' ? round2(r.stockValue) : undefined, updatedAt: r.updatedAt ?? r.createdAt,
+    stockValue: can(me, 'stock', 'edit') ? round2(r.stockValue) : undefined, updatedAt: r.updatedAt ?? r.createdAt,
   }));
   if (f.status === 'low') list = list.filter((p) => p.active && p.lowCount > 0);
   else if (f.status === 'out') list = list.filter((p) => p.active && p.outCount > 0);
@@ -130,7 +131,7 @@ export function stockSummary(me?: Me) {
     .get() as { products: number; skus: number; units: number; value: number; out: number | null; low: number | null };
   return {
     products: s.products, skus: s.skus, units: s.units, out: s.out ?? 0, low: s.low ?? 0,
-    value: me?.role === 'manager' ? round2(s.value) : undefined,
+    value: me && can(me, 'stock', 'edit') ? round2(s.value) : undefined,
   };
 }
 
@@ -275,8 +276,8 @@ export function saveProduct(id: number | null, body: ProductIn, me: Me, opts: { 
   const imageUrl = body.imageUrl && /^\/uploads\/[a-f0-9]{24}\.(jpg|png|webp)$/.test(body.imageUrl) ? body.imageUrl : null;
   const note = body.note?.trim().slice(0, 2000) || null;
   const attrs = cleanAttrs(body.attrs);
-  const manager = me.role === 'manager';
-  if (!manager) throw new HttpError(403, 'เฉพาะผู้จัดการเท่านั้น', 'NO_PERMISSION');
+  const manager = can(me, 'stock', 'edit'); // เห็นต้นทุน = คนที่แก้สต็อกได้
+  requireFeature(me, 'stock', 'edit');
 
   // ---- ตรวจรายการ SKU ให้ตรงกับคุณสมบัติ ----
   const colorAttr = attrs.find((a) => a.type === 'color');
@@ -472,7 +473,7 @@ export function listSkus(
 
 /** สินค้า 1 รายการ + SKU ทั้งหมด สำหรับตาราง สี × ไซซ์ */
 export function skuProduct(id: number, me: Me) {
-  const manager = me.role === 'manager';
+  const manager = can(me, 'stock', 'edit'); // เห็นต้นทุน = คนที่แก้สต็อกได้
   const p = db
     .prepare(
       `SELECT p.id, p.sku AS code, p.name, p.barcode, p.category_id AS categoryId, c.name AS category, p.art, p.tint,
@@ -502,7 +503,7 @@ export function bulkUpdateSkus(
   body: { variants?: { id: number; stock?: number; stockBase?: number; price?: number; barcode?: string | null; active?: boolean }[] },
   me: Me,
 ) {
-  if (me.role !== 'manager') throw new HttpError(403, 'เฉพาะผู้จัดการเท่านั้น', 'NO_PERMISSION');
+  requireFeature(me, 'stock', 'edit');
   const list = Array.isArray(body.variants) ? body.variants : [];
   const existing = new Map((q.variants.all(pid) as VariantRow[]).map((v) => [v.id, v]));
   if (!existing.size) throw new HttpError(404, 'ไม่พบสินค้า');
@@ -580,7 +581,7 @@ export function saveBranchStock(pid: number, body: { variants?: { id?: number | 
 
 /** แก้ไขทีละ SKU จากตาราง: บาร์โค้ด (กำหนดเอง) / แสดงขาย */
 export function patchVariant(id: number, body: { barcode?: string | null; active?: boolean }, me: Me) {
-  if (me.role !== 'manager') throw new HttpError(403, 'เฉพาะผู้จัดการเท่านั้น', 'NO_PERMISSION');
+  requireFeature(me, 'stock', 'edit');
   const v = db.prepare('SELECT id, product_id AS productId, barcode, active, extra FROM variants WHERE id = ?').get(id) as
     | { id: number; productId: number; barcode: string | null; active: number; extra: string }
     | undefined;
@@ -681,7 +682,7 @@ const CMD_REASON: Record<Exclude<StockCmdMode, 'check'>, string> = { add: 'ค�
 export function stockCommand(body: { mode?: string; lines?: { code?: string; qty?: number | string; line?: number }[]; apply?: boolean }, me: Me) {
   const mode = (['check', 'add', 'set'] as const).find((m) => m === body.mode);
   if (!mode) throw new HttpError(422, 'ไม่รู้จักคำสั่ง');
-  if (mode !== 'check' && me.role !== 'manager') throw new HttpError(403, 'เฉพาะผู้จัดการเท่านั้นที่แก้ไขสต็อกได้', 'NO_PERMISSION');
+  if (mode !== 'check') requireFeature(me, 'stock', 'edit');
   const input = Array.isArray(body.lines) ? body.lines.slice(0, 5000) : [];
   if (!input.length) throw new HttpError(422, 'ยังไม่มีรายการ — พิมพ์ [บาร์โค้ด] [จำนวน] บรรทัดละ 1 รายการ');
 
@@ -764,7 +765,7 @@ export type BulkAction = 'activate' | 'deactivate' | 'category' | 'zero' | 'dele
  * ลบ: สินค้าที่ยังไม่เคยขาย → ลบจริง · เคยขายแล้ว → ซ่อนถาวร (บิลเก่ายังเปิดดูได้) และคืนรหัส/บาร์โค้ดให้ใช้ใหม่ได้
  */
 export function bulkProducts(body: { ids?: number[]; action?: string; categoryId?: string }, me: Me) {
-  if (me.role !== 'manager') throw new HttpError(403, 'เฉพาะผู้จัดการเท่านั้น', 'NO_PERMISSION');
+  requireFeature(me, 'stock', 'edit');
   const action = (['activate', 'deactivate', 'category', 'zero', 'delete', 'vat', 'exempt'] as const).find((a) => a === body.action);
   if (!action) throw new HttpError(422, 'ไม่รู้จักคำสั่ง');
   const ids = [...new Set((Array.isArray(body.ids) ? body.ids : []).map(Number).filter((n) => Number.isInteger(n) && n > 0))].slice(0, 1000);

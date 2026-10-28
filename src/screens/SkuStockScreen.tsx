@@ -14,7 +14,7 @@ import { ProductEditor } from '../components/stock/ProductEditor';
 import { StockCommand } from '../components/stock/StockCommand';
 import { ToastView } from '../components/ToastView';
 import { moneyInput, n0, priceRange } from '../format';
-import { useSession } from '../session';
+import { can, useSession } from '../session';
 import { useAppSettings } from '../appSettings';
 import { randomBarcode } from '../stockDraft';
 import type { Toast } from '../store/usePos';
@@ -97,7 +97,7 @@ export function SkuStockScreen({ onNavigate, onStockChanged }: Props) {
   const appBranch = useAppSettings().branch;
   const { width } = useWindowDimensions();
   const { me } = useSession();
-  const manager = me.role === 'manager';
+  const manager = can(me, 'stock', 'edit'); // สิทธิ์แก้ไขตามบทบาท (ตั้งที่ พนักงาน → การจัดการสิทธิ์)
   const showSidebar = width >= 1100;
   const mobile = width < 768;
   const table = width >= 900;
@@ -183,7 +183,7 @@ export function SkuStockScreen({ onNavigate, onStockChanged }: Props) {
 
   /** เปิด/ปิดแสดงขายทั้งแถว (ทุกไซซ์ของสีนั้น) */
   const toggleRow = async (p: SkuProduct, row: MRow) => {
-    if (!manager) return notify('info', 'เฉพาะผู้จัดการเท่านั้น');
+    if (!manager) return notify('info', 'บทบาทของคุณดูได้อย่างเดียว');
     const next = !row.list.every((c) => c.active);
     const targets = row.list.filter((c) => c.active !== next);
     patchCells(targets.map((c) => ({ id: c.id, patch: { active: next } })));
@@ -219,10 +219,10 @@ export function SkuStockScreen({ onNavigate, onStockChanged }: Props) {
 
   const catName = categories.find((c) => c.id === category)?.name;
   const statusName = STATUS.find((x) => x.id === status)?.label ?? 'ทุกสถานะ';
-  const openEditor = (pid: number) => (manager ? setEditing(pid) : notify('info', 'เฉพาะผู้จัดการเท่านั้นที่แก้ไขสินค้าได้'));
+  const openEditor = (pid: number) => (manager ? setEditing(pid) : notify('info', 'บทบาทของคุณดูได้อย่างเดียว — แก้ไขสินค้าไม่ได้'));
   /** ปุ่มดินสอ: เปิดช่องจำนวน (และราคา) ของทุกสี/ไซซ์ในสินค้านั้นให้แก้ไขในตารางทันที */
   const startInline = (p: SkuProduct) => {
-    if (!manager) return notify('info', 'เฉพาะผู้จัดการเท่านั้นที่แก้ไขสินค้าได้');
+    if (!manager) return notify('info', 'บทบาทของคุณดูได้อย่างเดียว — แก้ไขสินค้าไม่ได้');
     if (inline && inline.pid !== p.id) return notify('info', 'กรุณาบันทึกหรือยกเลิกสินค้าที่กำลังแก้ไขอยู่ก่อน');
     const m = matrices.get(p.id)!;
     const price: Record<string, string> = {};
@@ -822,7 +822,7 @@ export function SkuStockScreen({ onNavigate, onStockChanged }: Props) {
                   ? 'ตรวจผลก่อนบันทึกเสมอ · เลือก "ตั้งเป็นจำนวนในไฟล์" เมื่อแก้ยอดคงเหลือ · ติ๊ก "อัปเดตชื่อ / หมวดหมู่ / ราคา" เมื่อแก้ข้อมูลอื่น'
                   : manager
                     ? 'นำเข้าได้ที่สาขาหลักเท่านั้น'
-                    : 'เฉพาะผู้จัดการ'}
+                    : 'ดูได้อย่างเดียว'}
               </Text>
             </View>
           </Pressable>
