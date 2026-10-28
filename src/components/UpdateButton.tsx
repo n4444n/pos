@@ -28,6 +28,15 @@ export function UpdateButton({ compact, block }: { compact?: boolean; block?: bo
     );
   }
 
+  if (u.status === 'installing') {
+    return (
+      <View style={[s.btn, s.dl, block && s.block]} accessibilityLabel="กำลังติดตั้งอัปเดต">
+        <ActivityIndicator size="small" color={colors.sub} />
+        <Text style={[s.text, { color: colors.sub }]} numberOfLines={1}>{compact ? 'ติดตั้ง…' : 'กำลังติดตั้ง — โปรแกรมจะปิดแล้วเปิดใหม่'}</Text>
+      </View>
+    );
+  }
+
   const install = async () => {
     setInstalling(true);
     const ok = await desktop()?.update?.install().catch(() => false);

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 /** สถานะอัปเดตของแอปเดสก์ท็อป (ส่งมาจาก desktop/main.cjs) */
 export type UpdateState = {
   /** idle = ไม่มีอัปเดต · downloading = กำลังดาวน์โหลด · ready = พร้อมติดตั้ง */
-  status: 'idle' | 'downloading' | 'ready';
+  status: 'idle' | 'downloading' | 'ready' | 'installing';
   /** เวอร์ชันแอปที่ติดตั้งอยู่ */
   current: string;
   /** เวอร์ชันใหม่ */
