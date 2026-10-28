@@ -76,8 +76,17 @@ const q = {
 
 const full = () => Object.fromEntries(FEATURES.map((f) => [f.id, 'edit' as Level])) as Record<Feature, Level>;
 
-/** สิทธิ์ของทุกบทบาท (ค่าเริ่มต้น + ที่แก้ไว้ในฐานข้อมูล) */
+/**
+ * สิทธิ์ของทุกบทบาท (ค่าเริ่มต้น + ที่แก้ไว้ในฐานข้อมูล)
+ * เก็บผลไว้ในหน่วยความจำ — can() ถูกเรียกหลายครั้งต่อคำขอ (บางทีทุกแถวในรายการสินค้า)
+ * ถ้าอ่านฐานข้อมูลใหม่ทุกครั้งจะเปลืองโดยเปล่าประโยชน์ · ล้างแคชเมื่อมีการบันทึกสิทธิ์
+ */
+let cache: Record<Role, Record<Feature, Level>> | null = null;
+export const clearPermCache = () => { cache = null; };
 export function allPerms(): Record<Role, Record<Feature, Level>> {
+  return (cache ??= buildPerms());
+}
+function buildPerms(): Record<Role, Record<Feature, Level>> {
   const out = {} as Record<Role, Record<Feature, Level>>;
   for (const r of ROLES) {
     out[r] = r === 'admin'
@@ -92,7 +101,10 @@ export function allPerms(): Record<Role, Record<Feature, Level>> {
   return out;
 }
 
-export const permsOf = (role: Role): Record<Feature, Level> => allPerms()[role] ?? allPerms().parttime;
+export const permsOf = (role: Role): Record<Feature, Level> => {
+  const all = allPerms();
+  return all[role] ?? all.parttime;
+};
 
 /** มีสิทธิ์ถึงระดับที่ต้องการหรือไม่ */
 export const can = (me: { role: Role }, feature: Feature, need: Level = 'view') =>
@@ -117,6 +129,7 @@ export function savePerms(role: string, perms: Record<string, string>) {
     q.clear.run(role);
     for (const [f, l] of rows) q.set.run(role, f, l);
     db.exec('COMMIT');
+    clearPermCache();
   } catch (e) {
     db.exec('ROLLBACK');
     throw e;
@@ -129,6 +142,7 @@ export function resetPerms(role: string) {
   if (role === 'admin') throw new HttpError(400, 'สิทธิ์ของผู้ดูแลระบบแก้ไขไม่ได้', 'ADMIN_FIXED');
   if (!(ROLES as readonly string[]).includes(role)) throw new HttpError(404, 'ไม่พบบทบาทนี้');
   q.clear.run(role);
+  clearPermCache();
   return allPerms();
 }
 

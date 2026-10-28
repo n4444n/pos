@@ -104,11 +104,12 @@ export function listProducts(f: { q?: string; category?: string; status?: string
     )
     .all(...args) as (ProductRow & { category: string; skuCount: number; skuActive: number; stock: number; outCount: number; lowCount: number; minPrice: number; maxPrice: number; stockValue: number })[];
 
+  const showCost = can(me, 'stock', 'edit'); // คิดครั้งเดียว ไม่ใช่ทุกแถว
   let list = rows.map((r) => ({
     id: r.id, sku: r.sku, barcode: r.barcode, name: r.name, categoryId: r.categoryId, category: r.category, art: r.art,
     tint: r.tint, imageUrl: r.imageUrl, active: !!r.active, lowStock: r.lowStock, skuCount: r.skuCount, skuActive: r.skuActive ?? 0,
     stock: r.stock, outCount: r.outCount ?? 0, lowCount: r.lowCount ?? 0, minPrice: r.minPrice ?? r.price, maxPrice: r.maxPrice ?? r.price,
-    stockValue: can(me, 'stock', 'edit') ? round2(r.stockValue) : undefined, updatedAt: r.updatedAt ?? r.createdAt,
+    stockValue: showCost ? round2(r.stockValue) : undefined, updatedAt: r.updatedAt ?? r.createdAt,
   }));
   if (f.status === 'low') list = list.filter((p) => p.active && p.lowCount > 0);
   else if (f.status === 'out') list = list.filter((p) => p.active && p.outCount > 0);
