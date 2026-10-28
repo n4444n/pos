@@ -42,13 +42,25 @@ if /i not "%MODE%"=="web" if not exist desktop\node_modules\electron\dist\electr
 )
 
 echo [4/4] เปิดเซิร์ฟเวอร์ ...
+rem หน้าต่างลูกรับค่า environment จากตรงนี้ไป (ตั้งก่อน start จะได้ไม่ต้องใส่เครื่องหมายคำพูดซ้อนกัน)
+
 rem ---- ร้านหลัก :3000 (ประตูเรียกใช้ตัวนี้)
-start "ร้านหลัก :3000" cmd /k "cd /d "%~dp0" && set PORT=3000&& set POS_HOST=127.0.0.1&& node --experimental-strip-types --disable-warning=ExperimentalWarning server\index.ts"
+set "PORT=3000"
+set "POS_HOST=127.0.0.1"
+start "ร้านหลัก :3000" cmd /k node --experimental-strip-types --disable-warning=ExperimentalWarning server\index.ts
 
 rem ---- ประตู + แผงควบคุม :3100
 rem    MAIN_SLUG/MAIN_PORT = ร้านหลักเข้าระบบ license เหมือนบน VPS
 rem    LEGACY_MAIN=1       = เปิดร้านหลักในเบราว์เซอร์ได้เลยตอนพัฒนา (บน VPS ปิดไว้)
-start "ประตู + แผงควบคุม :3100" cmd /k "cd /d "%~dp0license-server" && set MAIN_SLUG=main&& set MAIN_PORT=3000&& set MAIN_NAME=ร้านหลัก (ทดสอบ)&& set LEGACY_MAIN=1&& node --experimental-strip-types --disable-warning=ExperimentalWarning server.ts"
+set "PORT="
+set "POS_HOST="
+set "MAIN_SLUG=main"
+set "MAIN_PORT=3000"
+set "MAIN_NAME=ร้านหลัก (ทดสอบ)"
+set "LEGACY_MAIN=1"
+cd license-server
+start "ประตู + แผงควบคุม :3100" cmd /k node --experimental-strip-types --disable-warning=ExperimentalWarning server.ts
+cd ..
 timeout /t 5 /nobreak >nul
 
 if /i "%MODE%"=="ngrok" call :ngrok || (pause & exit /b 1)
@@ -57,7 +69,7 @@ rem ---- รหัสผ่านแผงควบคุม + license ของ
 set "ADMINPW="
 if exist license-server\data\admin-password.txt for /f "usebackq delims=" %%p in ("license-server\data\admin-password.txt") do set "ADMINPW=%%p"
 set "MAINCODE="
-for /f "usebackq delims=" %%c in (`node -e "try{const{DatabaseSync}=require('node:sqlite');const d=new DatabaseSync('license-server/data/license.db',{readOnly:true});const r=d.prepare(\"SELECT code FROM licenses WHERE slug='main'\").get();if(r)console.log(r.code)}catch{}" 2^>nul`) do set "MAINCODE=%%c"
+for /f "usebackq delims=" %%c in (`node -e "try{const{DatabaseSync}=require('node:sqlite');const d=new DatabaseSync('license-server/data/license.db',{readOnly:true});const r=d.prepare('SELECT code FROM licenses WHERE slug = ?').get('main');if(r)console.log(r.code)}catch(e){}" 2^>nul`) do set "MAINCODE=%%c"
 
 start "" "%BASE%/admin"
 echo.
