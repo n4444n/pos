@@ -530,7 +530,10 @@ function appOnly(res: ServerResponse) {
 async function resume() {
   if (!LOCAL) return;
   const rows = db.prepare("SELECT * FROM instances WHERE state = 'running'").all() as unknown as Instance[];
-  for (const i of rows) await prov.start(i.slug, i.port, i.manager_pin).catch((e) => setState(i.slug, 'error', e.message));
+  for (const i of rows) {
+    if (isMain(i.slug)) continue; // ร้านหลักมีบริการของตัวเองอยู่แล้ว (pos.service) — ห้ามเปิดซ้ำ
+    await prov.start(i.slug, i.port, i.manager_pin).catch((e) => setState(i.slug, 'error', e.message));
+  }
 }
 
 server.listen(PORT, process.env.LICENSE_HOST ?? '127.0.0.1', async () => {
