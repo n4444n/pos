@@ -3,7 +3,7 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { baht, bahtShort, PAYMENT_LABEL, variantLabel } from '../format';
 import { sellableStock, useAppSettings } from '../appSettings';
-import { imageSrc } from '../api';
+import { api, imageSrc, type PromoPreview } from '../api';
 import type { CartRow, Pos } from '../store/usePos';
 import { colors, font, radius } from '../theme';
 import { GarmentArt } from './GarmentArt';
@@ -79,6 +79,17 @@ export function CartPanel({ pos, onPayment, onPlace }: Props) {
     setApplying(false);
   };
 
+  // โปรอัตโนมัติ: ของแถมที่ได้แล้ว และโปรที่ยังอีกนิดเดียวก็ถึง
+  const [preview, setPreview] = useState<PromoPreview | null>(null);
+  useEffect(() => {
+    if (totals.subtotal <= 0) { setPreview(null); return; }
+    let live = true;
+    const t = setTimeout(() => {
+      api.promoPreview(totals.subtotal).then((p) => live && setPreview(p)).catch(() => live && setPreview(null));
+    }, 250);
+    return () => { live = false; clearTimeout(t); };
+  }, [totals.subtotal]);
+
   const payLabel = pos.payment ? PAYMENT_LABEL[pos.payment.method] : 'วิธีชำระเงิน';
   const settings = useAppSettings();
   // ค่าธรรมเนียมของวิธีชำระที่เลือก (ตั้งค่า → วิธีชำระเงิน) — ร้านเป็นผู้จ่าย ยอดลูกค้าไม่เปลี่ยน
@@ -143,6 +154,26 @@ export function CartPanel({ pos, onPayment, onPlace }: Props) {
       </View>
 
       <Dashed />
+
+      {/* โปรอัตโนมัติ */}
+      {preview && (preview.gifts.length > 0 || preview.next.length > 0) ? (
+        <View style={s.promoHint}>
+          {preview.gifts.map((g) => (
+            <View key={`g${g.variantId}`} style={s.hintRow}>
+              <Icon name="gift" size={14} color={colors.success} />
+              <Text style={[s.hintText, { color: colors.success }]} numberOfLines={2}>
+                ได้ของแถม {g.name}{g.qty > 1 ? ` ${g.qty} ชิ้น` : ''}
+              </Text>
+            </View>
+          ))}
+          {preview.next.slice(0, 1).map((n) => (
+            <View key={n.code} style={s.hintRow}>
+              <Icon name="gift-outline" size={14} color={colors.sub} />
+              <Text style={s.hintText} numberOfLines={2}>ซื้ออีก {baht(n.missing)} — {n.label}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
 
       {/* totals */}
       <View style={s.totals}>
@@ -255,6 +286,9 @@ const s = StyleSheet.create({
   remove: { position: 'absolute', right: 0, top: 10 },
   dashed: { borderTopWidth: 1.5, borderStyle: 'dashed', borderColor: colors.line, marginHorizontal: 12 },
   totals: { paddingHorizontal: 14, paddingVertical: 10, gap: 6 },
+  promoHint: { marginHorizontal: 14, marginTop: 8, padding: 9, borderRadius: radius.md, backgroundColor: colors.surface, gap: 5 },
+  hintRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  hintText: { fontFamily: font, fontSize: 11.5, color: colors.sub, flex: 1, lineHeight: 16 },
   tRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   tLabel: { fontFamily: font, fontSize: 13, color: colors.text },
   tVal: { fontFamily: font, fontSize: 13, color: colors.text },

@@ -16,7 +16,7 @@ import {
 import { apiKeyOf, authenticateKey, createKey, listKeys, revokeKey } from './apikeys.ts';
 import { createBranch, currentBranchInfo, deleteBranches, getBranch, listBranches, nextCode, resetBranchPrices, updateBranch } from './branches.ts';
 import {
-  approveManager, approveVoid, authenticate, clientIp, createStaff, listStaff, login, logout, PIN_LENGTH, requireManager, switchBranch, tokenOf, updateStaff,
+  approveManager, approveVoid, authenticate, clientIp, createStaff, listStaff, login, logout, PIN_LENGTH, requireFeature, switchBranch, tokenOf, updateStaff,
   type Me,
 } from './auth.ts';
 import { discountFor, HttpError, ORDER_TYPES, PAYMENT_METHODS, round2, getVatRate, type Promo } from './common.ts';
@@ -41,6 +41,8 @@ import { XLSX_TYPE } from './xlsx.ts';
 import { internalAllowed, shopStats } from './internal.ts';
 import { backupBuffer, backupFileName, dropUpload, newUploadPath, previewUpload, restoreBranches } from './backup.ts';
 import { docFloor } from './docFloor.ts';
+import { permCatalog, resetPerms, savePerms } from './perms.ts';
+import { bestAutoDiscount, createPromo, deletePromo, giftsFor, listPromos, previewFor, updatePromo } from './promos.ts';
 import { cancelShipment, createShipment, holdShipment, listShipments, restoreShipment, resumeShipment, scanShipment, setShipmentItem, shipmentDetail, shipShipment, updateShipment } from './shipments.ts';
 import {
   createCategory, getProduct, listCategories, saveBranchStock, listProducts, listSkus, patchVariant, bulkUpdateSkus, stockCommand, bulkProducts, readUpload, saveProduct, saveUpload, saveUploadVariants, uploadsMissingVariants, setProductActive, stockSummary,
@@ -198,6 +200,22 @@ function createOrder(body: OrderBody, terminalHeader?: unknown) {
       const p = checkPromo(body.promoCode, subtotal);
       discount = p.discount;
       promoCode = p.code;
+    } else {
+      // ไม่ได้กรอกโค้ด → ใช้โปรโมชั่นอัตโนมัติที่ลดได้มากที่สุด
+      const auto = bestAutoDiscount(subtotal);
+      if (auto) {
+        discount = auto.discount;
+        promoCode = auto.promo.code;
+      }
+    }
+    // ของแถมอัตโนมัติ (เช่น ซื้อครบ 2,000 แถมกระเป๋า) — เพิ่มเป็นรายการราคา 0 ตัดสต็อกจริง
+    for (const g of giftsFor(subtotal)) {
+      const v = q.variantForSale.get(g.variantId) as
+        | { id: number; sku: string; size: string; color: string; extra: string; stock: number; name: string; price: number }
+        | undefined;
+      if (!v) continue;
+      if (v.stock < g.qty && !allowNegativeStock()) continue; // ของแถมหมด → ขายต่อได้ ไม่ขวางการชำระเงิน
+      lines.push({ ...v, price: 0, qty: g.qty, lineTotal: 0, exempt: isExempt(v.id) });
     }
     // ค่าธรรมเนียม (เช่น บัตรเครดิต) คิดจากยอดสินค้าหลังส่วนลด — ลูกค้าจ่ายเพิ่ม หรือร้านจ่ายเอง ตามตั้งค่า
     const goods = round2(subtotal - discount);
@@ -436,7 +454,7 @@ const server = createServer(async (req, res) => {
 
       // ----- สำรอง / กู้คืนข้อมูล (ผู้จัดการ) -----
       if (path.startsWith('/api/backup/')) {
-        requireManager(me);
+        requireFeature(me, 'settings', 'edit');
         if (req.method === 'GET' && path === '/api/backup/download') {
           const branch = branchParam(url);
           const buf = backupBuffer(branch);
@@ -459,7 +477,7 @@ const server = createServer(async (req, res) => {
         }
         if (req.method === 'POST' && path === '/api/backup/restore') {
           const body = (await readBody(req)) as { id?: string; branchIds?: unknown; pin?: string };
-          const by = approveManager(body.pin, clientIp(req));
+          const by = approveManager(body.pin, clientIp(req), 'settings');
           const ids = Array.isArray(body.branchIds) ? body.branchIds.map(Number).filter(Number.isInteger) : [];
           return json(req, res, 200, restoreBranches(String(body.id ?? ''), ids, by));
         }
@@ -483,11 +501,32 @@ const server = createServer(async (req, res) => {
       if (req.method === 'POST' && path === '/api/auth/logout') return json(req, res, 200, logout(tokenOf(req, url)));
 
       // ----- จัดการพนักงาน (ผู้จัดการ) -----
-      if (path === '/api/staff' && req.method === 'GET') { requireManager(me); return json(req, res, 200, listStaff()); }
-      if (path === '/api/staff' && req.method === 'POST') { requireManager(me); return json(req, res, 201, createStaff((await readBody(req)) as never, me)); }
+      // ----- สิทธิ์ตามบทบาท (ดูได้ถ้าเปิดเมนูพนักงานได้ · แก้ได้เฉพาะคนที่แก้เมนูพนักงานได้) -----
+      if (path === '/api/perms' && req.method === 'GET') { requireFeature(me, 'staff', 'view'); return json(req, res, 200, permCatalog()); }
+      {
+        const pm = /^\/api\/perms\/([a-z]+)(\/reset)?$/.exec(path);
+        if (pm && req.method === 'PUT' && !pm[2]) {
+          requireFeature(me, 'staff', 'edit');
+          return json(req, res, 200, savePerms(pm[1], ((await readBody(req)) as { perms?: Record<string, string> }).perms ?? {}));
+        }
+        if (pm && req.method === 'POST' && pm[2]) { requireFeature(me, 'staff', 'edit'); return json(req, res, 200, resetPerms(pm[1])); }
+      }
+      if (path === '/api/staff' && req.method === 'GET') { requireFeature(me, 'staff', 'view'); return json(req, res, 200, listStaff()); }
+      if (path === '/api/staff' && req.method === 'POST') { requireFeature(me, 'staff', 'edit'); return json(req, res, 201, createStaff((await readBody(req)) as never, me)); }
       const st = path.match(/^\/api\/staff\/(\d+)$/);
-      if (st && req.method === 'PUT') { requireManager(me); return json(req, res, 200, updateStaff(Number(st[1]), (await readBody(req)) as never, me)); }
+      if (st && req.method === 'PUT') { requireFeature(me, 'staff', 'edit'); return json(req, res, 200, updateStaff(Number(st[1]), (await readBody(req)) as never, me)); }
       if (req.method === 'GET' && path === '/api/bootstrap') return json(req, res, 200, bootstrap(req.headers['x-pos-terminal']));
+      // ----- โปรโมชั่น / ส่วนลด -----
+      if (path === '/api/promos' && req.method === 'GET') { requireFeature(me, 'promos', 'view'); return json(req, res, 200, listPromos()); }
+      if (path === '/api/promos' && req.method === 'POST') { requireFeature(me, 'promos', 'edit'); return json(req, res, 201, createPromo((await readBody(req)) as never)); }
+      if (path === '/api/promos/preview' && req.method === 'GET') {
+        return json(req, res, 200, previewFor(Math.max(0, Number(url.searchParams.get('subtotal') ?? 0) || 0)));
+      }
+      {
+        const pc = /^\/api\/promos\/([A-Za-z0-9_-]{2,20})$/.exec(path);
+        if (pc && req.method === 'PUT') { requireFeature(me, 'promos', 'edit'); return json(req, res, 200, updatePromo(pc[1].toUpperCase(), (await readBody(req)) as never)); }
+        if (pc && req.method === 'DELETE') { requireFeature(me, 'promos', 'edit'); return json(req, res, 200, deletePromo(pc[1].toUpperCase())); }
+      }
       if (req.method === 'GET' && path.startsWith('/api/promos/')) {
         const code = decodeURIComponent(path.slice('/api/promos/'.length));
         return json(req, res, 200, checkPromo(code, Number(url.searchParams.get('subtotal') ?? 0)));
@@ -518,8 +557,8 @@ const server = createServer(async (req, res) => {
         const p = url.searchParams;
         return json(req, res, 200, listProducts({ q: p.get('q') ?? undefined, category: p.get('category') ?? undefined, status: p.get('status') ?? undefined }, me));
       }
-      if (path === '/api/products' && req.method === 'POST') { requireManager(me); requireMain(); return json(req, res, 201, saveProduct(null, (await readBody(req)) as never, me)); }
-      if (path === '/api/products/import' && req.method === 'POST') { requireManager(me); requireMain(); return json(req, res, 200, importProducts((await readBody(req, 8_000_000)) as never, me)); }
+      if (path === '/api/products' && req.method === 'POST') { requireFeature(me, 'stock', 'edit'); requireMain(); return json(req, res, 201, saveProduct(null, (await readBody(req)) as never, me)); }
+      if (path === '/api/products/import' && req.method === 'POST') { requireFeature(me, 'stock', 'edit'); requireMain(); return json(req, res, 200, importProducts((await readBody(req, 8_000_000)) as never, me)); }
       if (path === '/api/stock/alerts' && req.method === 'GET') return json(req, res, 200, stockSummary());
       // ส่งออกสต็อก (Excel) — ชีตแรกนำเข้ากลับได้ที่ "นำเข้าสินค้า" · ?branch=all (ผู้จัดการ) = เพิ่มชีตสต็อกทุกสาขา
       if (path === '/api/stock/export.xlsx' && req.method === 'GET') {
@@ -536,7 +575,7 @@ const server = createServer(async (req, res) => {
           const b = currentBranch() || mainBranchId();
           return json(req, res, 200, taxAdmin().terminals.filter((t) => t.branchId === b && t.active));
         }
-        requireManager(me);
+        requireFeature(me, 'settings', 'edit');
         if (path === '/api/tax' && req.method === 'GET') return json(req, res, 200, taxAdmin());
         if (path === '/api/tax/company' && req.method === 'PUT') return json(req, res, 200, saveTaxCompany((await readBody(req)) as never));
         if (path === '/api/tax/rates' && req.method === 'POST') return json(req, res, 201, addRate((await readBody(req)) as never, me.name));
@@ -563,52 +602,52 @@ const server = createServer(async (req, res) => {
           return send(req, res, 200, file, XLSX_TYPE);
         }
       }
-      if (path === '/api/settings' && req.method === 'GET') { requireManager(me); return json(req, res, 200, { settings: forAdmin(), keys: listKeys() }); }
+      if (path === '/api/settings' && req.method === 'GET') { requireFeature(me, 'settings', 'view'); return json(req, res, 200, { settings: forAdmin(), keys: listKeys() }); }
       {
         const sm2 = /^\/api\/settings\/([a-z]+)$/.exec(path);
         if (sm2 && req.method === 'PUT') {
-          requireManager(me);
+          requireFeature(me, 'settings', 'edit');
           let body = (await readBody(req)) as Record<string, unknown>;
           if (sm2[1] === 'stock') body = { ...body, sync: getSettings().stock.sync };
           return json(req, res, 200, { settings: saveSection(sm2[1], body) });
         }
       }
       if (path === '/api/settings/notify/test' && req.method === 'POST') {
-        requireManager(me);
+        requireFeature(me, 'settings', 'edit');
         const b = (await readBody(req)) as { channel?: string; event?: string };
         return json(req, res, 200, await testNotify(String(b.channel ?? ''), b.event ? String(b.event) : undefined));
       }
-      if (path === '/api/settings/notify/catalog' && req.method === 'GET') { requireManager(me); return json(req, res, 200, notifyCatalog()); }
-      if (path === '/api/settings/keys' && req.method === 'POST') { requireManager(me); return json(req, res, 201, createKey((await readBody(req)) as never, me)); }
+      if (path === '/api/settings/notify/catalog' && req.method === 'GET') { requireFeature(me, 'settings', 'view'); return json(req, res, 200, notifyCatalog()); }
+      if (path === '/api/settings/keys' && req.method === 'POST') { requireFeature(me, 'settings', 'edit'); return json(req, res, 201, createKey((await readBody(req)) as never, me)); }
       {
         const km = /^\/api\/settings\/keys\/(\d+)$/.exec(path);
-        if (km && req.method === 'DELETE') { requireManager(me); return json(req, res, 200, revokeKey(Number(km[1]))); }
+        if (km && req.method === 'DELETE') { requireFeature(me, 'settings', 'edit'); return json(req, res, 200, revokeKey(Number(km[1]))); }
       }
       // ----- จัดการสาขา (ผู้จัดการ) -----
       if (path === '/api/branches/manage' && req.method === 'GET') {
-        requireManager(me);
+        requireFeature(me, 'branches', 'view');
         return json(req, res, 200, { currentId: me.branchId, mainId: mainBranchId(), nextCode: nextCode(), list: listBranches() });
       }
-      if (path === '/api/branches' && req.method === 'POST') { requireManager(me); return json(req, res, 201, createBranch((await readBody(req)) as never)); }
-      if (path === '/api/branches/delete' && req.method === 'POST') { requireManager(me); return json(req, res, 200, deleteBranches(((await readBody(req)) as { ids?: unknown }).ids)); }
-      if (path === '/api/branches/reset-prices' && req.method === 'POST') { requireManager(me); return json(req, res, 200, resetBranchPrices(((await readBody(req)) as { variantIds?: unknown }).variantIds)); }
+      if (path === '/api/branches' && req.method === 'POST') { requireFeature(me, 'branches', 'edit'); return json(req, res, 201, createBranch((await readBody(req)) as never)); }
+      if (path === '/api/branches/delete' && req.method === 'POST') { requireFeature(me, 'branches', 'edit'); return json(req, res, 200, deleteBranches(((await readBody(req)) as { ids?: unknown }).ids)); }
+      if (path === '/api/branches/reset-prices' && req.method === 'POST') { requireFeature(me, 'branches', 'edit'); return json(req, res, 200, resetBranchPrices(((await readBody(req)) as { variantIds?: unknown }).variantIds)); }
       {
         const bm = /^\/api\/branches\/(\d+)$/.exec(path);
-        if (bm && req.method === 'PUT') { requireManager(me); return json(req, res, 200, updateBranch(Number(bm[1]), (await readBody(req)) as never)); }
-        if (bm && req.method === 'GET') { requireManager(me); return json(req, res, 200, getBranch(Number(bm[1]))); }
+        if (bm && req.method === 'PUT') { requireFeature(me, 'branches', 'edit'); return json(req, res, 200, updateBranch(Number(bm[1]), (await readBody(req)) as never)); }
+        if (bm && req.method === 'GET') { requireFeature(me, 'branches', 'view'); return json(req, res, 200, getBranch(Number(bm[1]))); }
       }
       if (path === '/api/products/bulk' && req.method === 'POST') {
-        requireManager(me);
+        requireFeature(me, 'stock', 'edit');
         const body = (await readBody(req)) as { action?: string };
         if (body.action !== 'zero') requireMain(); // ล้างสต็อก = เฉพาะสาขานี้ · อย่างอื่นเปลี่ยนสินค้าทุกสาขา
         return json(req, res, 200, bulkProducts(body as never, me));
       }
       // ---- ส่งของจากโรงงาน (ใบส่งของ DO) — ผู้จัดการเท่านั้น (ย้ายสต็อกข้ามสาขา) ----
-      if (path === '/api/shipments' && req.method === 'GET') { requireManager(me); return json(req, res, 200, listShipments()); }
-      if (path === '/api/shipments' && req.method === 'POST') { requireManager(me); return json(req, res, 201, createShipment((await readBody(req)) as never, me)); }
+      if (path === '/api/shipments' && req.method === 'GET') { requireFeature(me, 'shipments', 'view'); return json(req, res, 200, listShipments()); }
+      if (path === '/api/shipments' && req.method === 'POST') { requireFeature(me, 'shipments', 'edit'); return json(req, res, 201, createShipment((await readBody(req)) as never, me)); }
       // รายงานการส่ง: ใบส่งของที่ส่งออกแล้วในช่วงวันที่ (+ Excel รวมรายการสินค้า)
       if ((path === '/api/shipments/report' || path === '/api/shipments/report.xlsx') && req.method === 'GET') {
-        requireManager(me);
+        requireFeature(me, 'shipments', 'view');
         const f = Object.fromEntries(url.searchParams.entries()) as Record<string, string>;
         if (path === '/api/shipments/report') return json(req, res, 200, shipmentReport(f));
         const { file, range } = shipmentReportXlsx(f);
@@ -619,7 +658,7 @@ const server = createServer(async (req, res) => {
         // ใบส่งของเป็น Excel (หน้าตาเดียวกับใบพิมพ์ A4)
         const se = /^\/api\/shipments\/(\d+)\/export\.xlsx$/.exec(path);
         if (se && req.method === 'GET') {
-          requireManager(me);
+          requireFeature(me, 'shipments', 'view');
           const { file, docNo } = shipmentXlsx(Number(se[1]));
           res.setHeader('Content-Disposition', `attachment; filename="${docNo.replace(/[^\w.-]/g, '_')}.xlsx"`);
           return send(req, res, 200, file, XLSX_TYPE);
@@ -628,7 +667,7 @@ const server = createServer(async (req, res) => {
       {
         const sh = /^\/api\/shipments\/(\d+)(?:\/(scan|ship|cancel|restore|hold|resume|items\/(\d+)))?$/.exec(path);
         if (sh) {
-          requireManager(me);
+          requireFeature(me, 'shipments', 'edit');
           const id = Number(sh[1]);
           if (!sh[2] && req.method === 'GET') return json(req, res, 200, shipmentDetail(id));
           if (!sh[2] && req.method === 'PATCH') return json(req, res, 200, updateShipment(id, (await readBody(req)) as never));
@@ -652,30 +691,30 @@ const server = createServer(async (req, res) => {
         if (vm && req.method === 'PATCH') return requireMain(), json(req, res, 200, patchVariant(Number(vm[1]), (await readBody(req)) as { barcode?: string; active?: boolean }, me));
       }
       if (path === '/api/categories' && req.method === 'GET') return json(req, res, 200, listCategories());
-      if (path === '/api/categories' && req.method === 'POST') { requireManager(me); requireMain(); return json(req, res, 201, createCategory((await readBody(req)) as never)); }
-      if (path === '/api/uploads' && req.method === 'POST') { requireManager(me); return json(req, res, 201, saveUpload((await readBody(req, 6_000_000)) as never)); }
-      if (path === '/api/uploads/variants' && req.method === 'GET') { requireManager(me); return json(req, res, 200, { urls: uploadsMissingVariants() }); }
-      if (path === '/api/uploads/variants' && req.method === 'POST') { requireManager(me); return json(req, res, 200, saveUploadVariants((await readBody(req, 3_000_000)) as never)); }
+      if (path === '/api/categories' && req.method === 'POST') { requireFeature(me, 'stock', 'edit'); requireMain(); return json(req, res, 201, createCategory((await readBody(req)) as never)); }
+      if (path === '/api/uploads' && req.method === 'POST') { requireFeature(me, 'stock', 'edit'); return json(req, res, 201, saveUpload((await readBody(req, 6_000_000)) as never)); }
+      if (path === '/api/uploads/variants' && req.method === 'GET') { requireFeature(me, 'stock', 'edit'); return json(req, res, 200, { urls: uploadsMissingVariants() }); }
+      if (path === '/api/uploads/variants' && req.method === 'POST') { requireFeature(me, 'stock', 'edit'); return json(req, res, 200, saveUploadVariants((await readBody(req, 3_000_000)) as never)); }
       {
         const bm = /^\/api\/products\/(\d+)\/skus$/.exec(path);
-        if (bm && req.method === 'PUT') { requireManager(me); return json(req, res, 200, bulkUpdateSkus(Number(bm[1]), (await readBody(req)) as never, me)); }
+        if (bm && req.method === 'PUT') { requireFeature(me, 'stock', 'edit'); return json(req, res, 200, bulkUpdateSkus(Number(bm[1]), (await readBody(req)) as never, me)); }
       }
       const pm = path.match(/^\/api\/products\/(\d+)(\/active)?$/);
       if (pm) {
         const pid = Number(pm[1]);
         if (!pm[2] && req.method === 'GET') return json(req, res, 200, getProduct(pid, me));
         if (!pm[2] && req.method === 'PUT') {
-          requireManager(me);
+          requireFeature(me, 'stock', 'edit');
           const body = (await readBody(req)) as never;
           // สาขาย่อย: บันทึกได้เฉพาะจำนวน/ราคาขายของสาขา · สาขาหลัก: แก้สินค้าได้ทั้งหมด
           return json(req, res, 200, currentBranch() === mainBranchId() ? saveProduct(pid, body, me) : saveBranchStock(pid, body, me));
         }
-        if (pm[2] && req.method === 'PUT') { requireManager(me); requireMain(); return json(req, res, 200, setProductActive(pid, !!((await readBody(req)) as { active?: boolean }).active)); }
+        if (pm[2] && req.method === 'PUT') { requireFeature(me, 'stock', 'edit'); requireMain(); return json(req, res, 200, setProductActive(pid, !!((await readBody(req)) as { active?: boolean }).active)); }
       }
 
       // ----- รายงาน / Dashboard (ผู้จัดการ) -----
       if ((path === '/api/dashboard' || path === '/api/dashboard.csv' || path === '/api/dashboard.xlsx') && req.method === 'GET') {
-        requireManager(me);
+        requireFeature(me, 'reports', 'view');
         const f = { from: url.searchParams.get('from') ?? undefined, to: url.searchParams.get('to') ?? undefined };
         // ?branch=all = รวมทุกสาขา · ?branch=<id> = สาขาที่เลือก
         const bq = url.searchParams.get('branch');
@@ -697,7 +736,7 @@ const server = createServer(async (req, res) => {
       {
         const rm = /^\/api\/reports\/(sales|products|bills)(\.xlsx)?$/.exec(path);
         if (rm && req.method === 'GET') {
-          requireManager(me);
+          requireFeature(me, 'reports', 'view');
           const sp = url.searchParams;
           const bq = sp.get('branch');
           if (bq === 'all') setBranch(0);
@@ -737,7 +776,7 @@ const server = createServer(async (req, res) => {
         return json(req, res, 201, e);
       }
       if (path === '/api/expenses/categories' && req.method === 'PUT') {
-        requireManager(me);
+        requireFeature(me, 'expenses', 'edit');
         return json(req, res, 200, saveExpenseCategories(await readBody(req)));
       }
       if (path === '/api/expenses/drawer' && req.method === 'GET') {
@@ -746,9 +785,9 @@ const server = createServer(async (req, res) => {
       }
       {
         const em = /^\/api\/expenses\/(\d+)(\/void)?$/.exec(path);
-        if (em && !em[2] && req.method === 'PUT') { requireManager(me); return json(req, res, 200, updateExpense(Number(em[1]), (await readBody(req)) as never, me.name)); }
+        if (em && !em[2] && req.method === 'PUT') { requireFeature(me, 'expenses', 'edit'); return json(req, res, 200, updateExpense(Number(em[1]), (await readBody(req)) as never, me.name)); }
         if (em && em[2] && req.method === 'POST') {
-          requireManager(me);
+          requireFeature(me, 'expenses', 'view');
           const b = (await readBody(req)) as { reason?: string };
           return json(req, res, 200, voidExpense(Number(em[1]), String(b.reason ?? ''), me.name));
         }
@@ -807,7 +846,7 @@ const server = createServer(async (req, res) => {
       if (tv) {
         if (!tv[2] && req.method === 'GET') return json(req, res, 200, taxInvoiceDoc(Number(tv[1])));
         if (tv[2] && req.method === 'POST') {
-          requireManager(me);
+          requireFeature(me, 'taxReport', 'edit');
           const body = (await readBody(req)) as { reason?: string };
           return json(req, res, 200, cancelTaxInvoice(Number(tv[1]), body.reason, me.name));
         }
