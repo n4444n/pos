@@ -7,14 +7,18 @@ import { api, type Branch, type StaffMember } from '../api';
 import { Chips, FieldLabel } from '../components/history/Chips';
 import { Icon } from '../components/Icon';
 import { NavDrawer, Sidebar, type Route } from '../components/NavMenu';
+import { PermissionsSheet } from '../components/PermissionsSheet';
 import { Sheet } from '../components/Sheet';
 import { ToastView } from '../components/ToastView';
 import { thaiDate, thaiDateTime } from '../format';
-import { useSession } from '../session';
+import { ROLE_LABEL, useSession, type Role } from '../session';
 import type { Toast } from '../store/usePos';
 import { colors, font, radius } from '../theme';
 
-const ROLE_LABEL = { manager: 'ผู้จัดการ', staff: 'พนักงานขาย' } as const;
+/** บทบาทที่เข้าได้ทุกสาขา (ไม่ต้องเลือกสาขา) */
+const ALL_BRANCH: Role[] = ['admin', 'manager'];
+const allBranch = (r: Role) => ALL_BRANCH.includes(r);
+const ROLE_OPTIONS = (Object.keys(ROLE_LABEL) as Role[]).map((value) => ({ value, label: ROLE_LABEL[value] }));
 
 /** หน้าจัดการพนักงาน (ผู้จัดการเท่านั้น) — layout เดียวกับหน้าประวัติ/กะการขาย */
 export function StaffScreen({ onNavigate }: { onNavigate: (r: Route) => void }) {
@@ -26,6 +30,7 @@ export function StaffScreen({ onNavigate }: { onNavigate: (r: Route) => void }) 
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [drawer, setDrawer] = useState(false);
+  const [perms, setPerms] = useState(false);
   const [rows, setRows] = useState<StaffMember[] | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +46,7 @@ export function StaffScreen({ onNavigate }: { onNavigate: (r: Route) => void }) 
     api.branchManage().then((r) => setBranches(r.list), () => {});
   }, []);
   const branchNames = (r: StaffMember) =>
-    r.role === 'manager' ? 'ทุกสาขา' : r.branchIds.map((id) => branches.find((b) => b.id === id)?.name).filter(Boolean).join(', ') || '— ยังไม่กำหนด';
+    allBranch(r.role) ? 'ทุกสาขา' : r.branchIds.map((id) => branches.find((b) => b.id === id)?.name).filter(Boolean).join(', ') || '— ยังไม่กำหนด';
   useEffect(load, [load]);
 
   const active = rows?.filter((r) => r.active).length ?? 0;
@@ -67,6 +72,10 @@ export function StaffScreen({ onNavigate }: { onNavigate: (r: Route) => void }) 
                 <Icon name="calendar-outline" size={16} color={colors.primary} />
               </View>
             ) : null}
+            <Pressable style={s.pillBtn} onPress={() => setPerms(true)} accessibilityLabel="การจัดการสิทธิ์">
+              <Icon name="shield-checkmark-outline" size={16} color={colors.primary} />
+              <Text style={s.pillText}>การจัดการสิทธิ์</Text>
+            </Pressable>
             <Pressable style={[s.pillBtn, s.addBtn]} onPress={() => setEditing('new')} accessibilityLabel="เพิ่มพนักงาน">
               <Icon name="person-add-outline" size={16} color="#fff" />
               <Text style={[s.pillText, { color: '#fff' }]}>เพิ่มพนักงาน</Text>
@@ -85,7 +94,7 @@ export function StaffScreen({ onNavigate }: { onNavigate: (r: Route) => void }) 
         <View style={[s.row, { flexWrap: 'wrap' }]}>
           <Stat label="พนักงานทั้งหมด" value={String(rows?.length ?? '–')} />
           <Stat label="ใช้งานอยู่" value={String(active)} tone={colors.success} />
-          <Stat label="ผู้จัดการ" value={String(rows?.filter((r) => r.role === 'manager' && r.active).length ?? '–')} tone={colors.primary} />
+          <Stat label="ผู้ดูแล / ผู้จัดการ" value={String(rows?.filter((r) => allBranch(r.role) && r.active).length ?? '–')} tone={colors.primary} />
           <Stat label="มีสิทธิ์ยกเลิกบิล" value={String(rows?.filter((r) => r.canVoid && r.active).length ?? '–')} />
         </View>
 
@@ -112,7 +121,7 @@ export function StaffScreen({ onNavigate }: { onNavigate: (r: Route) => void }) 
                 style={({ hovered }: { hovered?: boolean }) => [s.tr, !r.active && { opacity: 0.55 }, hovered && { backgroundColor: '#F8FAFF' }]}
               >
                 <View style={[s.td, { flex: 2, flexDirection: 'row', justifyContent: 'flex-start', gap: 10 }]}>
-                  <Avatar name={r.name} manager={r.role === 'manager'} />
+                  <Avatar name={r.name} manager={allBranch(r.role)} />
                   <Text style={s.name} numberOfLines={1}>
                     {r.name}
                     {r.id === me.id ? <Text style={s.you}>  (คุณ)</Text> : null}
@@ -122,7 +131,7 @@ export function StaffScreen({ onNavigate }: { onNavigate: (r: Route) => void }) 
                   <RoleBadge role={r.role} />
                 </View>
                 <View style={[s.td, { flex: 1.6 }]}>
-                  <Text style={[s.cell, r.role !== 'manager' && !r.branchIds.length && { color: colors.danger }]} numberOfLines={2}>{branchNames(r)}</Text>
+                  <Text style={[s.cell, !allBranch(r.role) && !r.branchIds.length && { color: colors.danger }]} numberOfLines={2}>{branchNames(r)}</Text>
                 </View>
                 <View style={[s.td, { flex: 1.1 }]}>
                   <Icon name={r.canVoid ? 'checkmark-circle' : 'remove-circle-outline'} size={20} color={r.canVoid ? colors.success : colors.faint} />
@@ -139,7 +148,7 @@ export function StaffScreen({ onNavigate }: { onNavigate: (r: Route) => void }) 
               </Pressable>
             ) : (
               <Pressable key={r.id} onPress={() => setEditing(r)} style={[s.card, !r.active && { opacity: 0.55 }]}>
-                <Avatar name={r.name} manager={r.role === 'manager'} />
+                <Avatar name={r.name} manager={allBranch(r.role)} />
                 <View style={{ flex: 1, gap: 3 }}>
                   <Text style={s.name}>
                     {r.name}
@@ -159,6 +168,7 @@ export function StaffScreen({ onNavigate }: { onNavigate: (r: Route) => void }) 
         </ScrollView>
       </View>
 
+      <PermissionsSheet visible={perms} onClose={() => setPerms(false)} />
       <NavDrawer visible={drawer} onClose={() => setDrawer(false)} route="staff" onNavigate={onNavigate} />
       <StaffDialog
         branches={branches}
@@ -191,7 +201,7 @@ function StaffDialog({ target, branches, onClose, onSaved }: { target: StaffMemb
   const [name, setName] = useState('');
   const [pin, setPin] = useState('');
   const [showPin, setShowPin] = useState(false);
-  const [role, setRole] = useState<'manager' | 'staff'>('staff');
+  const [role, setRole] = useState<Role>('sales');
   const [canVoid, setCanVoid] = useState(false);
   const [active, setActive] = useState(true);
   const [branchIds, setBranchIds] = useState<number[]>([]);
@@ -203,7 +213,7 @@ function StaffDialog({ target, branches, onClose, onSaved }: { target: StaffMemb
     setName(cur?.name ?? '');
     setPin('');
     setShowPin(isNew);
-    setRole(cur?.role ?? 'staff');
+    setRole(cur?.role ?? 'sales');
     setCanVoid(cur?.canVoid ?? false);
     setActive(cur?.active ?? true);
     setBranchIds(cur?.branchIds ?? [me.branchId]);
@@ -211,14 +221,14 @@ function StaffDialog({ target, branches, onClose, onSaved }: { target: StaffMemb
   }, [target]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pinOk = /^\d{6}$/.test(pin);
-  const ready = name.trim().length > 0 && (isNew ? pinOk : pin === '' || pinOk) && (role === 'manager' || branchIds.length > 0);
+  const ready = name.trim().length > 0 && (isNew ? pinOk : pin === '' || pinOk) && (allBranch(role) || branchIds.length > 0);
 
   const save = async () => {
     setBusy(true);
     setError(null);
     try {
       if (isNew) {
-        await api.createStaff({ name: name.trim(), pin, role, canVoid: role === 'manager' || canVoid, branchIds });
+        await api.createStaff({ name: name.trim(), pin, role, canVoid: allBranch(role) || canVoid, branchIds });
         onSaved(`เพิ่ม ${name.trim()} แล้ว · PIN ${pin}`);
       } else if (cur) {
         await api.updateStaff(cur.id, { name: name.trim(), role, canVoid, active, branchIds, ...(pin ? { pin } : {}) });
@@ -274,14 +284,14 @@ function StaffDialog({ target, branches, onClose, onSaved }: { target: StaffMemb
 
         <FieldLabel>บทบาท</FieldLabel>
         <Chips
-          options={[{ value: 'staff', label: 'พนักงานขาย' }, { value: 'manager', label: 'ผู้จัดการ' }]}
+          options={ROLE_OPTIONS}
           value={role}
-          onChange={(v) => { setRole(v as 'manager' | 'staff'); if (v === 'manager') setCanVoid(true); }}
+          onChange={(v) => { setRole(v as Role); if (allBranch(v as Role)) setCanVoid(true); }}
         />
         <Text style={[s.small, { marginTop: 4 }]}>ผู้จัดการเข้าหน้า "พนักงาน" ได้ จัดการ PIN ของทุกคน และสลับได้ทุกสาขา</Text>
 
-        <FieldLabel required={role !== 'manager'}>สาขาที่ดูแล</FieldLabel>
-        {role === 'manager' ? (
+        <FieldLabel required={!allBranch(role)}>สาขาที่ดูแล</FieldLabel>
+        {allBranch(role) ? (
           <Text style={s.small}>ผู้จัดการเข้าได้ทุกสาขา</Text>
         ) : (
           <>
@@ -337,10 +347,10 @@ function Avatar({ name, manager }: { name: string; manager: boolean }) {
   );
 }
 
-function RoleBadge({ role }: { role: 'manager' | 'staff' }) {
+function RoleBadge({ role }: { role: Role }) {
   return (
-    <View style={[s.badge, { backgroundColor: role === 'manager' ? colors.primarySoft : colors.surface }]}>
-      <Text style={[s.badgeText, { color: role === 'manager' ? colors.primary : colors.sub }]}>{ROLE_LABEL[role]}</Text>
+    <View style={[s.badge, { backgroundColor: allBranch(role) ? colors.primarySoft : colors.surface }]}>
+      <Text style={[s.badgeText, { color: allBranch(role) ? colors.primary : colors.sub }]} numberOfLines={1}>{ROLE_LABEL[role]}</Text>
     </View>
   );
 }

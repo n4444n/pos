@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 import type { IncomingMessage } from 'node:http';
 import { currentBranch, db, DB_PATH, mainBranchId, tx } from './db.ts';
 import { HttpError } from './common.ts';
+import { can, permsOf, requirePerm, ROLES, type Feature, type Level, type Role } from './perms.ts';
 
 const SESSION_HOURS = 12;
 const MAX_FAILS = 5;
@@ -36,6 +37,10 @@ addColumn('staff', 'role', "TEXT NOT NULL DEFAULT 'staff'");
 addColumn('staff', 'active', 'INTEGER NOT NULL DEFAULT 1');
 addColumn('staff', 'can_void', 'INTEGER NOT NULL DEFAULT 1');
 addColumn('staff', 'last_login', 'TEXT');
+// บทบาทเดิมมี 2 แบบ (manager/staff) → ย้ายมาชุดใหม่ 4 บทบาทครั้งเดียว
+db.exec("UPDATE staff SET role = 'admin' WHERE role = 'manager'");
+db.exec("UPDATE staff SET role = 'sales'  WHERE role = 'staff'");
+db.exec(`UPDATE staff SET role = 'sales' WHERE role NOT IN ('admin', 'manager', 'sales', 'parttime')`);
 db.exec(`
   CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_pin ON staff(pin_hash) WHERE pin_hash IS NOT NULL;
   CREATE TABLE IF NOT EXISTS sessions (
@@ -66,11 +71,11 @@ addColumn('staff', 'last_branch_id', 'INTEGER');    // สาขาล่าส�
       db.prepare('UPDATE staff SET pin_hash = ? WHERE id = ?').run(hashPin(pin), s.id);
       created.push(`${s.name} = ${pin}`);
     }
-    const hasManager = db.prepare("SELECT 1 FROM staff WHERE role = 'manager' AND active = 1").get();
+    const hasManager = db.prepare("SELECT 1 FROM staff WHERE role = 'admin' AND active = 1").get();
     if (!hasManager) {
       const pin = envPin && !db.prepare('SELECT 1 FROM staff WHERE pin_hash = ?').get(hashPin(envPin)) ? envPin
         : db.prepare('SELECT 1 FROM staff WHERE pin_hash = ?').get(hashPin('999999')) ? '909090' : '999999';
-      db.prepare("INSERT INTO staff (name, pin_hash, role, can_void) VALUES ('ผู้จัดการ', ?, 'manager', 1)").run(hashPin(pin));
+      db.prepare("INSERT INTO staff (name, pin_hash, role, can_void) VALUES ('ผู้ดูแลระบบ', ?, 'admin', 1)").run(hashPin(pin));
       created.push(`ผู้จัดการ (manager) = ${pin}`);
     }
   });
@@ -81,7 +86,9 @@ addColumn('staff', 'last_branch_id', 'INTEGER');    // สาขาล่าส�
 export interface Me {
   id: number;
   name: string;
-  role: 'manager' | 'staff';
+  role: Role;
+  /** สิทธิ์ของบทบาทนี้ (เมนูไหนเห็น/แก้ได้) */
+  perms: Record<Feature, Level>;
   canVoid: boolean;
   /** สาขาที่กำลังใช้งาน */
   branchId: number;
@@ -104,7 +111,7 @@ const q = {
   purge: db.prepare('DELETE FROM sessions WHERE expires_at < ?'),
   lastLogin: db.prepare("UPDATE staff SET last_login = datetime('now', 'localtime') WHERE id = ?"),
   list: db.prepare(`SELECT ${STAFF_COLS}, pin_hash IS NOT NULL AS hasPin FROM staff ORDER BY active DESC, role, id`),
-  activeManagers: db.prepare("SELECT COUNT(*) AS n FROM staff WHERE role = 'manager' AND active = 1 AND id != ?"),
+  activeManagers: db.prepare("SELECT COUNT(*) AS n FROM staff WHERE role = 'admin' AND active = 1 AND id != ?"),
   allBranches: db.prepare('SELECT id FROM branches WHERE deleted_at IS NULL ORDER BY is_main DESC, code, id'),
   staffBranches: db.prepare(
     'SELECT b.id FROM staff_branches sb JOIN branches b ON b.id = sb.branch_id WHERE sb.staff_id = ? AND b.deleted_at IS NULL ORDER BY b.is_main DESC, b.code, b.id',
@@ -113,11 +120,14 @@ const q = {
   setLastBranch: db.prepare('UPDATE staff SET last_branch_id = ? WHERE id = ?'),
 };
 
-type StaffRow = { id: number; name: string; role: 'manager' | 'staff'; active: number; canVoid: number; lastLogin: string | null; lastBranchId: number | null };
+type StaffRow = { id: number; name: string; role: Role; active: number; canVoid: number; lastLogin: string | null; lastBranchId: number | null };
 
 /** สาขาที่พนักงานคนนี้เข้าได้ — ผู้จัดการเข้าได้ทุกสาขา */
+/** ผู้ดูแลระบบและผู้จัดการเข้าได้ทุกสาขา · บทบาทอื่นเฉพาะสาขาที่กำหนด */
+export const allBranchRole = (role: string) => role === 'admin' || role === 'manager';
+
 export function allowedBranches(r: { id: number; role: string }): number[] {
-  const rows = (r.role === 'manager' ? q.allBranches.all() : q.staffBranches.all(r.id)) as { id: number }[];
+  const rows = (allBranchRole(r.role) ? q.allBranches.all() : q.staffBranches.all(r.id)) as { id: number }[];
   return rows.map((x) => x.id);
 }
 function pickBranch(r: StaffRow, wanted: number | null | undefined): number {
@@ -128,7 +138,7 @@ function pickBranch(r: StaffRow, wanted: number | null | undefined): number {
   return ids.includes(mainBranchId()) ? mainBranchId() : ids[0];
 }
 const toMe = (r: StaffRow, branchId: number): Me => ({
-  id: r.id, name: r.name, role: r.role, canVoid: !!r.canVoid, branchId, branchIds: allowedBranches(r),
+  id: r.id, name: r.name, role: r.role, perms: permsOf(r.role), canVoid: !!r.canVoid, branchId, branchIds: allowedBranches(r),
 });
 
 // ---------- กันเดา PIN ----------
@@ -217,14 +227,16 @@ export function approveVoid(pin: unknown, ip: string): Me {
 }
 
 /** ยืนยันด้วย PIN ผู้จัดการ (งานเสี่ยง เช่น กู้คืนข้อมูล) — คืนชื่อผู้อนุมัติ */
-export function approveManager(pin: unknown, ip: string): string {
+/** PIN ของคนที่มีสิทธิ์แก้ไขเมนูนั้น (ใช้ยืนยันงานเสี่ยง เช่น กู้คืนข้อมูล) */
+export function approveManager(pin: unknown, ip: string, feature: Feature = 'settings'): string {
   const row = checkPin(pin, 'mgr:' + ip);
-  if (row.role !== 'manager') throw new HttpError(403, `${row.name} ไม่ใช่ผู้จัดการ — ใช้ PIN ผู้จัดการ`, 'NO_PERMISSION');
+  if (!can(row, feature, 'edit')) throw new HttpError(403, `${row.name} ไม่มีสิทธิ์ยืนยันรายการนี้ — ใช้ PIN ผู้ดูแลระบบ`, 'NO_PERMISSION');
   return row.name;
 }
 
-export function requireManager(me: Me) {
-  if (me.role !== 'manager') throw new HttpError(403, 'เฉพาะผู้จัดการเท่านั้น', 'NO_PERMISSION');
+/** ต้องมีสิทธิ์ในเมนูนี้ (ไม่ระบุระดับ = ต้องแก้ไขได้) */
+export function requireFeature(me: Me, feature: Feature, need: Level = 'edit') {
+  requirePerm(me, feature, need);
 }
 
 // ---------- จัดการพนักงาน (ผู้จัดการ) ----------
@@ -237,12 +249,14 @@ export function listStaff() {
 
 interface StaffBody { name?: string; pin?: string; role?: string; active?: boolean; canVoid?: boolean; branchIds?: unknown }
 
+const cleanRole = (v: unknown, fallback: Role): Role => ((ROLES as readonly string[]).includes(String(v)) ? (v as Role) : fallback);
+
 /** สาขาที่กำหนดให้พนักงาน (พนักงานขายต้องมีอย่างน้อย 1 สาขา) */
 function cleanBranchIds(v: unknown, role: string): number[] | null {
   if (v === undefined) return null;
   const valid = new Set((q.allBranches.all() as { id: number }[]).map((x) => x.id));
   const ids = [...new Set((Array.isArray(v) ? v : []).map(Number))].filter((n) => valid.has(n));
-  if (role !== 'manager' && !ids.length) throw new HttpError(422, 'กรุณาเลือกสาขาที่พนักงานคนนี้ดูแลอย่างน้อย 1 สาขา');
+  if (!allBranchRole(role) && !ids.length) throw new HttpError(422, 'กรุณาเลือกสาขาที่พนักงานคนนี้ดูแลอย่างน้อย 1 สาขา');
   return ids;
 }
 function setStaffBranches(staffId: number, ids: number[]) {
@@ -263,12 +277,12 @@ export function createStaff(body: StaffBody, me: Me) {
   if (!name) throw new HttpError(422, 'กรุณาระบุชื่อพนักงาน');
   const pin = String(body.pin ?? '');
   validPin(pin);
-  const role = body.role === 'manager' ? 'manager' : 'staff';
+  const role = cleanRole(body.role, 'sales');
   const branches = cleanBranchIds(body.branchIds ?? [me.branchId], role) ?? [me.branchId];
   const id = tx(() => {
     const r = db
       .prepare('INSERT INTO staff (name, pin_hash, role, can_void, active) VALUES (?, ?, ?, ?, 1)')
-      .run(name.slice(0, 60), hashPin(pin), role, body.canVoid === false ? 0 : role === 'manager' || body.canVoid ? 1 : 0);
+      .run(name.slice(0, 60), hashPin(pin), role, body.canVoid === false ? 0 : can({ role }, 'history', 'edit') || body.canVoid ? 1 : 0);
     const id = Number(r.lastInsertRowid);
     setStaffBranches(id, branches);
     return id;
@@ -281,13 +295,13 @@ export function updateStaff(id: number, body: StaffBody, me: Me) {
   if (!cur) throw new HttpError(404, 'ไม่พบพนักงาน');
   const name = body.name !== undefined ? body.name.trim() : cur.name;
   if (!name) throw new HttpError(422, 'กรุณาระบุชื่อพนักงาน');
-  const role = body.role === 'manager' || body.role === 'staff' ? body.role : cur.role;
+  const role = cleanRole(body.role, cur.role);
   const active = body.active !== undefined ? body.active : !!cur.active;
   const canVoid = body.canVoid !== undefined ? body.canVoid : !!cur.canVoid;
-  // ต้องเหลือผู้จัดการที่ใช้งานได้อย่างน้อย 1 คน
-  if (cur.role === 'manager' && cur.active && (role !== 'manager' || !active)) {
+  // ต้องเหลือผู้ดูแลระบบที่ใช้งานได้อย่างน้อย 1 คน (ไม่งั้นไม่มีใครตั้งค่าระบบได้)
+  if (cur.role === 'admin' && cur.active && (role !== 'admin' || !active)) {
     const { n } = q.activeManagers.get(id) as { n: number };
-    if (n === 0) throw new HttpError(409, 'ต้องมีผู้จัดการที่ใช้งานได้อย่างน้อย 1 คน');
+    if (n === 0) throw new HttpError(409, 'ต้องมีผู้ดูแลระบบที่ใช้งานได้อย่างน้อย 1 คน');
   }
   if (id === me.id && !active) throw new HttpError(409, 'ไม่สามารถปิดการใช้งานบัญชีของตัวเองได้');
   tx(() => {

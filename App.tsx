@@ -6,7 +6,7 @@ import { api } from './src/api';
 import { useAppSettings } from './src/appSettings';
 import { desktop } from './src/desktop';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { NavDrawer, refreshStockBadge, REPORT_ROUTES, type Route } from './src/components/NavMenu';
+import { canOpen, firstRoute, NavDrawer, refreshStockBadge, type Route } from './src/components/NavMenu';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { DashboardScreen } from './src/screens/DashboardScreen';
 import { ProductReportScreen } from './src/screens/ProductReportScreen';
@@ -25,6 +25,7 @@ import { ShipmentReportScreen } from './src/screens/ShipmentReportScreen';
 import { TaxReportScreen } from './src/screens/TaxReportScreen';
 import { auth, SessionContext, type Me } from './src/session';
 import { SalesScreen } from './src/screens/SalesScreen';
+import { PromoScreen } from './src/screens/PromoScreen';
 import { colors } from './src/theme';
 
 /** โหลดฟอนต์ไทย (IBM Plex Sans Thai) บนเว็บ — ถ้าออฟไลน์จะใช้ฟอนต์ระบบแทน */
@@ -44,7 +45,7 @@ function useRoute(): [Route, (r: Route) => void] {
   const read = (): Route => {
     if (Platform.OS !== 'web') return 'sales';
     const h = window.location.hash.slice(1);
-    const routes: Route[] = ['history', 'shifts', 'expenses', 'staff', 'dashboard', 'salesReport', 'billReport', 'productReport', 'taxReport', 'stock', 'skus', 'shipments', 'shipmentReport', 'branches', 'settings'];
+    const routes: Route[] = ['history', 'shifts', 'expenses', 'promos', 'staff', 'dashboard', 'salesReport', 'billReport', 'productReport', 'taxReport', 'stock', 'skus', 'shipments', 'shipmentReport', 'branches', 'settings'];
     return (routes as string[]).includes(h) ? (h as Route) : 'sales';
   };
   const [route, setRoute] = useState<Route>(read);
@@ -133,10 +134,10 @@ function Main({ me }: { me: Me }) {
     refreshStockBadge();
   }, [route, stockVersion]);
 
-  // หน้าพนักงานเฉพาะผู้จัดการ
+  // ไม่มีสิทธิ์เปิดหน้านี้ → พาไปหน้าแรกที่เปิดได้
   useEffect(() => {
-    if ((route === 'staff' || REPORT_ROUTES.includes(route) || route === 'settings' || route === 'branches' || route === 'shipments' || route === 'shipmentReport') && me.role !== 'manager') go('sales');
-  }, [route, me.role, go]);
+    if (!canOpen(me, route)) go(firstRoute(me));
+  }, [route, me, go]);
 
   return (
     <>
@@ -149,18 +150,19 @@ function Main({ me }: { me: Me }) {
       ) : null}
       {route === 'expenses' ? <ExpenseScreen onNavigate={go} onDrawerChanged={() => setStockVersion((v) => v + 1)} /> : null}
       {route === 'shifts' ? <ShiftScreen onNavigate={go} onShiftChanged={() => setStockVersion((v) => v + 1)} /> : null}
-      {route === 'staff' && me.role === 'manager' ? <StaffScreen onNavigate={go} /> : null}
-      {route === 'dashboard' && me.role === 'manager' ? <DashboardScreen onNavigate={go} /> : null}
-      {route === 'salesReport' && me.role === 'manager' ? <SalesReportScreen onNavigate={go} /> : null}
-      {route === 'billReport' && me.role === 'manager' ? <BillReportScreen onNavigate={go} /> : null}
-      {route === 'productReport' && me.role === 'manager' ? <ProductReportScreen onNavigate={go} /> : null}
-      {route === 'taxReport' && me.role === 'manager' ? <TaxReportScreen onNavigate={go} /> : null}
+      {route === 'staff' && canOpen(me, 'staff') ? <StaffScreen onNavigate={go} /> : null}
+      {route === 'dashboard' && canOpen(me, 'dashboard') ? <DashboardScreen onNavigate={go} /> : null}
+      {route === 'salesReport' && canOpen(me, 'salesReport') ? <SalesReportScreen onNavigate={go} /> : null}
+      {route === 'billReport' && canOpen(me, 'billReport') ? <BillReportScreen onNavigate={go} /> : null}
+      {route === 'productReport' && canOpen(me, 'productReport') ? <ProductReportScreen onNavigate={go} /> : null}
+      {route === 'taxReport' && canOpen(me, 'taxReport') ? <TaxReportScreen onNavigate={go} /> : null}
       {route === 'stock' ? <StockScreen onNavigate={go} onStockChanged={() => setStockVersion((v) => v + 1)} /> : null}
-      {route === 'settings' && me.role === 'manager' ? <SettingsScreen onNavigate={go} onSettingsChanged={() => setStockVersion((v) => v + 1)} /> : null}
-      {route === 'branches' && me.role === 'manager' ? <BranchScreen onNavigate={go} /> : null}
-      {route === 'shipments' && me.role === 'manager' ? <ShipmentScreen onNavigate={go} onStockChanged={() => setStockVersion((v) => v + 1)} /> : null}
-      {route === 'shipmentReport' && me.role === 'manager' ? <ShipmentReportScreen onNavigate={go} /> : null}
+      {route === 'settings' && canOpen(me, 'settings') ? <SettingsScreen onNavigate={go} onSettingsChanged={() => setStockVersion((v) => v + 1)} /> : null}
+      {route === 'branches' && canOpen(me, 'branches') ? <BranchScreen onNavigate={go} /> : null}
+      {route === 'shipments' && canOpen(me, 'shipments') ? <ShipmentScreen onNavigate={go} onStockChanged={() => setStockVersion((v) => v + 1)} /> : null}
+      {route === 'shipmentReport' && canOpen(me, 'shipmentReport') ? <ShipmentReportScreen onNavigate={go} /> : null}
       {route === 'skus' ? <SkuStockScreen onNavigate={go} onStockChanged={() => setStockVersion((v) => v + 1)} /> : null}
+      {route === 'promos' ? <PromoScreen onNavigate={go} /> : null}
       <NavDrawer visible={drawer} onClose={() => setDrawer(false)} route={route} onNavigate={go} />
     </>
   );

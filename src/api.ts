@@ -1,6 +1,6 @@
 // เรียก API ของเซิร์ฟเวอร์ POS (ทุก endpoint อยู่ใน object `api`) + ชนิดข้อมูลของคำขอ/คำตอบ
 import { Platform } from 'react-native';
-import { auth, type Me } from './session';
+import { auth, type Feature, type Me, type PermLevel, type Role } from './session';
 import { getDeviceTerminal } from './terminal';
 import type { PublicSettings } from './appSettings';
 import type {
@@ -309,16 +309,59 @@ export const api = {
   me: () => request<Me>('/api/auth/me'),
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
   staffList: () => request<StaffMember[]>('/api/staff'),
-  createStaff: (b: { name: string; pin: string; role: 'manager' | 'staff'; canVoid: boolean; branchIds: number[] }) =>
+  // ---------- สิทธิ์ตามบทบาท ----------
+  perms: () => request<PermCatalog>('/api/perms'),
+  savePerms: (role: Role, perms: Record<string, PermLevel>) =>
+    request<PermCatalog['perms']>(`/api/perms/${role}`, { method: 'PUT', body: JSON.stringify({ perms }) }),
+  resetPerms: (role: Role) => request<PermCatalog['perms']>(`/api/perms/${role}/reset`, { method: 'POST' }),
+  // ---------- โปรโมชั่น ----------
+  promos: () => request<PromoRule[]>('/api/promos'),
+  createPromo: (b: PromoInput) => request<PromoRule>('/api/promos', { method: 'POST', body: JSON.stringify(b) }),
+  updatePromo: (code: string, b: Partial<PromoRule>) => request<PromoRule>(`/api/promos/${code}`, { method: 'PUT', body: JSON.stringify(b) }),
+  deletePromo: (code: string) => request<{ ok: true }>(`/api/promos/${code}`, { method: 'DELETE' }),
+  promoPreview: (subtotal: number) => request<PromoPreview>(`/api/promos/preview?subtotal=${subtotal}`),
+  createStaff: (b: { name: string; pin: string; role: Role; canVoid: boolean; branchIds: number[] }) =>
     request<StaffMember>('/api/staff', { method: 'POST', body: JSON.stringify(b) }),
-  updateStaff: (id: number, b: Partial<{ name: string; pin: string; role: 'manager' | 'staff'; canVoid: boolean; active: boolean; branchIds: number[] }>) =>
+  updateStaff: (id: number, b: Partial<{ name: string; pin: string; role: Role; canVoid: boolean; active: boolean; branchIds: number[] }>) =>
     request<StaffMember>(`/api/staff/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
 };
+
+export interface PermCatalog {
+  roles: { id: Role; label: string; desc: string; fixed: boolean }[];
+  features: { id: Feature; label: string; group: string; hint: string }[];
+  perms: Record<Role, Record<Feature, PermLevel>>;
+}
+
+/** โปรโมชั่น (ตัวตั้งค่า): ส่วนลด หรือ ของแถม */
+export interface PromoRule {
+  code: string;
+  label: string;
+  kind: 'discount' | 'freebie';
+  type: 'percent' | 'amount';
+  value: number;
+  minTotal: number;
+  giftVariantId: number | null;
+  giftQty: number;
+  /** ใช้เองเมื่อยอดถึงขั้นต่ำ (ไม่ต้องกรอกโค้ด) */
+  auto: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+  note: string;
+  active: boolean;
+  giftName?: string | null;
+}
+export type PromoInput = Omit<PromoRule, 'giftName'>;
+export interface PromoPreview {
+  subtotal: number;
+  gifts: { variantId: number; qty: number; promoCode: string; label: string; name: string }[];
+  discount: { code: string; label: string; amount: number } | null;
+  next: { code: string; label: string; minTotal: number; missing: number }[];
+}
 
 export interface StaffMember {
   id: number;
   name: string;
-  role: 'manager' | 'staff';
+  role: Role;
   active: boolean;
   canVoid: boolean;
   lastLogin: string | null;

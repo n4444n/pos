@@ -2,14 +2,27 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../api';
-import { useSession } from '../session';
+import { can, ROLE_LABEL, useSession, type Feature, type Me } from '../session';
 import { colors, font, radius } from '../theme';
 import { BranchChip } from './BranchPicker';
 import { Icon, type IconName } from './Icon';
 import { AppVersionChip, UpdateButton } from './UpdateButton';
 
 export type Route =
-  | 'sales' | 'dashboard' | 'salesReport' | 'billReport' | 'productReport' | 'taxReport' | 'history' | 'shifts' | 'expenses' | 'staff' | 'stock' | 'skus' | 'shipments' | 'shipmentReport' | 'branches' | 'settings';
+  | 'sales' | 'dashboard' | 'salesReport' | 'billReport' | 'productReport' | 'taxReport' | 'history' | 'shifts' | 'expenses' | 'promos' | 'staff' | 'stock' | 'skus' | 'shipments' | 'shipmentReport' | 'branches' | 'settings';
+
+/** หน้าไหนต้องมีสิทธิ์อะไร (ตั้งได้ที่ พนักงาน → การจัดการสิทธิ์) */
+export const ROUTE_FEATURE: Record<Route, Feature> = {
+  sales: 'sales', history: 'history', shifts: 'shifts', expenses: 'expenses', promos: 'promos',
+  stock: 'stock', skus: 'stock', shipments: 'shipments', shipmentReport: 'shipments',
+  dashboard: 'reports', salesReport: 'reports', billReport: 'reports', productReport: 'reports', taxReport: 'taxReport',
+  staff: 'staff', branches: 'branches', settings: 'settings',
+};
+/** เปิดหน้านี้ได้ไหม */
+export const canOpen = (me: Me, r: Route) => can(me, ROUTE_FEATURE[r]);
+/** หน้าแรกที่เปิดได้ (ใช้เมื่อถูกพาออกจากหน้าที่ไม่มีสิทธิ์) */
+export const firstRoute = (me: Me): Route =>
+  (['sales', 'history', 'shifts', 'expenses', 'promos', 'stock', 'shipments', 'dashboard', 'staff', 'settings'] as Route[]).find((r) => canOpen(me, r)) ?? 'sales';
 
 /** หน้าที่อยู่ใต้เมนู "รายงาน" (เฉพาะผู้จัดการ) */
 export const REPORT_ROUTES: Route[] = ['dashboard', 'salesReport', 'billReport', 'productReport', 'taxReport'];
@@ -43,11 +56,11 @@ function useStockBadge() {
   return n;
 }
 
-interface Item { id: Route | 'report' | 'stockGroup' | 'shipGroup'; label: string; icon: IconName; soon?: boolean; manager?: boolean; children?: Item[] }
+interface Item { id: Route | 'report' | 'stockGroup' | 'shipGroup'; label: string; icon: IconName; soon?: boolean; children?: Item[] }
 const ITEMS: Item[] = [
   { id: 'sales', label: 'หน้าขาย', icon: 'storefront-outline' },
   {
-    id: 'report', label: 'รายงาน', icon: 'stats-chart-outline', manager: true,
+    id: 'report', label: 'รายงาน', icon: 'stats-chart-outline',
     children: [
       { id: 'dashboard', label: 'รายงานรวม', icon: 'grid-outline' },
       { id: 'salesReport', label: 'ยอดขาย', icon: 'cash-outline' },
@@ -59,7 +72,8 @@ const ITEMS: Item[] = [
   { id: 'history', label: 'ประวัติการขาย', icon: 'receipt-outline' },
   { id: 'shifts', label: 'กะการขาย', icon: 'time-outline' },
   { id: 'expenses', label: 'ค่าใช้จ่าย / ลิ้นชัก', icon: 'wallet-outline' },
-  { id: 'staff', label: 'พนักงาน', icon: 'people-outline', manager: true },
+  { id: 'promos', label: 'โปรโมชั่น', icon: 'gift-outline' },
+  { id: 'staff', label: 'พนักงาน', icon: 'people-outline' },
   {
     id: 'stockGroup', label: 'สต็อกสินค้า', icon: 'shirt-outline',
     children: [
@@ -68,14 +82,14 @@ const ITEMS: Item[] = [
     ],
   },
   {
-    id: 'shipGroup', label: 'ส่งของจากโรงงาน', icon: 'cube-outline', manager: true,
+    id: 'shipGroup', label: 'ส่งของจากโรงงาน', icon: 'cube-outline',
     children: [
       { id: 'shipments', label: 'ใบส่งของ (สแกนส่ง)', icon: 'scan-outline' },
       { id: 'shipmentReport', label: 'รายงานการส่ง', icon: 'document-text-outline' },
     ],
   },
-  { id: 'branches', label: 'สาขา', icon: 'business-outline', manager: true },
-  { id: 'settings', label: 'ตั้งค่า', icon: 'settings-outline', manager: true },
+  { id: 'branches', label: 'สาขา', icon: 'business-outline' },
+  { id: 'settings', label: 'ตั้งค่า', icon: 'settings-outline' },
 ];
 
 interface MenuProps {
@@ -83,6 +97,15 @@ interface MenuProps {
   onNavigate: (r: Route) => void;
   /** ช่องค้นหาด้านบนเมนู (หน้าประวัติการขายใช้ค้นหาบิล) */
   header?: ReactNode;
+}
+
+/** เมนูที่บทบาทนี้เห็น (กลุ่มเมนูเหลือเฉพาะลูกที่เปิดได้) */
+function visibleItems(me: Me): Item[] {
+  return ITEMS.flatMap((it) => {
+    if (!it.children) return canOpen(me, it.id as Route) ? [it] : [];
+    const children = it.children.filter((c) => canOpen(me, c.id as Route));
+    return children.length ? [{ ...it, children }] : [];
+  });
 }
 
 /** รายการเมนู + ส่วนท้าย ใช้ร่วมกันทั้ง sidebar และ drawer */
@@ -108,7 +131,7 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
       {header}
       {/* รายการเมนูเลื่อนขึ้น-ลงได้เมื่อยาวเกินจอ (เช่น เปิดเมนูย่อยหลายกลุ่ม) — ส่วนผู้ใช้/ท้ายเมนูอยู่กับที่ด้านล่าง */}
       <ScrollView style={s.items} contentContainerStyle={{ gap: 8 }} showsVerticalScrollIndicator>
-        {ITEMS.filter((it) => !it.manager || me.role === 'manager').map((it) => {
+        {visibleItems(me).map((it) => {
           if (it.children) {
             const expanded = isOpen(it);
             const inGroup = it.children.some((c) => c.id === route);
@@ -172,7 +195,7 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={s.userName} numberOfLines={1}>{me.name}</Text>
-          <Text style={s.userRole}>{me.role === 'manager' ? 'ผู้จัดการ' : 'พนักงานขาย'}</Text>
+          <Text style={s.userRole}>{ROLE_LABEL[me.role] ?? 'พนักงานขาย'}</Text>
         </View>
         <Pressable
           onPress={logout}
