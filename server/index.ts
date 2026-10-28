@@ -133,7 +133,7 @@ function requireMain() {
 
 // ---------- handlers ----------
 function bootstrap(terminalHeader?: unknown) {
-  const terminal = terminalFor(terminalHeader, false);
+  const terminal = terminalFor(terminalHeader);
   return {
     categories: q.categories.all(),
     products: (q.products.all() as { attrs: string | null; vatExempt: number }[]).map((p) => ({ ...p, vatExempt: !!p.vatExempt, attrs: p.attrs ? JSON.parse(p.attrs) : [] })),
@@ -177,7 +177,7 @@ function createOrder(body: OrderBody, terminalHeader?: unknown) {
   if (!methodEnabled(payment)) throw new HttpError(400, 'วิธีชำระเงินนี้ถูกปิดใช้งาน (ตั้งค่า → วิธีชำระเงิน)');
 
   const shift = requireShift(); // ต้องเปิดกะก่อนขาย
-  const terminal = terminalFor(terminalHeader, true); // เครื่อง POS ที่ออกบิล
+  const terminal = terminalFor(terminalHeader); // เครื่อง POS ที่ออกบิล
 
   return tx(() => {
     // ราคาและสต็อกคำนวณจากฐานข้อมูลเสมอ (ไม่เชื่อราคาจากฝั่ง client)

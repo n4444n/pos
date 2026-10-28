@@ -33,7 +33,7 @@ export const SECTIONS: { id: SectionId; label: string; icon: IconName; desc: str
   { id: 'display', label: 'การแสดงผลหน้าขาย', icon: 'grid-outline', desc: 'มุมมองสินค้า รูปทรง/คุณภาพรูป ตัวอักษร การแสดงสต็อก' },
   { id: 'stock', label: 'สต็อก', icon: 'cube-outline', desc: 'จุดแจ้งเตือนสินค้าเหลือน้อย · รูปแบบรหัส SKU' },
   { id: 'payments', label: 'วิธีชำระเงิน & ค่าธรรมเนียม', icon: 'wallet-outline', desc: 'เปิด/ปิดวิธีชำระ ตั้งชื่อ ค่าธรรมเนียม % / บาท' },
-  { id: 'tax', label: 'ภาษี (VAT)', icon: 'document-text-outline', desc: 'ข้อกำหนดกรมสรรพากร: จด VAT · เลขผู้เสียภาษี · สำนักงานใหญ่/สาขาที่ · อัตรา VAT (วันเริ่ม/สิ้นสุด) · หมายเลขเครื่อง POS · ห้ามแก้ไขบิล', local: true },
+  { id: 'tax', label: 'ภาษี (VAT)', icon: 'document-text-outline', desc: 'ไม่บังคับ — ตั้งเมื่อร้านจด VAT: เลขผู้เสียภาษี · สำนักงานใหญ่/สาขาที่ · อัตรา VAT (วันเริ่ม/สิ้นสุด) · หมายเลขเครื่อง POS · ห้ามแก้ไขบิล', local: true },
   { id: 'barcode', label: 'บาร์โค้ด', icon: 'barcode-outline', desc: 'ประเภทบาร์โค้ด · สร้างบาร์โค้ดอัตโนมัติ' },
   { id: 'labels', label: 'กระดาษบาร์โค้ด', icon: 'pricetags-outline', desc: 'หน้าตาป้าย: โปรไฟล์ · ขนาดสติ๊กเกอร์/ดวงต่อแถว · ขนาดบาร์โค้ด · ข้อมูลและตัวอักษรบนป้าย · รูปแบบป้าย' },
   { id: 'labelPrinter', label: 'ตั้งค่าเครื่องพิมพ์บาร์โค้ด', icon: 'print-outline', desc: 'เครื่องพิมพ์ป้ายบาร์โค้ดของคอมพิวเตอร์เครื่องนี้ (แยกจากเครื่องพิมพ์ใบเสร็จ) · พิมพ์ทันทีไม่ถาม · ขนาดกระดาษในไดรเวอร์ · ทดสอบพิมพ์ป้าย', local: true },
