@@ -62,26 +62,34 @@ export function TaxSection({ notify, onChanged }: { notify: Notify; onChanged: (
 
 type Run = (fn: () => Promise<TaxAdmin>, ok: string) => Promise<boolean>;
 
-/** สรุปสถานะความพร้อมตามข้อกำหนด */
+/**
+ * สรุปว่าตั้งอะไรไว้แล้วบ้าง — เป็นรายการ "ตั้งเพิ่มได้" ไม่ใช่เงื่อนไขบังคับ
+ * ไม่ตั้งอะไรเลยก็ขายได้ตามปกติ บิลจะไม่คิด VAT และไม่ระบุเครื่อง POS
+ */
 function Status({ data }: { data: TaxAdmin }) {
   const vatBranches = data.branches.filter((b) => b.vatRegistered);
+  const on = vatBranches.length > 0;
   const checks: [boolean, string][] = [
     [!!data.company.taxId && data.company.taxIdValid, 'เลขประจำตัวผู้เสียภาษี 13 หลัก'],
-    [vatBranches.every((b) => !!b.taxBranchNo), 'ระบุสำนักงานใหญ่ / สาขาที่ ทุกสาขาที่จด VAT'],
-    [data.rateToday !== null || !vatBranches.length, 'มีอัตรา VAT ที่มีผลวันนี้'],
-    [vatBranches.every((b) => data.terminals.some((t) => t.branchId === b.id && t.active)), 'ตั้งเครื่อง POS ทุกสาขาที่จด VAT'],
+    [on && vatBranches.every((b) => !!b.taxBranchNo), 'ระบุสำนักงานใหญ่ / สาขาที่ ของสาขาที่จด VAT'],
+    [data.rateToday !== null, 'มีอัตรา VAT ที่มีผลวันนี้'],
+    [on && vatBranches.every((b) => data.terminals.some((t) => t.branchId === b.id && t.active)), 'ตั้งเครื่อง POS ของสาขาที่จด VAT'],
     [data.company.lockEdit, 'ห้ามแก้ไขบิลที่ออกแล้ว (ยกเลิกแล้วออกใหม่)'],
   ];
   const done = checks.filter((c) => c[0]).length;
+  const full = done === checks.length;
   return (
-    <View style={[s.status, done === checks.length && { borderColor: '#BFE8D3', backgroundColor: colors.successSoft }]}>
+    <View style={[s.status, full && { borderColor: '#BFE8D3', backgroundColor: colors.successSoft }]}>
       <View style={s.row}>
-        <Icon name={done === checks.length ? 'shield-checkmark' : 'alert-circle'} size={20} color={done === checks.length ? colors.success : '#B26A00'} />
+        <Icon name={full ? 'shield-checkmark' : 'information-circle'} size={20} color={full ? colors.success : colors.primary} />
         <Text style={s.statusTitle}>
-          {done === checks.length ? 'พร้อมตามข้อกำหนดภาษีมูลค่าเพิ่ม' : `ตั้งค่าแล้ว ${done}/${checks.length} รายการ`}
+          {full ? 'ครบตามข้อกำหนดภาษีมูลค่าเพิ่ม' : `ตั้งค่าไว้ ${done}/${checks.length} รายการ`}
           {data.rateToday !== null ? ` · อัตรา VAT วันนี้ ${data.rateToday}%` : ''}
         </Text>
       </View>
+      <Text style={s.hint}>
+        ส่วนนี้ไม่บังคับ — ไม่ตั้งก็ขายได้ตามปกติ (บิลไม่คิด VAT) ตั้งเมื่อร้านจด VAT และต้องออกเอกสารตามข้อกำหนดกรมสรรพากร
+      </Text>
       <View style={s.checks}>
         {checks.map(([ok, label]) => (
           <View key={label} style={s.check}>
@@ -198,8 +206,10 @@ function RatesCard({ data, run }: { data: TaxAdmin; run: Run }) {
       </Text>
       {data.rateToday === null && data.branches.some((b) => b.vatRegistered) ? (
         <View style={s.warn}>
-          <Icon name="warning-outline" size={16} color={colors.danger} />
-          <Text style={[s.hint, { color: colors.danger, flex: 1 }]}>ยังไม่มีอัตรา VAT ที่มีผลวันนี้ — สาขาที่จด VAT จะขายไม่ได้จนกว่าจะเพิ่มอัตรา</Text>
+          <Icon name="information-circle-outline" size={16} color="#B26A00" />
+          <Text style={[s.hint, { color: '#B26A00', flex: 1 }]}>
+            ยังไม่มีอัตรา VAT ที่มีผลวันนี้ — ขายได้ตามปกติ แต่บิลจะไม่คิด VAT (ถ้าร้านจด VAT ให้เพิ่มอัตราเพื่อให้บิลคิดภาษีถูกต้อง)
+          </Text>
         </View>
       ) : null}
       <TableWrap>
@@ -387,7 +397,7 @@ function ThisDeviceCard({ data, notify, onChanged }: { data: TaxAdmin; notify: N
           {cur ? <Btn label="ไม่ระบุ" icon="close" onPress={() => pick(null)} /> : null}
         </View>
       ) : null}
-      <Text style={[s.hint, { color: mine ? colors.success : colors.sub }]}>{mine ? `เครื่องนี้ใช้เป็น ${mine.code}` : 'เครื่องนี้ยังไม่ได้เลือกเครื่อง POS'}</Text>
+      <Text style={[s.hint, { color: mine ? colors.success : colors.sub }]}>{mine ? `เครื่องนี้ใช้เป็น ${mine.code}` : 'เครื่องนี้ยังไม่ได้เลือกเครื่อง POS — ขายได้ตามปกติ บิลแค่ไม่ระบุเครื่อง'}</Text>
     </Card>
   );
 }

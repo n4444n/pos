@@ -90,7 +90,6 @@ const q = {
        FROM pos_terminals t ORDER BY t.branch_id, t.code`,
   ),
   terminal: db.prepare('SELECT id, branch_id AS branchId, code, rd_no AS rdNo, name, active FROM pos_terminals WHERE id = ?'),
-  activeIn: db.prepare('SELECT COUNT(*) AS n FROM pos_terminals WHERE branch_id = ? AND active = 1'),
 };
 
 /** อัตรา VAT (%) ที่มีผลในวันที่ระบุ · null = ไม่มีอัตราครอบคลุม */
@@ -125,13 +124,15 @@ export function billTax(lines: TaxLine[], subtotal: number, discount: number, to
   return { vatRate: r ? ratePct : 0, vat, vatBase: round2(vatable - vat), exempt };
 }
 
-/** ภาษีของบิลขายใหม่ในสาขาปัจจุบัน (อัตรา ณ วันนี้) */
+/**
+ * ภาษีของบิลขายใหม่ในสาขาปัจจุบัน (อัตรา ณ วันนี้)
+ * ระบบภาษีเป็นของ "ตั้งเพิ่มถ้าต้องการ" — ไม่บังคับตั้งค่าก่อนขาย
+ * สาขาไม่ได้จด VAT หรือยังไม่มีอัตราที่มีผลวันนี้ → ออกบิลได้ตามปกติ โดยไม่คิด VAT
+ */
 export function saleTax(lines: TaxLine[], subtotal: number, discount: number, total: number): BillTax {
   const b = currentBranchInfo();
   if (!b.vatRegistered) return billTax(lines, subtotal, discount, total, 0);
-  const rate = rateOn(today());
-  if (rate === null) throw new HttpError(409, 'ยังไม่ได้ตั้งอัตรา VAT ที่มีผลวันนี้ — ไปที่ ตั้งค่า → ภาษี (VAT) → อัตรา VAT', 'NO_VAT_RATE');
-  return billTax(lines, subtotal, discount, total, rate);
+  return billTax(lines, subtotal, discount, total, rateOn(today()) ?? 0);
 }
 
 /** สินค้า (variant) ไหนยกเว้น VAT */
@@ -147,25 +148,13 @@ export function getTerminal(id: number): Terminal | null {
 }
 /**
  * เครื่อง POS ของ request (header X-POS-Terminal ที่แต่ละเครื่องเลือกไว้ในตั้งค่า → ภาษี → เครื่องนี้)
- * - สาขาที่ตั้งเครื่อง POS ไว้แล้ว → ต้องเลือกเครื่องก่อนขาย (strict)
- * - สาขาที่ยังไม่ตั้ง → null (บิลไม่ระบุเครื่อง)
+ * ไม่บังคับ — เครื่องที่ยังไม่ได้เลือก ขายได้ตามปกติ บิลแค่ไม่ระบุเครื่อง
  */
-export function terminalFor(header: unknown, strict: boolean): Terminal | null {
+export function terminalFor(header: unknown): Terminal | null {
   const branch = currentBranch() || mainBranchId();
   const id = Number(header);
   const t = Number.isInteger(id) && id > 0 ? getTerminal(id) : null;
-  if (t && t.active && t.branchId === branch) return t;
-  const configured = (q.activeIn.get(branch) as { n: number }).n > 0;
-  if (configured && strict) {
-    throw new HttpError(
-      409,
-      t && t.branchId !== branch
-        ? `เครื่องนี้ตั้งเป็น ${t.code} ของสาขาอื่น — เลือกเครื่อง POS ของสาขานี้ที่ ตั้งค่า → ภาษี (VAT) → เครื่องนี้`
-        : 'เครื่องนี้ยังไม่ได้เลือกหมายเลขเครื่อง POS — ไปที่ ตั้งค่า → ภาษี (VAT) → เครื่องนี้',
-      'NO_TERMINAL',
-    );
-  }
-  return null;
+  return t && t.active && t.branchId === branch ? t : null;
 }
 
 // ---------- หน้าตั้งค่าภาษี (ผู้จัดการ) ----------
