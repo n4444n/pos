@@ -34,7 +34,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Clothing POS",
-      "artifactName": "ClothingPOS-Setup-${version}.exe"
+      "artifactName": "ClothingPOS-Setup-${version}.exe",
+      "include": "build/installer.nsh"
     }
   }
 }

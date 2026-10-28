@@ -719,6 +719,7 @@ ipcMain.on('shell:close-settings', (e) => fromShell(e) && settingsWin?.close());
 //         เครื่องที่เก่ากว่า minVersion → ขึ้นกล่องให้ติดตั้งทันที (ไม่มีปุ่มภายหลัง)
 const CHECK_EVERY_MS = 4 * 60 * 60 * 1000;
 let manualCheck = false;
+let installing = false; // กดติดตั้งแล้ว — กันสั่งซ้ำ และกันตัวติดตั้งทำงานพร้อมกัน 2 ตัว
 let update = { status: 'idle', current: app.getVersion(), version: null, percent: 0, forced: false, notes: [] };
 
 /** รายละเอียดอัปเดตจาก latest.yml (releaseNotes) → รายการข้อสั้น ๆ */
@@ -755,9 +756,35 @@ async function minVersionPolicy() {
     return null;
   }
 }
+/**
+ * ติดตั้งอัปเดตเดี๋ยวนี้
+ * ต้องปิดหน้าต่างและออกจากโปรแกรมให้สนิทก่อน ไม่งั้นตัวติดตั้งลบไฟล์รุ่นเก่าไม่ได้
+ * แล้วขึ้น "Failed to uninstall old application files … : 2" (ไฟล์ถูกล็อกเพราะโปรแกรมยังเปิดอยู่)
+ */
 function installNow() {
-  if (update.status !== 'ready') return false;
-  setImmediate(() => autoUpdater.quitAndInstall(true, true)); // ติดตั้งเงียบ แล้วเปิดโปรแกรมใหม่
+  if (update.status !== 'ready' || installing) return false;
+  installing = true;
+  setUpdate({ status: 'installing' });
+  app.removeAllListeners('window-all-closed'); // กัน app.quit() ซ้อนระหว่างปิดหน้าต่าง
+  for (const w of BrowserWindow.getAllWindows()) {
+    try {
+      w.removeAllListeners('close');
+      w.destroy();
+    } catch {
+      /* ปิดไม่ได้ก็ข้าม */
+    }
+  }
+  // isSilent = false: ตัวติดตั้งแบบเลือกโฟลเดอร์ได้ (oneClick: false) ใช้โหมดเงียบไม่ได้
+  //   โหมดเงียบจะข้ามขั้นตอนปิดโปรแกรมเก่า แล้วถอนรุ่นเก่าไม่สำเร็จ
+  setTimeout(() => {
+    try {
+      autoUpdater.quitAndInstall(false, true);
+    } catch (e) {
+      installing = false;
+      setUpdate({ status: 'ready' });
+      dialog.showErrorBox('อัปเดตไม่สำเร็จ', `เปิดตัวติดตั้งไม่ได้: ${String(e?.message ?? e)}\n\nปิดโปรแกรมแล้วลองใหม่อีกครั้ง`);
+    }
+  }, 400); // เผื่อเวลาให้หน้าต่างปิดจริง
   return true;
 }
 
@@ -766,7 +793,9 @@ function setupUpdater() {
   autoUpdater.setFeedURL({ provider: 'generic', url: updatesUrl() });
   autoUpdater.requestHeaders = appHeaders(); // electron-updater ใช้ session แยก → แนบกุญแจเอง
   autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // ไม่ติดตั้งเองตอนปิดโปรแกรม — ติดตั้งเฉพาะตอนกดปุ่ม (installNow)
+  // เดิมเปิดไว้ ทำให้ตัวติดตั้งถูกสั่งรัน 2 ตัวซ้อน (ตอน quitAndInstall และตอน quit) แย่งลบไฟล์เดียวกัน
+  autoUpdater.autoInstallOnAppQuit = false;
 
   autoUpdater.on('update-not-available', () => {
     if (manualCheck) dialog.showMessageBox(win, { type: 'info', title: 'อัปเดต', message: `ใช้เวอร์ชันล่าสุดอยู่แล้ว (${app.getVersion()})` });
