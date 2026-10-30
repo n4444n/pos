@@ -238,6 +238,8 @@ export const api = {
   cancelShipment: (id: number, reason: string) =>
     request<ShipmentList>(`/api/shipments/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
   restoreShipment: (id: number) => request<ShipmentDetail>(`/api/shipments/${id}/restore`, { method: 'POST' }),
+  /** ลบใบที่ส่งออกแล้วถาวร พร้อมคืนสต็อกกลับที่เดิม */
+  deleteShipment: (id: number) => request<{ ok: true; docNo: string; items: number }>(`/api/shipments/${id}`, { method: 'DELETE' }),
   // ----- ภาษีมูลค่าเพิ่ม -----
   tax: () => request<TaxAdmin>('/api/tax'),
   taxCompany: (b: { legalName?: string; taxId?: string; lockEdit?: boolean }) => request<TaxAdmin>('/api/tax/company', { method: 'PUT', body: JSON.stringify(b) }),

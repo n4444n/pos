@@ -43,7 +43,7 @@ import { backupBuffer, backupFileName, dropUpload, newUploadPath, previewUpload,
 import { docFloor } from './docFloor.ts';
 import { permCatalog, resetPerms, savePerms } from './perms.ts';
 import { bestAutoDiscount, createPromo, deletePromo, giftsFor, listPromos, previewFor, updatePromo } from './promos.ts';
-import { cancelShipment, createShipment, holdShipment, listShipments, restoreShipment, resumeShipment, scanShipment, setShipmentItem, shipmentDetail, shipShipment, updateShipment } from './shipments.ts';
+import { cancelShipment, createShipment, deleteShippedShipment, holdShipment, listShipments, restoreShipment, resumeShipment, scanShipment, setShipmentItem, shipmentDetail, shipShipment, updateShipment } from './shipments.ts';
 import {
   createCategory, getProduct, listCategories, saveBranchStock, listProducts, listSkus, patchVariant, bulkUpdateSkus, stockCommand, bulkProducts, readUpload, saveProduct, saveUpload, saveUploadVariants, uploadsMissingVariants, setProductActive, stockSummary,
   variantLabel,
@@ -667,9 +667,15 @@ const server = createServer(async (req, res) => {
       {
         const sh = /^\/api\/shipments\/(\d+)(?:\/(scan|ship|cancel|restore|hold|resume|items\/(\d+)))?$/.exec(path);
         if (sh) {
-          requireFeature(me, 'shipments', 'edit');
           const id = Number(sh[1]);
-          if (!sh[2] && req.method === 'GET') return json(req, res, 200, shipmentDetail(id));
+          // เปิดดูใบส่งของ ใช้สิทธิ์ "ดูได้" ก็พอ · แก้/ลบ ต้อง "แก้ไขได้"
+          if (!sh[2] && req.method === 'GET') {
+            requireFeature(me, 'shipments', 'view');
+            return json(req, res, 200, shipmentDetail(id));
+          }
+          requireFeature(me, 'shipments', 'edit');
+          // ลบใบที่ส่งออกแล้วถาวร พร้อมคืนสต็อกกลับที่เดิม
+          if (!sh[2] && req.method === 'DELETE') return json(req, res, 200, deleteShippedShipment(id, me));
           if (!sh[2] && req.method === 'PATCH') return json(req, res, 200, updateShipment(id, (await readBody(req)) as never));
           if (sh[2] === 'scan' && req.method === 'POST') return json(req, res, 200, scanShipment(id, (await readBody(req)) as never));
           if (sh[2] === 'ship' && req.method === 'POST') return json(req, res, 200, shipShipment(id, me));
