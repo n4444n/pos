@@ -172,17 +172,3 @@ GitHub Actions สร้างให้อัตโนมัติทุกค�
 | ดู log ร้าน a | `journalctl -u pos-trial@a -f` |
 | รายชื่อร้านที่รันอยู่ | `pos-trial-ctl list` |
 | สำรองข้อมูลร้านทดลอง | ไฟล์อยู่ `/var/lib/pos-trial/<ร้าน>/pos.db` · ฐานข้อมูล license `/var/lib/pos-license/license.db` |
-
-### ทดลองบนเครื่องตัวเอง (ไม่ต้องมี VPS)
-| คำสั่ง | เปิดที่ |
-|---|---|
-| `license-demo.bat` | `http://localhost:3100/admin` + แอปชุดทดลองบนเครื่องนี้ |
-| `license-demo.bat ngrok` | ลิงก์ ngrok (เช่น `https://<ชื่อ>.ngrok-free.dev/admin`) — ทดสอบจากเครื่องอื่น/มือถือได้ |
-
-- ทุกอย่างอยู่หลังพอร์ต **3100** พอร์ตเดียว (ลิงก์ ngrok ลิงก์เดียวใช้ได้หมด):
-  `/admin` แผงควบคุม · `/api/activate`, `/api/check` แอปชุดทดลอง · `/s/<ชื่อย่อร้าน>` เปิดร้านในเบราว์เซอร์
-- ร้านทดลองรันอยู่หลังบ้านที่พอร์ต 3101, 3102, … — แอปแนบ header `X-POS-Shop` ส่วนเบราว์เซอร์จำร้านใน cookie (`/s/` = ลืมร้าน)
-- รหัสผ่านแผงควบคุม: สุ่มครั้งแรกเก็บใน `license-server\data\admin-password.txt` (แก้ไฟล์แล้วรันใหม่ = เปลี่ยนรหัส) หรือตั้ง `ADMIN_PASSWORD`
-- แอปชุดทดลองบนเครื่องอื่น: `set POS_LICENSE_SERVER=<ลิงก์ ngrok>` แล้ว `cd desktop && npx electron . --trial`
-- บัญชี ngrok ฟรีเปิดได้ทีละตัว — ปิด `run-ngrok.bat` (พอร์ต 3000) ก่อน
-- ข้อมูลทดลองอยู่ `license-server\data` (ลบ = เริ่มใหม่)

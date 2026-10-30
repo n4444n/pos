@@ -18,9 +18,7 @@
     "start": "npm run build:web && cross-env NODE_ENV=production npm run server",
     "serve": "cross-env NODE_ENV=production npm run server",
     "typecheck": "tsc --noEmit",
-    "printer:emulator": "node desktop/tools/printer-emulator.cjs",
-    "db:reset": "node -e \"require('fs').rmSync('data',{recursive:true,force:true})\"",
-    "db:demo": "node --experimental-strip-types --disable-warning=ExperimentalWarning server/demo-sales.ts"
+    "db:reset": "node -e \"require('fs').rmSync('data',{recursive:true,force:true})\""
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

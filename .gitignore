@@ -20,3 +20,11 @@ desktop/app-key.txt
 # ผลจากเครื่องพิมพ์จำลอง
 printer-output/
 *.log
+# ไฟล์ทดสอบ/ngrok สำหรับเครื่องนักพัฒนา — ไม่ขึ้น GitHub
+run-test.bat
+test-printer.bat
+start-ngrok.bat
+run-ngrok.bat
+license-demo.bat
+desktop/tools/
+server/demo-sales.ts

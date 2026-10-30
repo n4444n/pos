@@ -2,7 +2,7 @@
 // - ภาษาไทยออกถูกทุกตัว (ส่งเป็นภาพ ไม่ใช้ตารางอักษรของเครื่องพิมพ์)
 // - ตัดกระดาษ (GS V) · เปิดลิ้นชักเงิน (ESC p) · เว้นระยะหัว/ท้าย (ESC J)
 // - ส่งทาง LAN/WiFi (TCP 9100) · USB (Windows spooler แบบ RAW) · Bluetooth (พอร์ต COM เสมือน)
-// ไม่พึ่ง Electron — ทดสอบด้วย node ได้ และใช้ร่วมกับตัวจำลองเครื่องพิมพ์ (tools/printer-emulator.cjs)
+// ไม่พึ่ง Electron — ทดสอบด้วย node ได้
 const net = require('node:net');
 const fs = require('node:fs');
 const os = require('node:os');

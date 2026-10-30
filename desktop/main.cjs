@@ -19,7 +19,7 @@ const { execFileSync } = require('node:child_process');
 // เซิร์ฟเวอร์ license = เซิร์ฟเวอร์เดียวกับที่ตั้งไว้ในแอป (config.serverUrl เช่น https://pos.sh0p.tech)
 const licenseServer = () => String(config.serverUrl || '').replace(/\/+$/, '');
 
-// โหมดพัฒนาเท่านั้น: POS_SERVER_URL ชี้ไปเซิร์ฟเวอร์ทดสอบบนเครื่องนี้ (run-test.bat)
+// โหมดพัฒนาเท่านั้น: POS_SERVER_URL ชี้ไปเซิร์ฟเวอร์บนเครื่องนี้
 // ใช้โฟลเดอร์ตั้งค่าแยก (%APPDATA%\Clothing POS Dev) จึงไม่ทับ license/เครื่องพิมพ์ของแอปที่ติดตั้งจริง
 const DEV_SERVER = !app.isPackaged && process.env.POS_SERVER_URL ? String(process.env.POS_SERVER_URL).replace(/\/+$/, '') : '';
 if (DEV_SERVER) app.setName('Clothing POS Dev');

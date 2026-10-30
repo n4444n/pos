@@ -1,5 +1,5 @@
 // Clothing POS — เซิร์ฟเวอร์ license + แผงควบคุมร้านทดลอง
-// รัน: node --experimental-strip-types license-server/server.ts   (หรือ license-demo.bat)
+// รัน: node --experimental-strip-types license-server/server.ts
 //
 //   แผงควบคุม   /admin             ออก license (ร้าน · จำนวนวัน · จำนวนเครื่อง) · ต่ออายุ · ระงับ · ดูเครื่อง/สถานะร้าน
 //   แอป .exe    POST /api/activate กรอก license → ยังไม่มีร้าน? จองพอร์ต + สร้าง + เปิดบริการ → ตอบที่อยู่ + PIN
