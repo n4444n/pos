@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { api, type ShipBranch, type ShipmentDetail, type ShipReport, type ShipReportFilter, type ShipReportRow } from '../api';
+import { ToastView } from '../components/ToastView';
+import { can, useSession } from '../session';
+import type { Toast } from '../store/usePos';
 import { Icon } from '../components/Icon';
 import type { Route } from '../components/NavMenu';
 import { DataTable, ExcelButton, k, Pager, PeriodControl, ReportPage, usePeriod, type Column } from '../components/report/ReportKit';
@@ -23,6 +26,11 @@ export function ShipmentReportScreen({ onNavigate }: { onNavigate: (r: Route) =>
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
+  const [delRow, setDelRow] = useState<ShipReportRow | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
+  const { me } = useSession();
+  const canEdit = can(me, 'shipments', 'edit');
+  const notify = (kind: Toast['kind'], text: string) => setToast({ id: Date.now(), kind, text });
 
   useEffect(() => {
     api.shipments().then((r) => setBranches(r.branches), () => {});
@@ -75,7 +83,16 @@ export function ShipmentReportScreen({ onNavigate }: { onNavigate: (r: Route) =>
       render: (r) => <Text style={[k.tdText, { textAlign: 'center', fontWeight: '700' }]}>{n0(r.units)}</Text>, total: t && n0(t.units),
     },
     { id: 'by', label: 'ผู้ส่ง', width: 120, sortable: true, render: (r) => text(r.shippedBy ?? r.createdBy) },
-    { id: 'note', label: 'หมายเหตุ', width: 180, render: (r) => text(r.note) },
+    {
+      id: 'act', label: 'จัดการ', width: canEdit ? 132 : 96, align: 'center',
+      render: (r) => (
+        <View style={s.acts}>
+          <ActBtn icon="eye-outline" label={`ดูใบส่งของ ${r.docNo}`} onPress={() => setOpenId(r.id)} />
+          <ActBtn icon="grid-outline" label={`ส่งออก Excel ${r.docNo}`} tone={colors.success} onPress={() => openXlsx(r.id)} />
+          {canEdit ? <ActBtn icon="trash-outline" label={`ลบใบส่งของ ${r.docNo}`} tone={colors.danger} onPress={() => setDelRow(r)} /> : null}
+        </View>
+      ),
+    },
   ];
 
   return (
@@ -144,12 +161,119 @@ export function ShipmentReportScreen({ onNavigate }: { onNavigate: (r: Route) =>
           />
         </View>
         <Text style={k.note}>
-          แสดงเฉพาะใบที่ส่งออกแล้ว (ไม่รวมฉบับร่างและใบที่ยกเลิก) ตามวันที่ส่ง · กดแถวเพื่อดูสินค้าทุกรายการในใบ · ส่งออก Excel ได้ทั้งรายการใบส่งของและรายการสินค้าทั้งหมด
+          แสดงเฉพาะใบที่ส่งออกแล้ว (ไม่รวมฉบับร่างและใบที่ยกเลิก) ตามวันที่ส่ง · กดแถวหรือปุ่ม ดู เพื่อเปิดใบส่งของ · ปุ่มลบจะคืนสต็อกกลับให้อัตโนมัติ
         </Text>
       </ScrollView>
 
       <DocSheet id={openId} onClose={() => setOpenId(null)} />
+      <DeleteSheet
+        row={delRow}
+        onClose={() => setDelRow(null)}
+        onDone={(msg) => {
+          setDelRow(null);
+          notify('success', msg);
+          load();
+        }}
+      />
+      <ToastView toast={toast} onDone={() => setToast(null)} />
     </ReportPage>
+  );
+}
+
+/** เปิดไฟล์ Excel ของใบส่งของใบเดียว */
+function openXlsx(id: number) {
+  if (Platform.OS === 'web') window.open(api.shipmentXlsxUrl(id), '_blank');
+}
+
+/** ปุ่มเล็กในคอลัมน์ "จัดการ" */
+function ActBtn({ icon, label, onPress, tone = colors.primary }: {
+  icon: Parameters<typeof Icon>[0]['name'];
+  label: string;
+  onPress: () => void;
+  tone?: string;
+}) {
+  return (
+    <Pressable
+      style={({ hovered }: { hovered?: boolean }) => [s.actBtn, hovered && { backgroundColor: colors.surface, borderColor: tone }]}
+      onPress={(e) => {
+        // กันไม่ให้ไปโดนการกดทั้งแถว (ซึ่งเปิดใบส่งของ)
+        (e as unknown as { stopPropagation?: () => void }).stopPropagation?.();
+        onPress();
+      }}
+      accessibilityLabel={label}
+      accessibilityRole="button"
+    >
+      <Icon name={icon} size={16} color={tone} />
+    </Pressable>
+  );
+}
+
+/**
+ * ยืนยันลบใบส่งของที่ส่งออกแล้ว
+ * ลบถาวร + คืนสต็อก: ดึงของออกจากปลายทาง คืนเข้าต้นทาง — ต้องพิมพ์เลขที่ใบยืนยันก่อน
+ */
+function DeleteSheet({ row, onClose, onDone }: { row: ShipReportRow | null; onClose: () => void; onDone: (msg: string) => void }) {
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    setConfirm('');
+    setErr('');
+    setBusy(false);
+  }, [row]);
+  const ok = !!row && confirm.trim().toUpperCase() === row.docNo.toUpperCase();
+  const go = async () => {
+    if (!row || !ok) return;
+    setBusy(true);
+    setErr('');
+    try {
+      const r = await api.deleteShipment(row.id);
+      onDone(`ลบใบส่งของ ${r.docNo} และคืนสต็อกแล้ว (${r.items} รายการ)`);
+    } catch (e) {
+      setErr((e as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Sheet visible={!!row} onClose={onClose} title="ลบใบส่งของถาวร" width={520}>
+      {row ? (
+        <View style={{ gap: 12 }}>
+          <View style={s.warnBox}>
+            <Icon name="warning-outline" size={20} color={colors.danger} />
+            <Text style={s.warnText}>
+              ลบแล้วเอาคืนไม่ได้ · ระบบจะ<Text style={{ fontWeight: '700' }}>ดึงของ {n0(row.units)} ชิ้นออกจาก{row.destBranchName ?? 'สาขาปลายทาง'}</Text>
+              {row.sourceBranchName ? ` และคืนเข้า${row.sourceBranchName}` : ' (ตอนส่งไม่ได้ตัดสต็อกต้นทาง จึงไม่มีของคืนกลับ)'}
+            </Text>
+          </View>
+          <View style={s.info}>
+            <Info icon="document-text-outline" label="เลขที่" value={row.docNo} strong />
+            <Info icon="calendar-outline" label="วันที่ส่ง" value={dateTime(row.shippedAt)} />
+            <Info icon="cube-outline" label="จำนวน" value={`${n0(row.units)} ชิ้น · ${n0(row.lines)} รายการ`} />
+            <Info icon="person-outline" label="ผู้ส่ง" value={row.shippedBy ?? row.createdBy ?? '-'} />
+          </View>
+          <Text style={k.note}>ถ้าของถูกขายหรือย้ายออกจากปลายทางไปแล้วจนคืนไม่ครบ ระบบจะไม่ยอมลบ</Text>
+          <Text style={s.confirmLabel}>พิมพ์ <Text style={{ fontWeight: '700' }}>{row.docNo}</Text> เพื่อยืนยัน</Text>
+          <TextInput
+            value={confirm}
+            onChangeText={setConfirm}
+            placeholder={row.docNo}
+            placeholderTextColor={colors.faint}
+            autoCapitalize="characters"
+            style={s.confirmInput}
+            accessibilityLabel="พิมพ์เลขที่ใบส่งของเพื่อยืนยันการลบ"
+          />
+          {err ? <Text style={k.error}>{err}</Text> : null}
+          <View style={[k.row, { gap: 8, justifyContent: 'flex-end' }]}>
+            <Pressable style={k.pill} onPress={onClose} accessibilityLabel="ยกเลิก">
+              <Text style={k.pillText}>ยกเลิก</Text>
+            </Pressable>
+            <Pressable style={[s.delBtn, (!ok || busy) && { opacity: 0.45 }]} disabled={!ok || busy} onPress={go} accessibilityLabel="ยืนยันลบใบส่งของ">
+              {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.delText}>ลบถาวร และคืนสต็อก</Text>}
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+    </Sheet>
   );
 }
 
@@ -250,6 +374,14 @@ function dateTime(v: string) {
 }
 
 const s = StyleSheet.create({
+  acts: { flexDirection: 'row', gap: 6, justifyContent: 'center' },
+  actBtn: { width: 32, height: 32, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
+  warnBox: { flexDirection: 'row', gap: 10, padding: 12, borderRadius: radius.md, backgroundColor: colors.dangerSoft, borderWidth: 1, borderColor: '#F3C4C6' },
+  warnText: { fontFamily: font, fontSize: 13, color: colors.danger, flex: 1, lineHeight: 19 },
+  confirmLabel: { fontFamily: font, fontSize: 13, color: colors.text },
+  confirmInput: { fontFamily: font, fontSize: 15, height: 46, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 14, color: colors.text, backgroundColor: '#fff', letterSpacing: 1 },
+  delBtn: { height: 42, paddingHorizontal: 18, borderRadius: radius.md, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center' },
+  delText: { fontFamily: font, fontSize: 14, color: '#fff', fontWeight: '700' },
   docCell: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   cards: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   card: { flexGrow: 1, flexBasis: 180, minWidth: 0, backgroundColor: colors.panel, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, padding: 14, gap: 4 },
