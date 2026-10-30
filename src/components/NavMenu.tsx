@@ -2,7 +2,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../api';
-import { can, ROLE_LABEL, useSession, type Feature, type Me } from '../session';
+import { LANGS, useT } from '../i18n';
+import { can, useSession, type Feature, type Me } from '../session';
 import { colors, font, radius } from '../theme';
 import { BranchChip } from './BranchPicker';
 import { Icon, type IconName } from './Icon';
@@ -58,38 +59,38 @@ function useStockBadge() {
 
 interface Item { id: Route | 'report' | 'stockGroup' | 'shipGroup'; label: string; icon: IconName; soon?: boolean; children?: Item[] }
 const ITEMS: Item[] = [
-  { id: 'sales', label: 'หน้าขาย', icon: 'storefront-outline' },
+  { id: 'sales', label: 'nav.sales', icon: 'storefront-outline' },
   {
-    id: 'report', label: 'รายงาน', icon: 'stats-chart-outline',
+    id: 'report', label: 'nav.report', icon: 'stats-chart-outline',
     children: [
-      { id: 'dashboard', label: 'รายงานรวม', icon: 'grid-outline' },
-      { id: 'salesReport', label: 'ยอดขาย', icon: 'cash-outline' },
-      { id: 'billReport', label: 'ยอดขายรายบิล', icon: 'receipt-outline' },
-      { id: 'productReport', label: 'สินค้า', icon: 'pricetags-outline' },
-      { id: 'taxReport', label: 'ภาษีขาย (VAT)', icon: 'document-text-outline' },
+      { id: 'dashboard', label: 'nav.dashboard', icon: 'grid-outline' },
+      { id: 'salesReport', label: 'nav.salesReport', icon: 'cash-outline' },
+      { id: 'billReport', label: 'nav.billReport', icon: 'receipt-outline' },
+      { id: 'productReport', label: 'nav.productReport', icon: 'pricetags-outline' },
+      { id: 'taxReport', label: 'nav.taxReport', icon: 'document-text-outline' },
     ],
   },
-  { id: 'history', label: 'ประวัติการขาย', icon: 'receipt-outline' },
-  { id: 'shifts', label: 'กะการขาย', icon: 'time-outline' },
-  { id: 'expenses', label: 'ค่าใช้จ่าย / ลิ้นชัก', icon: 'wallet-outline' },
-  { id: 'promos', label: 'โปรโมชั่น', icon: 'gift-outline' },
-  { id: 'staff', label: 'พนักงาน', icon: 'people-outline' },
+  { id: 'history', label: 'nav.history', icon: 'receipt-outline' },
+  { id: 'shifts', label: 'nav.shifts', icon: 'time-outline' },
+  { id: 'expenses', label: 'nav.expenses', icon: 'wallet-outline' },
+  { id: 'promos', label: 'nav.promos', icon: 'gift-outline' },
+  { id: 'staff', label: 'nav.staff', icon: 'people-outline' },
   {
-    id: 'stockGroup', label: 'สต็อกสินค้า', icon: 'shirt-outline',
+    id: 'stockGroup', label: 'nav.stockGroup', icon: 'shirt-outline',
     children: [
-      { id: 'stock', label: 'สต็อกสินค้า', icon: 'shirt-outline' },
-      { id: 'skus', label: 'สต็อกสินค้า (คุณสมบัติ)', icon: 'barcode-outline' },
+      { id: 'stock', label: 'nav.stock', icon: 'shirt-outline' },
+      { id: 'skus', label: 'nav.skus', icon: 'barcode-outline' },
     ],
   },
   {
-    id: 'shipGroup', label: 'ส่งของจากโรงงาน', icon: 'cube-outline',
+    id: 'shipGroup', label: 'nav.shipGroup', icon: 'cube-outline',
     children: [
-      { id: 'shipments', label: 'ใบส่งของ (สแกนส่ง)', icon: 'scan-outline' },
-      { id: 'shipmentReport', label: 'รายงานการส่ง', icon: 'document-text-outline' },
+      { id: 'shipments', label: 'nav.shipments', icon: 'scan-outline' },
+      { id: 'shipmentReport', label: 'nav.shipmentReport', icon: 'document-text-outline' },
     ],
   },
-  { id: 'branches', label: 'สาขา', icon: 'business-outline' },
-  { id: 'settings', label: 'ตั้งค่า', icon: 'settings-outline' },
+  { id: 'branches', label: 'nav.branches', icon: 'business-outline' },
+  { id: 'settings', label: 'nav.settings', icon: 'settings-outline' },
 ];
 
 interface MenuProps {
@@ -111,6 +112,7 @@ function visibleItems(me: Me): Item[] {
 /** รายการเมนู + ส่วนท้าย ใช้ร่วมกันทั้ง sidebar และ drawer */
 export function NavMenu({ route, onNavigate, header }: MenuProps) {
   const { me, logout } = useSession();
+  const { t, lang, setLang } = useT();
   const badge = useStockBadge();
   // กลุ่มเมนูย่อย: ถ้ายังไม่เคยกดเปิด/ปิด → เปิดอยู่เมื่อหน้าปัจจุบันอยู่ในกลุ่มนั้น
   const [, rerender] = useState(0);
@@ -142,10 +144,10 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
                   style={({ hovered }: { hovered?: boolean }) => [s.item, inGroup && s.groupOn, hovered && !inGroup && s.itemHover]}
                   accessibilityRole="button"
                   accessibilityState={{ expanded }}
-                  accessibilityLabel={`${it.label} — ${expanded ? 'ย่อ' : 'แสดง'}เมนูย่อย`}
+                  accessibilityLabel={`${t(it.label)} — ${expanded ? 'ย่อ' : 'แสดง'}เมนูย่อย`}
                 >
                   <Icon name={it.icon} size={19} color={inGroup ? colors.primary : colors.text} />
-                  <Text style={[s.itemText, inGroup && { color: colors.primary, fontWeight: '600' }]}>{it.label}</Text>
+                  <Text style={[s.itemText, inGroup && { color: colors.primary, fontWeight: '600' }]}>{t(it.label)}</Text>
                   {it.id === 'stockGroup' && !expanded ? stockBadgeView(false) : null}
                   <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={inGroup ? colors.primary : colors.sub} />
                 </Pressable>
@@ -162,7 +164,7 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
                           accessibilityState={{ selected: on }}
                         >
                           <Icon name={c.icon} size={17} color={on ? '#fff' : colors.sub} />
-                          <Text style={[s.itemText, on && { color: '#fff' }]} numberOfLines={1}>{c.label}</Text>
+                          <Text style={[s.itemText, on && { color: '#fff' }]} numberOfLines={1}>{t(c.label)}</Text>
                           {c.id === 'stock' ? stockBadgeView(on) : null}
                         </Pressable>
                       );
@@ -183,19 +185,35 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
               accessibilityState={{ selected: on, disabled: it.soon }}
             >
               <Icon name={it.icon} size={19} color={on ? '#fff' : it.soon ? colors.faint : colors.text} />
-              <Text style={[s.itemText, on && { color: '#fff' }, it.soon && { color: colors.faint }]}>{it.label}</Text>
+              <Text style={[s.itemText, on && { color: '#fff' }, it.soon && { color: colors.faint }]}>{t(it.label)}</Text>
               {it.soon ? <Text style={s.soon}>เร็ว ๆ นี้</Text> : null}
             </Pressable>
           );
         })}
       </ScrollView>
+      {/* สลับภาษา — เฉพาะเครื่องนี้ ไม่กระทบเครื่องอื่นหรือสาขาอื่น */}
+      <View style={s.langRow}>
+        <Icon name="language-outline" size={15} color={colors.sub} />
+        {LANGS.map((l) => (
+          <Pressable
+            key={l.id}
+            onPress={() => setLang(l.id)}
+            style={[s.langBtn, lang === l.id && s.langOn]}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: lang === l.id }}
+            accessibilityLabel={l.label}
+          >
+            <Text style={[s.langText, lang === l.id && { color: '#fff', fontWeight: '700' }]}>{l.short}</Text>
+          </Pressable>
+        ))}
+      </View>
       <View style={s.user}>
         <View style={s.avatar}>
           <Text style={s.avatarText}>{me.name.slice(0, 1)}</Text>
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={s.userName} numberOfLines={1}>{me.name}</Text>
-          <Text style={s.userRole}>{ROLE_LABEL[me.role] ?? 'พนักงานขาย'}</Text>
+          <Text style={s.userRole}>{t(`role.${me.role}`)}</Text>
         </View>
         <Pressable
           onPress={logout}
@@ -203,7 +221,7 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
           accessibilityLabel="ออกจากระบบ"
         >
           <Icon name="log-out-outline" size={18} color={colors.danger} />
-          <Text style={s.logoutText}>ออก</Text>
+          <Text style={s.logoutText}>{t('nav.logout')}</Text>
         </Pressable>
       </View>
       <UpdateButton block />
@@ -266,6 +284,10 @@ const s = StyleSheet.create({
   badgeText: { fontFamily: font, fontSize: 11, fontWeight: '700', color: '#fff' },
   soon: { fontFamily: font, fontSize: 10, color: colors.faint },
   user: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: radius.md, backgroundColor: colors.surface },
+  langRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4, paddingBottom: 2 },
+  langBtn: { paddingHorizontal: 10, height: 26, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line, justifyContent: 'center', backgroundColor: '#fff' },
+  langOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  langText: { fontFamily: font, fontSize: 11.5, color: colors.sub, fontWeight: '600' },
   avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontFamily: font, fontSize: 15, fontWeight: '700', color: '#fff' },
   userName: { fontFamily: font, fontSize: 14, fontWeight: '600', color: colors.text },

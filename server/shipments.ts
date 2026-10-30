@@ -71,12 +71,14 @@ const q = {
   nextSeq: db.prepare('INSERT INTO shipment_seq (year, n) VALUES (?, 1) ON CONFLICT (year) DO UPDATE SET n = n + 1 RETURNING n'),
   insert: db.prepare('INSERT INTO shipments (doc_no, dest_branch_id, source_branch_id, bags, note, created_by) VALUES (?, ?, ?, ?, ?, ?)'),
   update: db.prepare('UPDATE shipments SET dest_branch_id = ?, source_branch_id = ?, bags = ?, note = ? WHERE id = ?'),
+  // เรียงตามลำดับที่สแกนเข้ามา (rowid) — ของใหม่อยู่บนสุด
+  // ห้ามเรียงด้วย updated_at: กดเพิ่ม/ลดจำนวนแล้วแถวจะเด้งไปอยู่บนสุด ทำให้สับสน
   items: db.prepare(
     `SELECT i.variant_id AS variantId, i.qty, v.sku, v.barcode, v.size, v.color, v.extra, p.name, p.id AS productId, p.sku AS productSku
        FROM shipment_items i
        JOIN main.variants_all v ON v.id = i.variant_id
        JOIN products p ON p.id = v.product_id
-      WHERE i.shipment_id = ? ORDER BY i.updated_at DESC, i.rowid DESC`,
+      WHERE i.shipment_id = ? ORDER BY i.rowid DESC`,
   ),
   find: db.prepare(
     `SELECT v.id, v.sku, v.size, v.color, v.extra, p.name

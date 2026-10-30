@@ -13,6 +13,7 @@
     "dev": "expo start --web",
     "dev:api": "node --experimental-strip-types --disable-warning=ExperimentalWarning --watch server/index.ts",
     "build:web": "expo export --platform web",
+    "i18n": "node scripts/i18n-check.mjs",
     "server": "node --experimental-strip-types --disable-warning=ExperimentalWarning server/index.ts",
     "start": "npm run build:web && cross-env NODE_ENV=production npm run server",
     "serve": "cross-env NODE_ENV=production npm run server",
