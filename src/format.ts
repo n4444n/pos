@@ -1,4 +1,5 @@
 // จัดรูปแบบตัวเลข/เงิน/วันที่ภาษาไทย และป้ายข้อความที่ใช้ซ้ำ (วิธีชำระ · VAT · ตัวเลือกสินค้า)
+import { uiLang } from './i18n/current';
 const money = new Intl.NumberFormat('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const money0 = new Intl.NumberFormat('th-TH', { maximumFractionDigits: 0 });
 
@@ -52,11 +53,11 @@ const pad = (n: number) => String(n).padStart(2, '0');
 /** YYYY-MM-DD ตามเวลาเครื่อง */
 export const isoDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-/** '2026-10-11 14:05:00' → '11/10/2569 · 14:05' */
+/** '2026-10-11 14:05:00' → '11/10/2569 · 14:05' (โหมด English ใช้ ค.ศ. → '11/10/2026 · 14:05') */
 export function thaiDateTime(s: string) {
   const [d, t = ''] = s.split(' ');
   const [y, m, day] = d.split('-');
-  return `${day}/${m}/${Number(y) + 543} · ${t.slice(0, 5)}`;
+  return `${day}/${m}/${Number(y) + (uiLang() === 'en' ? 0 : 543)} · ${t.slice(0, 5)}`;
 }
 
 /** 505 → '505 นาที' / 8 ชม. 25 นาที */

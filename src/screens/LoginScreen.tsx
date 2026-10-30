@@ -5,6 +5,7 @@ import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, useWindowDime
 import { api } from '../api';
 import { Icon } from '../components/Icon';
 import { thaiDate, thaiTime } from '../format';
+import { useT } from '../i18n';
 import { auth, type Me } from '../session';
 import { colors, font } from '../theme';
 
@@ -13,6 +14,7 @@ const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'clear', '0', 'back']
 
 /** หน้าเข้าสู่ระบบด้วย PIN 6 หลัก (กดครบ 6 หลักแล้วเข้าสู่ระบบอัตโนมัติ) */
 export function LoginScreen({ onLogin }: { onLogin: (me: Me) => void }) {
+  const { t } = useT();
   const { width, height } = useWindowDimensions();
   const compact = height < 700 || width < 400;
   const [pin, setPin] = useState('');
@@ -92,10 +94,10 @@ export function LoginScreen({ onLogin }: { onLogin: (me: Me) => void }) {
           </View>
         </View>
 
-        <Text style={s.title}>เข้าสู่ระบบ</Text>
-        <Text style={s.sub}>กรอก PIN พนักงาน {PIN_LENGTH} หลัก</Text>
+        <Text style={s.title}>{t('login.title')}</Text>
+        <Text style={s.sub}>{t('login.enterPin', { n: PIN_LENGTH })}</Text>
 
-        <View style={s.dots} accessibilityLabel={`กรอกแล้ว ${pin.length} จาก ${PIN_LENGTH} หลัก`}>
+        <View style={s.dots} accessibilityLabel={t('login.dots', { filled: pin.length, total: PIN_LENGTH })}>
           {Array.from({ length: PIN_LENGTH }).map((_, i) => (
             <View key={i} style={[s.dot, i < pin.length && s.dotOn, error && s.dotErr]} />
           ))}
@@ -106,7 +108,7 @@ export function LoginScreen({ onLogin }: { onLogin: (me: Me) => void }) {
           ) : error ? (
             <Text style={s.error}>{error}</Text>
           ) : (
-            <Text style={s.hint}>ใช้แป้นตัวเลขด้านล่าง หรือคีย์บอร์ด</Text>
+            <Text style={s.hint}>{t('login.hint')}</Text>
           )}
         </View>
 
@@ -123,12 +125,12 @@ export function LoginScreen({ onLogin }: { onLogin: (me: Me) => void }) {
                 hovered && s.keyHover,
                 pressed && s.keyPressed,
               ]}
-              accessibilityLabel={k === 'clear' ? 'ล้าง' : k === 'back' ? 'ลบ' : k}
+              accessibilityLabel={k === 'clear' ? t('login.clear') : k === 'back' ? t('login.backspace') : k}
             >
               {k === 'back' ? (
                 <Icon name="backspace-outline" size={22} color={colors.text} />
               ) : k === 'clear' ? (
-                <Text style={s.keyAltText}>ล้าง</Text>
+                <Text style={s.keyAltText}>{t('login.clearKey')}</Text>
               ) : (
                 <Text style={s.keyText}>{k}</Text>
               )}
@@ -136,7 +138,7 @@ export function LoginScreen({ onLogin }: { onLogin: (me: Me) => void }) {
           ))}
         </View>
       </View>
-      <Text style={s.footer}>ลืม PIN? ติดต่อผู้จัดการร้านเพื่อตั้ง PIN ใหม่</Text>
+      <Text style={s.footer}>{t('login.forgot')}</Text>
       <Credit center />
     </View>
   );

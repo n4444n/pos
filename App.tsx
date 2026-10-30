@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, View } from 'react-native';
 import { api } from './src/api';
 import { useAppSettings } from './src/appSettings';
+import { I18nProvider } from './src/i18n';
 import { desktop } from './src/desktop';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { canOpen, firstRoute, NavDrawer, refreshStockBadge, type Route } from './src/components/NavMenu';
@@ -86,6 +87,7 @@ export default function App() {
   }, []);
 
   return (
+    <I18nProvider>
     <SafeAreaProvider>
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
         <StatusBar style="dark" />
@@ -103,6 +105,7 @@ export default function App() {
         )}
       </SafeAreaView>
     </SafeAreaProvider>
+    </I18nProvider>
   );
 }
 

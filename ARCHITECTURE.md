@@ -110,6 +110,13 @@ API key สิทธิ์ `sync` และ `settings.stock.sync` (ระบบ�
 
 เพิ่มหมวดใหม่: สร้างไฟล์ใน `settings/` แล้วเพิ่มรายการใน `SECTIONS` + บรรทัดแสดงผลใน `screens/SettingsScreen.tsx`
 
+### สองภาษา ไทย / English (`src/i18n/`)
+- สลับภาษาที่ปุ่ม TH / EN ท้ายเมนู — จำแยกต่อเครื่อง (`localStorage` `pos.lang`)
+- `th.ts` / `en.ts` + `t('key')` — ใช้กับข้อความใหม่ (เมนู บทบาท หน้าเข้าสู่ระบบ) · ตรวจคีย์ที่ขาด: `node scripts/i18n-check.mjs`
+- `dom.ts` + `phrases.ts` — ข้อความไทยที่ยังเขียนตรง ๆ ในหน้าจอ (หลายพันข้อความ) ถูกแปลบนหน้าจอตอนเลือก EN: คอยดู DOM แล้วเทียบพจนานุกรม (รวม placeholder / aria-label / title / alert / วันที่จาก Intl) · เลือก TH = คืนข้อความเดิม · ไม่แตะค่าในช่องกรอกและข้อมูลร้าน (ชื่อสินค้า ชื่อพนักงาน ฯลฯ)
+- เพิ่มหน้าจอ/ข้อความใหม่ → รัน `node scripts/i18n-extract.cjs` ดูข้อความไทยที่ยังไม่มีคำแปล แล้วเติมใน `phrases.ts` (ไม่เติม = หน้าจอ EN แสดงไทยตรงนั้น ไม่พัง)
+- ไม่แปลส่วนที่ครอบด้วย `testID="noi18n"` · ใบเสร็จ/ป้ายบาร์โค้ดใช้ภาษาตามตั้งค่าใบเสร็จ (หน้าต่างพิมพ์แยก ไม่โดนแปล) · ข้อความ error จาก server ยังเป็นไทย
+
 ## แอปเดสก์ท็อป (`desktop/`)
 `main.cjs` หน้าต่าง · ตั้งค่าเครื่อง · พิมพ์ · อัปเดต · license ชุดทดลอง · `preload.cjs` สะพานให้หน้าเว็บ (`window.posDesktop`) ·
 `escpos.cjs` พิมพ์ ESC/POS · หน้าในแอป: `settings.html` `offline.html` `splash.html` `activate.html` · รายละเอียดใน `desktop/README.md`

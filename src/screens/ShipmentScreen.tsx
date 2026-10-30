@@ -47,6 +47,21 @@ export function ShipmentScreen({ onNavigate, onStockChanged }: { onNavigate: (r:
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
+  // ย่อ/ขยายการ์ดรายละเอียดเอกสาร — ย่อแล้วช่องสแกนด้านล่างได้พื้นที่เพิ่ม · จำค่าไว้ในเครื่องนี้
+  const [docOpen, setDocOpen] = useState(() => {
+    try {
+      return globalThis.localStorage?.getItem('pos.ship.docOpen') !== '0';
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try {
+      globalThis.localStorage?.setItem('pos.ship.docOpen', docOpen ? '1' : '0');
+    } catch {
+      /* โหมดส่วนตัว/ปิดที่เก็บข้อมูลไว้ — ไม่จำก็ไม่เป็นไร */
+    }
+  }, [docOpen]);
 
   const notify = useCallback((kind: Toast['kind'], text: string) => setToast({ id: Date.now(), kind, text }), []);
   const clearToast = useCallback(() => setToast(null), []);
@@ -193,8 +208,8 @@ export function ShipmentScreen({ onNavigate, onStockChanged }: { onNavigate: (r:
             </Pressable>
           </View>
         ) : (
-          <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: isOpen ? 90 : 24 }}>
-            {/* เลือกใบส่งของ */}
+          <>
+            {/* แถบเลือกใบส่งของ — อยู่กับที่ ไม่เลื่อนตาม */}
             <View style={[s.card, s.row, { flexWrap: 'wrap', gap: 10 }]}>
               <Icon name="cube-outline" size={18} color={colors.primary} />
               <Text style={s.label}>ใบส่งของ:</Text>
@@ -220,162 +235,340 @@ export function ShipmentScreen({ onNavigate, onStockChanged }: { onNavigate: (r:
               </Pressable>
             </View>
 
-            <View style={[{ gap: 12 }, wide && { flexDirection: 'row', alignItems: 'stretch' }]}>
-              {/* ข้อมูลใบส่งของ */}
-              <View style={[s.card, { gap: 12 }, wide && { flex: 1 }]}>
-                <View style={[s.row, { justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap' }]}>
-                  <View>
-                    <Text style={s.small}>เลขที่เอกสาร</Text>
-                    <Text style={s.docNo}>{sh.docNo}</Text>
-                    <Text style={s.small}>{thaiDateTime(sh.shippedAt ?? sh.createdAt)}</Text>
-                  </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={s.small}>จำนวนที่สแกน</Text>
-                    <Text style={s.big}>
-                      {units.toLocaleString()} <Text style={s.unit}>ตัว ({cur!.items.length} รายการ)</Text>
-                    </Text>
-                    <Text style={s.small}>ผู้จัด: {sh.shippedBy ?? sh.createdBy ?? '-'}</Text>
-                  </View>
-                </View>
-
-                <BranchField
-                  label="ส่งถึงสาขา (เพิ่มสต็อก)" icon="storefront-outline" value={sh.destBranchId} branches={branches} disabled={!isDraft}
-                  exclude={sh.sourceBranchId} onChange={(id) => update({ destBranchId: id! })}
-                />
-                <BranchField
-                  label="ตัดสต็อกจากสาขา" icon="remove-circle-outline" value={sh.sourceBranchId} branches={branches} disabled={!isDraft}
-                  exclude={sh.destBranchId} allowNone onChange={(id) => update({ sourceBranchId: id })}
-                />
-                <View style={[s.row, { gap: 16, flexWrap: 'wrap' }]}>
-                  <View style={{ gap: 4 }}>
-                    <Text style={s.label}>จำนวนบรรจุ</Text>
-                    <Stepper value={sh.bags} suffix="ถุง" disabled={!isDraft} onChange={(n) => update({ bags: n })} />
-                  </View>
-                  <View style={{ flex: 1, minWidth: 200, gap: 4 }}>
-                    <Text style={s.label}>หมายเหตุ</Text>
-                    <NoteInput value={sh.note ?? ''} disabled={!isDraft} onSave={(t) => update({ note: t })} />
-                  </View>
-                </View>
-
-                <View style={[s.statusBox, { backgroundColor: STATUS[view].bg }]}>
-                  <Text style={[s.statusTitle, { color: STATUS[view].fg }]}>
-                    {sh.status === 'cancelled'
-                      ? `ยกเลิกแล้ว — โดย ${sh.cancelledBy ?? '-'}${sh.cancelledAt ? ` · ${thaiDateTime(sh.cancelledAt)}` : ''}`
-                      : sh.status === 'shipped'
-                      ? 'ส่งออกจากโรงงานแล้ว'
-                      : held
-                        ? `พักไว้ — โดย ${sh.heldBy ?? '-'} · ${thaiDateTime(sh.heldAt!)}`
-                        : 'กำลังจัดเตรียม — สแกนสินค้าแล้วกด "ส่งออก" (หรือ "พักไว้" ถ้ายังไม่เสร็จ)'}
-                  </Text>
-                  <Text style={s.small}>
-                    {sh.status === 'cancelled'
-                      ? `เหตุผล: ${sh.cancelReason ?? '-'} · สต็อกไม่เปลี่ยน${sh.purgeAt ? ` · จะลบถาวร ${thaiDateTime(sh.purgeAt)}` : ''}`
-                      : held
-                      ? `รายการที่สแกนแล้ว ${units.toLocaleString()} ตัว ยังอยู่ครบ · กด "ทำต่อ" เพื่อสแกนต่อ`
-                      : sh.status === 'shipped'
-                      ? `เพิ่มสต็อก${sh.destBranchName}แล้ว${sh.sourceBranchName ? ` · ตัดสต็อก${sh.sourceBranchName}แล้ว` : ' · ไม่ได้ตัดสต็อกสาขาใด'} · รายการถูกล็อก`
-                      : sh.sourceBranchName
-                        ? `ตอนส่งออก: ตัดสต็อก${sh.sourceBranchName} → เพิ่มสต็อก${sh.destBranchName}`
-                        : `ตอนส่งออก: เพิ่มสต็อก${sh.destBranchName} (ไม่ตัดสต็อกสาขาใด)`}
-                  </Text>
-                  {sh.status === 'cancelled' ? (
-                    <Pressable style={[s.pillBtn, s.primaryBtn, { alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => restore(sh.id)} accessibilityLabel="กู้คืนเป็นฉบับร่าง">
-                      <Icon name="arrow-undo" size={16} color="#fff" />
-                      <Text style={[s.pillText, { color: '#fff', fontWeight: '700' }]}>กู้คืนเป็นฉบับร่าง</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              </View>
-
-              {/* สแกน (พักไว้ → แสดงปุ่มทำต่อแทน) */}
-              {held ? (
-                <View style={[s.card, s.heldCard, wide && { flex: 1 }]}>
-                  <Icon name="pause-circle-outline" size={44} color={STATUS.held.fg} />
-                  <Text style={[s.cardTitle, { color: STATUS.held.fg }]}>ใบส่งของนี้พักไว้</Text>
-                  <Text style={[s.small, { textAlign: 'center' }]}>
-                    สแกนไปแล้ว {units.toLocaleString()} ตัว ({cur!.items.length} รายการ) — กลับมาทำต่อได้ทุกเมื่อ แม้ปิดเบราว์เซอร์หรือเปลี่ยนเครื่อง
-                  </Text>
-                  <Pressable style={[s.pillBtn, s.primaryBtn, { paddingHorizontal: 28 }]} onPress={resume} accessibilityLabel="ทำต่อ">
-                    <Icon name="play" size={18} color="#fff" />
-                    <Text style={[s.pillText, { color: '#fff', fontWeight: '700' }]}>ทำต่อ</Text>
-                  </Pressable>
-                </View>
-              ) : null}
-              {isDraft ? (
-                <ScanBox
-                  docId={sh.id}
-                  fill={wide}
-                  style={wide ? { flex: 1 } : undefined}
-                  onScan={async (code, qty) => {
-                    try {
-                      const d = await api.scanShipment(sh.id, code, qty);
-                      apply(d);
-                      beep(true);
-                      return { ok: true, text: `${d.scanned!.added > 0 ? '+' : ''}${d.scanned!.added} · ${d.scanned!.name} (${d.scanned!.label}) → ${d.scanned!.qty} ตัว` };
-                    } catch (e) {
-                      beep(false);
-                      return { ok: false, text: (e as Error).message };
-                    }
-                  }}
-                />
-              ) : null}
-            </View>
-
-            {/* รายการ */}
-            <View style={[s.card, { gap: 8 }]}>
-              <View style={[s.row, { justifyContent: 'space-between', flexWrap: 'wrap' }]}>
-                <Text style={s.cardTitle}>
-                  รายการที่สแกนแล้ว ({cur!.items.length} รายการ / รวม {units.toLocaleString()} ตัว)
-                </Text>
-                {short.length && isDraft ? (
-                  <Text style={[s.small, { color: colors.danger }]}>⚠ สต็อก{sh.sourceBranchName}ไม่พอ {short.length} รายการ</Text>
-                ) : null}
-              </View>
-              {cur!.items.length === 0 ? (
-                <Text style={[s.small, { textAlign: 'center', paddingVertical: 24 }]}>ยังไม่มีสินค้า — สแกนบาร์โค้ดหรือพิมพ์รหัส SKU ในช่องสแกน</Text>
-              ) : (
-                <>
-                  {!mobile ? (
-                    <View style={s.thead}>
-                      <Text style={[s.th, { width: 36 }]}>#</Text>
-                      <Text style={[s.th, { flex: 1 }]}>สินค้า / รหัส</Text>
-                      <Text style={[s.th, { width: 150 }]}>สี / ไซซ์</Text>
-                      {cur!.sourceStock && isDraft ? <Text style={[s.th, { width: 90, textAlign: 'right' }]}>สต็อกต้นทาง</Text> : null}
-                      <Text style={[s.th, { width: isDraft ? 150 : 90, textAlign: 'center' }]}>จำนวนส่ง</Text>
-                    </View>
-                  ) : null}
-                  {cur!.items.map((it, n) => {
-                    const have = cur!.sourceStock?.[it.variantId];
-                    const lack = have !== undefined && have < it.qty;
-                    return (
-                      <View key={it.variantId} style={[s.tr, mobile && { flexWrap: 'wrap' }]}>
-                        {!mobile ? <Text style={[s.cell, { width: 36 }]}>{n + 1}</Text> : null}
-                        <View style={{ flex: 1, minWidth: 160 }}>
-                          <Text style={s.name} numberOfLines={2}>{it.name}</Text>
-                          <Text style={s.sku}>{it.barcode && it.barcode !== it.sku ? `CODE : ${it.barcode}  |  ` : ''}SKU : {it.sku}{mobile ? ` · ${it.label}` : ''}</Text>
+            {wide ? (
+              /* จอกว้าง: ซ้ายอยู่กับที่ (เลื่อนในตัวเองได้) · ขวาเลื่อนรายการที่สแกนแล้วแยกต่างหาก */
+              <View style={s.split}>
+                <View style={s.left}>
+                  <View style={s.leftInner}>
+                    {/* ข้อมูลใบส่งของ — 35% ของความสูง · ย่อ/ขยายได้ */}
+                    <View style={[s.card, { gap: 12 }, docOpen ? s.docPane : s.docShut]}>
+                      <Pressable
+                        style={[s.row, { justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap' }]}
+                        onPress={() => setDocOpen((o) => !o)}
+                        accessibilityLabel={docOpen ? 'ย่อรายละเอียดเอกสาร' : 'ขยายรายละเอียดเอกสาร'}
+                      >
+                        <View>
+                          <Text style={s.small}>เลขที่เอกสาร</Text>
+                          <Text style={s.docNo}>{sh.docNo}</Text>
+                          <Text style={s.small}>{thaiDateTime(sh.shippedAt ?? sh.createdAt)}</Text>
                         </View>
-                        {!mobile ? <Text style={[s.cell, { width: 150 }]}>{it.label}</Text> : null}
-                        {cur!.sourceStock && isDraft && !mobile ? (
-                          <Text style={[s.cell, { width: 90, textAlign: 'right' }, lack && { color: colors.danger, fontWeight: '700' }]}>{have ?? 0}</Text>
-                        ) : null}
-                        <View style={{ width: isDraft ? 150 : 90, alignItems: 'center' }}>
-                          {isDraft ? (
-                            <Stepper
-                              value={it.qty}
-                              min={0}
-                              onChange={(q) => api.setShipmentItem(sh.id, it.variantId, q).then(apply).catch((e: Error) => notify('error', e.message))}
-                            />
-                          ) : (
-                            <Text style={s.qty}>{it.qty.toLocaleString()} ตัว</Text>
-                          )}
+                        <View style={[s.row, { alignItems: 'flex-start', gap: 10 }]}>
+                          <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={s.small}>จำนวนที่สแกน</Text>
+                            <Text style={s.big}>
+                              {units.toLocaleString()} <Text style={s.unit}>ตัว ({cur!.items.length} รายการ)</Text>
+                            </Text>
+                            <Text style={s.small}>ผู้จัด: {sh.shippedBy ?? sh.createdBy ?? '-'}</Text>
+                          </View>
+                          <View style={s.chev}>
+                            <Icon name={docOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.sub} />
+                          </View>
+                        </View>
+                      </Pressable>
+                      {docOpen ? (
+                       <ScrollView contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
+
+                      <BranchField
+                        label="ส่งถึงสาขา (เพิ่มสต็อก)" icon="storefront-outline" value={sh.destBranchId} branches={branches} disabled={!isDraft}
+                        exclude={sh.sourceBranchId} onChange={(id) => update({ destBranchId: id! })}
+                      />
+                      <BranchField
+                        label="ตัดสต็อกจากสาขา" icon="remove-circle-outline" value={sh.sourceBranchId} branches={branches} disabled={!isDraft}
+                        exclude={sh.destBranchId} allowNone onChange={(id) => update({ sourceBranchId: id })}
+                      />
+                      <View style={[s.row, { gap: 16, flexWrap: 'wrap' }]}>
+                        <View style={{ gap: 4 }}>
+                          <Text style={s.label}>จำนวนบรรจุ</Text>
+                          <Stepper value={sh.bags} suffix="ถุง" disabled={!isDraft} onChange={(n) => update({ bags: n })} />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 200, gap: 4 }}>
+                          <Text style={s.label}>หมายเหตุ</Text>
+                          <NoteInput value={sh.note ?? ''} disabled={!isDraft} onSave={(t) => update({ note: t })} />
                         </View>
                       </View>
-                    );
-                  })}
-                </>
-              )}
-            </View>
-          </ScrollView>
+
+                      <View style={[s.statusBox, { backgroundColor: STATUS[view].bg }]}>
+                        <Text style={[s.statusTitle, { color: STATUS[view].fg }]}>
+                          {sh.status === 'cancelled'
+                            ? `ยกเลิกแล้ว — โดย ${sh.cancelledBy ?? '-'}${sh.cancelledAt ? ` · ${thaiDateTime(sh.cancelledAt)}` : ''}`
+                            : sh.status === 'shipped'
+                            ? 'ส่งออกจากโรงงานแล้ว'
+                            : held
+                              ? `พักไว้ — โดย ${sh.heldBy ?? '-'} · ${thaiDateTime(sh.heldAt!)}`
+                              : 'กำลังจัดเตรียม — สแกนสินค้าแล้วกด "ส่งออก" (หรือ "พักไว้" ถ้ายังไม่เสร็จ)'}
+                        </Text>
+                        <Text style={s.small}>
+                          {sh.status === 'cancelled'
+                            ? `เหตุผล: ${sh.cancelReason ?? '-'} · สต็อกไม่เปลี่ยน${sh.purgeAt ? ` · จะลบถาวร ${thaiDateTime(sh.purgeAt)}` : ''}`
+                            : held
+                            ? `รายการที่สแกนแล้ว ${units.toLocaleString()} ตัว ยังอยู่ครบ · กด "ทำต่อ" เพื่อสแกนต่อ`
+                            : sh.status === 'shipped'
+                            ? `เพิ่มสต็อก${sh.destBranchName}แล้ว${sh.sourceBranchName ? ` · ตัดสต็อก${sh.sourceBranchName}แล้ว` : ' · ไม่ได้ตัดสต็อกสาขาใด'} · รายการถูกล็อก`
+                            : sh.sourceBranchName
+                              ? `ตอนส่งออก: ตัดสต็อก${sh.sourceBranchName} → เพิ่มสต็อก${sh.destBranchName}`
+                              : `ตอนส่งออก: เพิ่มสต็อก${sh.destBranchName} (ไม่ตัดสต็อกสาขาใด)`}
+                        </Text>
+                        {sh.status === 'cancelled' ? (
+                          <Pressable style={[s.pillBtn, s.primaryBtn, { alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => restore(sh.id)} accessibilityLabel="กู้คืนเป็นฉบับร่าง">
+                            <Icon name="arrow-undo" size={16} color="#fff" />
+                            <Text style={[s.pillText, { color: '#fff', fontWeight: '700' }]}>กู้คืนเป็นฉบับร่าง</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                       </ScrollView>
+                      ) : null}
+                    </View>
+
+                    {/* สแกน (พักไว้ → แสดงปุ่มทำต่อแทน) */}
+                    {held ? (
+                      <View style={[s.card, s.heldCard, wide && s.scanPane]}>
+                        <Icon name="pause-circle-outline" size={44} color={STATUS.held.fg} />
+                        <Text style={[s.cardTitle, { color: STATUS.held.fg }]}>ใบส่งของนี้พักไว้</Text>
+                        <Text style={[s.small, { textAlign: 'center' }]}>
+                          สแกนไปแล้ว {units.toLocaleString()} ตัว ({cur!.items.length} รายการ) — กลับมาทำต่อได้ทุกเมื่อ แม้ปิดเบราว์เซอร์หรือเปลี่ยนเครื่อง
+                        </Text>
+                        <Pressable style={[s.pillBtn, s.primaryBtn, { paddingHorizontal: 28 }]} onPress={resume} accessibilityLabel="ทำต่อ">
+                          <Icon name="play" size={18} color="#fff" />
+                          <Text style={[s.pillText, { color: '#fff', fontWeight: '700' }]}>ทำต่อ</Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
+                    {isDraft ? (
+                      <ScanBox
+                        docId={sh.id}
+                        fill={wide}
+                        style={wide ? s.scanPane : undefined}
+                        onScan={async (code, qty) => {
+                          try {
+                            const d = await api.scanShipment(sh.id, code, qty);
+                            apply(d);
+                            beep(true);
+                            return { ok: true, text: `${d.scanned!.added > 0 ? '+' : ''}${d.scanned!.added} · ${d.scanned!.name} (${d.scanned!.label}) → ${d.scanned!.qty} ตัว` };
+                          } catch (e) {
+                            beep(false);
+                            return { ok: false, text: (e as Error).message };
+                          }
+                        }}
+                      />
+                    ) : null}
+                  </View>
+                </View>
+                {/* รายการ — หัวตารางค้างไว้ เลื่อนเฉพาะแถวสินค้า */}
+                <View style={[s.card, s.itemsPane]}>
+                    <View style={[s.row, { justifyContent: 'space-between', flexWrap: 'wrap' }]}>
+                      <Text style={s.cardTitle}>
+                        รายการที่สแกนแล้ว ({cur!.items.length} รายการ / รวม {units.toLocaleString()} ตัว)
+                      </Text>
+                      {short.length && isDraft ? (
+                        <Text style={[s.small, { color: colors.danger }]}>⚠ สต็อก{sh.sourceBranchName}ไม่พอ {short.length} รายการ</Text>
+                      ) : null}
+                    </View>
+                    {cur!.items.length === 0 ? (
+                      <Text style={[s.small, { textAlign: 'center', paddingVertical: 24 }]}>ยังไม่มีสินค้า — สแกนบาร์โค้ดหรือพิมพ์รหัส SKU ในช่องสแกน</Text>
+                    ) : (
+                      <>
+                        {!mobile ? (
+                          <View style={s.thead}>
+                            <Text style={[s.th, { width: 36 }]}>#</Text>
+                            <Text style={[s.th, { flex: 1 }]}>สินค้า / รหัส</Text>
+                            <Text style={[s.th, { width: 150 }]}>สี / ไซซ์</Text>
+                            {cur!.sourceStock && isDraft ? <Text style={[s.th, { width: 90, textAlign: 'right' }]}>สต็อกต้นทาง</Text> : null}
+                            <Text style={[s.th, { width: isDraft ? 150 : 90, textAlign: 'center' }]}>จำนวนส่ง</Text>
+                          </View>
+                        ) : null}
+                        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: isOpen ? 86 : 8 }}>
+                        {cur!.items.map((it, n) => {
+                          const have = cur!.sourceStock?.[it.variantId];
+                          const lack = have !== undefined && have < it.qty;
+                          return (
+                            <View key={it.variantId} style={[s.tr, mobile && { flexWrap: 'wrap' }]}>
+                              {!mobile ? <Text style={[s.cell, { width: 36 }]}>{n + 1}</Text> : null}
+                              <View style={{ flex: 1, minWidth: 160 }}>
+                                <Text style={s.name} numberOfLines={2}>{it.name}</Text>
+                                <Text style={s.sku}>{it.barcode && it.barcode !== it.sku ? `CODE : ${it.barcode}  |  ` : ''}SKU : {it.sku}{mobile ? ` · ${it.label}` : ''}</Text>
+                              </View>
+                              {!mobile ? <Text style={[s.cell, { width: 150 }]}>{it.label}</Text> : null}
+                              {cur!.sourceStock && isDraft && !mobile ? (
+                                <Text style={[s.cell, { width: 90, textAlign: 'right' }, lack && { color: colors.danger, fontWeight: '700' }]}>{have ?? 0}</Text>
+                              ) : null}
+                              <View style={{ width: isDraft ? 150 : 90, alignItems: 'center' }}>
+                                {isDraft ? (
+                                  <Stepper
+                                    value={it.qty}
+                                    min={0}
+                                    onChange={(q) => api.setShipmentItem(sh.id, it.variantId, q).then(apply).catch((e: Error) => notify('error', e.message))}
+                                  />
+                                ) : (
+                                  <Text style={s.qty}>{it.qty.toLocaleString()} ตัว</Text>
+                                )}
+                              </View>
+                            </View>
+                          );
+                        })}
+                        </ScrollView>
+                      </>
+                    )}
+                </View>
+              </View>
+            ) : (
+              <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: isOpen ? 90 : 24 }}>
+                <View style={[{ gap: 12 }, !wide && { gap: 12 }]}>
+                  {/* ข้อมูลใบส่งของ */}
+                  <View style={[s.card, { gap: 12 }]}>
+                    <View style={[s.row, { justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap' }]}>
+                      <View>
+                        <Text style={s.small}>เลขที่เอกสาร</Text>
+                        <Text style={s.docNo}>{sh.docNo}</Text>
+                        <Text style={s.small}>{thaiDateTime(sh.shippedAt ?? sh.createdAt)}</Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={s.small}>จำนวนที่สแกน</Text>
+                        <Text style={s.big}>
+                          {units.toLocaleString()} <Text style={s.unit}>ตัว ({cur!.items.length} รายการ)</Text>
+                        </Text>
+                        <Text style={s.small}>ผู้จัด: {sh.shippedBy ?? sh.createdBy ?? '-'}</Text>
+                      </View>
+                    </View>
+
+                    <BranchField
+                      label="ส่งถึงสาขา (เพิ่มสต็อก)" icon="storefront-outline" value={sh.destBranchId} branches={branches} disabled={!isDraft}
+                      exclude={sh.sourceBranchId} onChange={(id) => update({ destBranchId: id! })}
+                    />
+                    <BranchField
+                      label="ตัดสต็อกจากสาขา" icon="remove-circle-outline" value={sh.sourceBranchId} branches={branches} disabled={!isDraft}
+                      exclude={sh.destBranchId} allowNone onChange={(id) => update({ sourceBranchId: id })}
+                    />
+                    <View style={[s.row, { gap: 16, flexWrap: 'wrap' }]}>
+                      <View style={{ gap: 4 }}>
+                        <Text style={s.label}>จำนวนบรรจุ</Text>
+                        <Stepper value={sh.bags} suffix="ถุง" disabled={!isDraft} onChange={(n) => update({ bags: n })} />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 200, gap: 4 }}>
+                        <Text style={s.label}>หมายเหตุ</Text>
+                        <NoteInput value={sh.note ?? ''} disabled={!isDraft} onSave={(t) => update({ note: t })} />
+                      </View>
+                    </View>
+
+                    <View style={[s.statusBox, { backgroundColor: STATUS[view].bg }]}>
+                      <Text style={[s.statusTitle, { color: STATUS[view].fg }]}>
+                        {sh.status === 'cancelled'
+                          ? `ยกเลิกแล้ว — โดย ${sh.cancelledBy ?? '-'}${sh.cancelledAt ? ` · ${thaiDateTime(sh.cancelledAt)}` : ''}`
+                          : sh.status === 'shipped'
+                          ? 'ส่งออกจากโรงงานแล้ว'
+                          : held
+                            ? `พักไว้ — โดย ${sh.heldBy ?? '-'} · ${thaiDateTime(sh.heldAt!)}`
+                            : 'กำลังจัดเตรียม — สแกนสินค้าแล้วกด "ส่งออก" (หรือ "พักไว้" ถ้ายังไม่เสร็จ)'}
+                      </Text>
+                      <Text style={s.small}>
+                        {sh.status === 'cancelled'
+                          ? `เหตุผล: ${sh.cancelReason ?? '-'} · สต็อกไม่เปลี่ยน${sh.purgeAt ? ` · จะลบถาวร ${thaiDateTime(sh.purgeAt)}` : ''}`
+                          : held
+                          ? `รายการที่สแกนแล้ว ${units.toLocaleString()} ตัว ยังอยู่ครบ · กด "ทำต่อ" เพื่อสแกนต่อ`
+                          : sh.status === 'shipped'
+                          ? `เพิ่มสต็อก${sh.destBranchName}แล้ว${sh.sourceBranchName ? ` · ตัดสต็อก${sh.sourceBranchName}แล้ว` : ' · ไม่ได้ตัดสต็อกสาขาใด'} · รายการถูกล็อก`
+                          : sh.sourceBranchName
+                            ? `ตอนส่งออก: ตัดสต็อก${sh.sourceBranchName} → เพิ่มสต็อก${sh.destBranchName}`
+                            : `ตอนส่งออก: เพิ่มสต็อก${sh.destBranchName} (ไม่ตัดสต็อกสาขาใด)`}
+                      </Text>
+                      {sh.status === 'cancelled' ? (
+                        <Pressable style={[s.pillBtn, s.primaryBtn, { alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => restore(sh.id)} accessibilityLabel="กู้คืนเป็นฉบับร่าง">
+                          <Icon name="arrow-undo" size={16} color="#fff" />
+                          <Text style={[s.pillText, { color: '#fff', fontWeight: '700' }]}>กู้คืนเป็นฉบับร่าง</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  </View>
+
+                  {/* สแกน (พักไว้ → แสดงปุ่มทำต่อแทน) */}
+                  {held ? (
+                    <View style={[s.card, s.heldCard]}>
+                      <Icon name="pause-circle-outline" size={44} color={STATUS.held.fg} />
+                      <Text style={[s.cardTitle, { color: STATUS.held.fg }]}>ใบส่งของนี้พักไว้</Text>
+                      <Text style={[s.small, { textAlign: 'center' }]}>
+                        สแกนไปแล้ว {units.toLocaleString()} ตัว ({cur!.items.length} รายการ) — กลับมาทำต่อได้ทุกเมื่อ แม้ปิดเบราว์เซอร์หรือเปลี่ยนเครื่อง
+                      </Text>
+                      <Pressable style={[s.pillBtn, s.primaryBtn, { paddingHorizontal: 28 }]} onPress={resume} accessibilityLabel="ทำต่อ">
+                        <Icon name="play" size={18} color="#fff" />
+                        <Text style={[s.pillText, { color: '#fff', fontWeight: '700' }]}>ทำต่อ</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
+                  {isDraft ? (
+                    <ScanBox
+                      docId={sh.id}
+                      fill={wide}
+                      style={wide ? { flex: 1 } : undefined}
+                      onScan={async (code, qty) => {
+                        try {
+                          const d = await api.scanShipment(sh.id, code, qty);
+                          apply(d);
+                          beep(true);
+                          return { ok: true, text: `${d.scanned!.added > 0 ? '+' : ''}${d.scanned!.added} · ${d.scanned!.name} (${d.scanned!.label}) → ${d.scanned!.qty} ตัว` };
+                        } catch (e) {
+                          beep(false);
+                          return { ok: false, text: (e as Error).message };
+                        }
+                      }}
+                    />
+                  ) : null}
+                </View>
+                {/* รายการ */}
+                <View style={[s.card, { gap: 8 }]}>
+                  <View style={[s.row, { justifyContent: 'space-between', flexWrap: 'wrap' }]}>
+                    <Text style={s.cardTitle}>
+                      รายการที่สแกนแล้ว ({cur!.items.length} รายการ / รวม {units.toLocaleString()} ตัว)
+                    </Text>
+                    {short.length && isDraft ? (
+                      <Text style={[s.small, { color: colors.danger }]}>⚠ สต็อก{sh.sourceBranchName}ไม่พอ {short.length} รายการ</Text>
+                    ) : null}
+                  </View>
+                  {cur!.items.length === 0 ? (
+                    <Text style={[s.small, { textAlign: 'center', paddingVertical: 24 }]}>ยังไม่มีสินค้า — สแกนบาร์โค้ดหรือพิมพ์รหัส SKU ในช่องสแกน</Text>
+                  ) : (
+                    <>
+                      {!mobile ? (
+                        <View style={s.thead}>
+                          <Text style={[s.th, { width: 36 }]}>#</Text>
+                          <Text style={[s.th, { flex: 1 }]}>สินค้า / รหัส</Text>
+                          <Text style={[s.th, { width: 150 }]}>สี / ไซซ์</Text>
+                          {cur!.sourceStock && isDraft ? <Text style={[s.th, { width: 90, textAlign: 'right' }]}>สต็อกต้นทาง</Text> : null}
+                          <Text style={[s.th, { width: isDraft ? 150 : 90, textAlign: 'center' }]}>จำนวนส่ง</Text>
+                        </View>
+                      ) : null}
+                      {cur!.items.map((it, n) => {
+                        const have = cur!.sourceStock?.[it.variantId];
+                        const lack = have !== undefined && have < it.qty;
+                        return (
+                          <View key={it.variantId} style={[s.tr, mobile && { flexWrap: 'wrap' }]}>
+                            {!mobile ? <Text style={[s.cell, { width: 36 }]}>{n + 1}</Text> : null}
+                            <View style={{ flex: 1, minWidth: 160 }}>
+                              <Text style={s.name} numberOfLines={2}>{it.name}</Text>
+                              <Text style={s.sku}>{it.barcode && it.barcode !== it.sku ? `CODE : ${it.barcode}  |  ` : ''}SKU : {it.sku}{mobile ? ` · ${it.label}` : ''}</Text>
+                            </View>
+                            {!mobile ? <Text style={[s.cell, { width: 150 }]}>{it.label}</Text> : null}
+                            {cur!.sourceStock && isDraft && !mobile ? (
+                              <Text style={[s.cell, { width: 90, textAlign: 'right' }, lack && { color: colors.danger, fontWeight: '700' }]}>{have ?? 0}</Text>
+                            ) : null}
+                            <View style={{ width: isDraft ? 150 : 90, alignItems: 'center' }}>
+                              {isDraft ? (
+                                <Stepper
+                                  value={it.qty}
+                                  min={0}
+                                  onChange={(q) => api.setShipmentItem(sh.id, it.variantId, q).then(apply).catch((e: Error) => notify('error', e.message))}
+                                />
+                              ) : (
+                                <Text style={s.qty}>{it.qty.toLocaleString()} ตัว</Text>
+                              )}
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </>
+                  )}
+                </View>
+              </ScrollView>
+            )}
+          </>
         )}
 
         {/* แถบส่งออก */}
@@ -862,6 +1055,15 @@ function CreateSheet({ visible, branches, onClose, onCreate }: {
 
 const s = StyleSheet.create({
   root: { flex: 1, flexDirection: 'row', gap: 14, backgroundColor: colors.bg },
+  // จอกว้าง: แบ่งสองคอลัมน์ ซ้ายอยู่กับที่ · ขวาเลื่อนรายการที่สแกนแล้ว
+  split: { flex: 1, flexDirection: 'row', gap: 12, minHeight: 0 },
+  left: { flex: 55, minWidth: 0, minHeight: 0 },              // ซ้าย 55%
+  leftInner: { flex: 1, minHeight: 0, gap: 12 },
+  itemsPane: { flex: 45, minWidth: 0, minHeight: 0, gap: 8 }, // ขวา 45%
+  docPane: { flex: 35, minHeight: 0 },                        // บนซ้าย 35%
+  docShut: { flexGrow: 0, flexShrink: 0 },                    // ย่อแล้ว = สูงตามเนื้อหาหัวการ์ด
+  scanPane: { flex: 65, minHeight: 0 },                       // ล่างซ้าย 65%
+  chev: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   main: { flex: 1, minWidth: 0, backgroundColor: colors.panel, borderRadius: radius.xl, padding: 16, gap: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
