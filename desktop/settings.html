@@ -100,6 +100,17 @@
   </section>
 
   <section class="card">
+    <h2>การแสดงผล</h2>
+    <label>การเร่งความเร็วด้วยการ์ดจอ</label>
+    <div class="seg" id="gpu">
+      <button data-v="auto">เปิด (แนะนำ)</button>
+      <button data-v="off">ปิด</button>
+    </div>
+    <div class="hint" id="gpuHint">ถ้าเลื่อนหน้าจอหรือกดปุ่มแล้วหน่วง/กระตุก ลองปิดดู — ไดรเวอร์การ์ดจอบางรุ่นทำให้ช้ากว่าปกติ · ต้องเปิดโปรแกรมใหม่จึงมีผล</div>
+    <div class="hint" id="gpuNow"></div>
+  </section>
+
+  <section class="card">
     <h2>เซิร์ฟเวอร์</h2>
     <label for="server">ที่อยู่ระบบ POS</label>
     <input type="text" id="server" spellcheck="false">
@@ -113,7 +124,7 @@
 <script>
   const api = window.desktopShell;
   const $ = (id) => document.getElementById(id);
-  const st = { mode: 'raster', conn: 'usb', paper: null, drawer: 'off' };
+  const st = { mode: 'raster', conn: 'usb', paper: null, drawer: 'off', gpu: 'auto' };
 
   function seg(id, key, parse = (v) => v) {
     const el = $(id);
@@ -125,6 +136,7 @@
   const paintConn = seg('conn', 'conn');
   const paintPaper = seg('paper', 'paper', (v) => (v ? Number(v) : null));
   const paintDrawer = seg('drawer', 'drawer');
+  const paintGpu = seg('gpu', 'gpu');
 
   function layout() {
     const raster = st.mode === 'raster';
@@ -182,7 +194,7 @@
     dots: Number($('dots').value) || 0, threshold: Number($('threshold').value),
     feedTop: Number($('feedTop').value) || 0, feedBottom: Number($('feedBottom').value) || 0,
     cut: $('cut').checked, drawerPin: Number($('drawerPin').value), silent: $('silent').checked,
-    serverUrl: $('server').value.trim(),
+    serverUrl: $('server').value.trim(), gpu: st.gpu,
   });
   const say = (ok, text) => { $('testmsg').className = ok == null ? 'hint' : ok ? 'hint ok' : 'hint err'; $('testmsg').textContent = text; };
   $('threshold').oninput = () => ($('thVal').textContent = `(${$('threshold').value})`);
@@ -204,8 +216,10 @@
     $('feedBottom').value = c.feedBottom;
     $('cut').checked = c.cut;
     $('drawerPin').value = String(c.drawerPin);
-    Object.assign(st, { mode: c.printMode, conn: c.connection, paper: c.paperWidth, drawer: c.drawer });
-    paintMode(); paintConn(); paintPaper(); paintDrawer();
+    Object.assign(st, { mode: c.printMode, conn: c.connection, paper: c.paperWidth, drawer: c.drawer, gpu: c.gpu || 'auto' });
+    paintMode(); paintConn(); paintPaper(); paintDrawer(); paintGpu();
+    const g = await api.gpuStatus();
+    if (g) $('gpuNow').textContent = `ตอนนี้วาดภาพด้วย${g.hardware ? 'การ์ดจอ' : 'CPU'} (${g.detail})`;
     await loadPrinters(c.printer);
   })();
 

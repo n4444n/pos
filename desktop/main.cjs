@@ -57,6 +57,10 @@ const DEFAULTS = {
   // ---- ชุดทดลอง
   license: null, //        { code, shop, expiresAt, route } หลังเปิดใช้งานสำเร็จ (route = ชื่อร้านหลังประตูเดียวของโหมดทดสอบ)
   machineId: '', //        รหัสเครื่อง (สำรอง เมื่ออ่าน MachineGuid ของ Windows ไม่ได้)
+  // ---- การแสดงผล
+  // 'auto' = ใช้การ์ดจอช่วยวาดภาพ (เร็วที่สุดถ้าไดรเวอร์ดี)
+  // 'off'  = ให้ CPU วาดเอง — เลือกอันนี้ถ้าเลื่อนหน้าจอแล้วกระตุก (ไดรเวอร์การ์ดจอบางรุ่นทำให้ช้ากว่า)
+  gpu: 'auto',
 };
 
 function loadConfig() {
@@ -107,6 +111,7 @@ function sanitize(c) {
           }
         : null,
     machineId: /^[\w-]{8,128}$/.test(String(c.machineId || '')) ? String(c.machineId) : '',
+    gpu: c.gpu === 'off' ? 'off' : 'auto',
   };
 }
 function saveConfig(next) {
@@ -119,6 +124,9 @@ function saveConfig(next) {
 // ทำให้ทุกครั้งที่เปิดโปรแกรมได้ค่าเริ่มต้นเสมอ (ลืมเครื่องพิมพ์/เซิร์ฟเวอร์ที่ตั้งไว้)
 let config = loadConfig();
 const serverOrigin = () => new URL(config.serverUrl).origin;
+
+// ต้องสั่งก่อน app พร้อมใช้งาน — สั่งทีหลังไม่มีผล
+if (config.gpu === 'off') app.disableHardwareAcceleration();
 
 // ---------------------------------------------------------------- กุญแจแอป (ใช้ได้เฉพาะโปรแกรมนี้)
 // เซิร์ฟเวอร์ (Caddy) รับเฉพาะคำขอที่มี header X-POS-App ตรงกับกุญแจ → เปิด URL ในเบราว์เซอร์ไม่ได้
@@ -651,6 +659,22 @@ const deny = { ok: false, error: 'not allowed' };
 
 ipcMain.handle('shell:get-config', (e) => (fromShell(e) ? { ...config, version: app.getVersion(), defaultServer: DEFAULT_SERVER } : null));
 ipcMain.handle('shell:list-printers', (e) => (fromShell(e) ? listPrinters(e.sender) : []));
+/** สถานะการวาดภาพ: ใช้การ์ดจอหรือ CPU — ไว้ให้หน้าตั้งค่าแสดง (วินิจฉัยอาการกระตุก) */
+ipcMain.handle('shell:gpu-status', (e) => {
+  if (!fromShell(e)) return null;
+  let f = {};
+  try {
+    f = app.getGPUFeatureStatus() || {};
+  } catch {
+    /* บางแพลตฟอร์มไม่มี */
+  }
+  const composite = String(f.gpu_compositing || '');
+  return {
+    setting: config.gpu,
+    hardware: /^enabled/.test(composite),
+    detail: composite || 'ไม่ทราบ',
+  };
+});
 ipcMain.handle('shell:list-ports', (e) => (fromShell(e) ? escpos.listSerialPorts() : []));
 ipcMain.handle('shell:test-print', (e, c) => (fromShell(e) ? testPrint(c) : deny));
 ipcMain.handle('shell:preview', (e, c) => (fromShell(e) ? previewTest(c) : deny));
@@ -688,13 +712,32 @@ ipcMain.handle('pos:label-print', async (e, html, page, c) => {
   return r;
 });
 
-ipcMain.handle('shell:save-config', (e, c) => {
+ipcMain.handle('shell:save-config', async (e, c) => {
   if (!fromShell(e)) return null;
   const before = config.serverUrl;
+  const beforeGpu = config.gpu;
   const saved = saveConfig(c);
   if (settingsWin) settingsWin.close();
   if (saved.serverUrl !== before) {
     autoUpdater.setFeedURL({ provider: 'generic', url: updatesUrl() });
+  }
+  // การเร่งด้วยการ์ดจอตั้งได้ตอนเปิดโปรแกรมเท่านั้น → ถามว่าจะเปิดใหม่เลยไหม
+  if (saved.gpu !== beforeGpu) {
+    const r = await dialog.showMessageBox(win, {
+      type: 'question',
+      title: 'ต้องเปิดโปรแกรมใหม่',
+      message: saved.gpu === 'off' ? 'ปิดการเร่งด้วยการ์ดจอแล้ว' : 'เปิดการเร่งด้วยการ์ดจอแล้ว',
+      detail: 'การตั้งค่านี้มีผลเมื่อเปิดโปรแกรมใหม่',
+      buttons: ['เปิดใหม่ตอนนี้', 'ไว้ทีหลัง'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (r.response === 0) {
+      app.relaunch();
+      app.exit(0);
+      return saved;
+    }
   }
   openServer(); // โหลดใหม่ให้หน้า POS ใช้ขนาดกระดาษ/เซิร์ฟเวอร์ใหม่
   return saved;

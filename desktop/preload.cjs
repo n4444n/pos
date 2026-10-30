@@ -11,6 +11,7 @@ if (location.protocol === 'file:') {
     getConfig: () => ipcRenderer.invoke('shell:get-config'),
     saveConfig: (c) => ipcRenderer.invoke('shell:save-config', c),
     listPrinters: () => ipcRenderer.invoke('shell:list-printers'),
+    gpuStatus: () => ipcRenderer.invoke('shell:gpu-status'),
     listPorts: () => ipcRenderer.invoke('shell:list-ports'),
     testPrint: (c) => ipcRenderer.invoke('shell:test-print', c),
     preview: (c) => ipcRenderer.invoke('shell:preview', c),
