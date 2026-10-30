@@ -18,12 +18,11 @@
 | `src/` + `App.tsx` | หน้าจอทั้งหมด (Expo / React Native Web) | `npm run dev` (พัฒนา) · `npm run build:web` → `dist/` |
 | `server/` | API + เสิร์ฟหน้าเว็บ + ฐานข้อมูล | `npm run dev:api` (พอร์ต 3000) — ไม่มี dependency ภายนอก |
 | `desktop/` | แอป Windows (Electron) — เปิดหน้าเว็บจากเซิร์ฟเวอร์ | `cd desktop && npm start` · ดู `desktop/README.md` |
-| `license-server/` | ระบบ license + แผงควบคุม + สร้างร้านทดลองอัตโนมัติ | `license-demo.bat` (พอร์ต 3100) |
+| `license-server/` | ระบบ license + แผงควบคุม + สร้างร้านทดลองอัตโนมัติ | พอร์ต 3100 |
 | `deploy/` | สคริปต์/ไฟล์ตั้งค่า VPS (Caddy, systemd, อัปเดต, สำรองข้อมูล) | ดู `deploy/README.md` |
 | `data/` | ฐานข้อมูลทดลองบนเครื่อง (ไม่ขึ้น git) | `npm run db:reset` = เริ่มใหม่ |
 
-ไฟล์ .bat ที่โฟลเดอร์หลัก (ดับเบิลคลิกได้): `start-ngrok.bat` เปิด POS ผ่าน ngrok · `build-web.bat` build หน้าเว็บใหม่ ·
-`license-demo.bat` ทดลองระบบ license · `test-printer.bat` ทดสอบพิมพ์ใบเสร็จด้วยเครื่องพิมพ์จำลอง
+ไฟล์ .bat ที่โฟลเดอร์หลัก (ดับเบิลคลิกได้): `build-web.bat` build หน้าเว็บใหม่
 
 ## เซิร์ฟเวอร์ (`server/`)
 
@@ -52,7 +51,7 @@
 | `events.ts` · `notify.ts` | เหตุการณ์ → แจ้งเตือน LINE / WhatsApp / Webhook |
 | `apikeys.ts` | API key ให้ระบบภายนอก |
 | `xlsx.ts` | สร้างไฟล์ Excel เอง (ไม่ใช้ไลบรารี) |
-| `seed.ts` · `demo-sales.ts` | ข้อมูลตัวอย่างครั้งแรก · สร้างยอดขายย้อนหลัง (`npm run db:demo`) |
+| `seed.ts` | ข้อมูลตัวอย่างครั้งแรก |
 
 ### กติกาฐานข้อมูล
 - **ไม่มีไฟล์ migration แยก** — ตารางสร้างด้วย `CREATE TABLE IF NOT EXISTS` ในโมดูลเจ้าของ และเพิ่ม/ลบคอลัมน์ด้วยการตรวจ `PRAGMA table_info` ก่อน (ดู `db.ts`) เปิดเซิร์ฟเวอร์ครั้งถัดไปฐานข้อมูลเดิมถูกปรับให้เอง
