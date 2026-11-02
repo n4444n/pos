@@ -9,7 +9,7 @@ import {
 } from './notify.ts';
 
 export type EventName =
-  | 'order.created' | 'order.edited' | 'order.voided' | 'stock.low' | 'stock.out'
+  | 'order.created' | 'payment.promptpay' | 'order.edited' | 'order.voided' | 'stock.low' | 'stock.out'
   | 'shift.opened' | 'shift.closed' | 'cash.moved' | 'expense.created' | 'report.daily';
 
 const baht = (n: number) => `฿${Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
@@ -84,6 +84,12 @@ function varsFor(key: EventKey, d: Any): { vars: Record<string, string>; items: 
         staff: d.salesperson || v.staff,
       });
       for (const it of d.items ?? []) items.push({ name: it.name, detail: `${it.label ? it.label + ' ' : ''}× ${it.qty}`, value: baht(it.price * it.qty) });
+      break;
+    case 'promptpay':
+      Object.assign(v, {
+        orderNo: d.orderNo ?? '-', amount: baht(d.amount ?? 0), account: d.account || '-', promptpay: d.promptpayMasked || '-',
+        locked: d.locked ? 'ใช่' : 'ไม่ (ลูกค้ากรอกยอดเอง)', staff: d.salesperson || v.staff,
+      });
       break;
     case 'void':
       Object.assign(v, { orderNo: d.orderNo, total: baht(d.total), reason: d.reason || '-' });

@@ -9,6 +9,7 @@ import { DateField } from '../DateField';
 import { Icon, type IconName } from '../Icon';
 import { NavDrawer, Sidebar, type Route } from '../NavMenu';
 import { Sheet } from '../Sheet';
+import { downloadFile } from '../../download';
 
 // ---------- ช่วงเวลา ----------
 export type PeriodId = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'lastMonth' | 'year' | 'custom';
@@ -190,7 +191,7 @@ export function ExcelButton({ url, disabled }: { url: () => string; disabled?: b
       style={[k.excel, disabled && { opacity: 0.5 }]}
       disabled={disabled}
       onPress={() => {
-        if (Platform.OS === 'web') window.open(url(), '_blank');
+        downloadFile(url());
       }}
       accessibilityLabel="ส่งออก Excel"
     >

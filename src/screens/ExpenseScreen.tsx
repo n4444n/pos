@@ -13,9 +13,11 @@ import { Sheet } from '../components/Sheet';
 import { resizeToDataUrl } from '../components/stock/ImagePicker';
 import { ToastView } from '../components/ToastView';
 import { baht, isoDate, signedBaht, thaiDate, thaiDateTime } from '../format';
+import { uiLang } from '../i18n/current';
 import { can, useSession } from '../session';
 import type { Toast } from '../store/usePos';
 import { colors, font, radius } from '../theme';
+import { downloadFile } from '../download';
 
 const SOURCES: { id: ExpenseSource; label: string; short: string; icon: IconName }[] = [
   { id: 'drawer', label: 'เงินสดในลิ้นชัก', short: 'ลิ้นชัก', icon: 'cash-outline' },
@@ -39,13 +41,6 @@ const monthEnd = (offset = 0) => {
   const d = new Date();
   return isoDate(new Date(d.getFullYear(), d.getMonth() + offset + 1, 0));
 };
-const RANGES = [
-  { label: 'วันนี้', get: () => ({ from: today(), to: today() }) },
-  { label: '7 วัน', get: () => ({ from: daysAgo(6), to: today() }) },
-  { label: 'เดือนนี้', get: () => ({ from: monthStart(), to: monthEnd() }) },
-  { label: 'เดือนก่อน', get: () => ({ from: monthStart(-1), to: monthEnd(-1) }) },
-  { label: 'ปีนี้', get: () => ({ from: `${new Date().getFullYear()}-01-01`, to: `${new Date().getFullYear()}-12-31` }) },
-];
 const shortDate = (s: string) => thaiDate(new Date(`${s}T12:00:00`));
 
 interface Props {
@@ -81,7 +76,7 @@ export function ExpenseScreen({ onNavigate, onDrawerChanged }: Props) {
 
   const [range, setRange] = useState(() => ({ from: monthStart(), to: monthEnd() }));
   const [category, setCategory] = useState('');
-  const [source, setSource] = useState('');
+  const source = ''; // ตัวกรองแหล่งเงินถูกเอาออกจากหน้าจอ (ยังส่งค่าว่างให้ API)
   const [q, setQ] = useState('');
   const [showVoid, setShowVoid] = useState(false);
   const [allBranches, setAllBranches] = useState(false);
@@ -92,6 +87,8 @@ export function ExpenseScreen({ onNavigate, onDrawerChanged }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<null | { edit: Expense | null; source?: ExpenseSource }>(null);
   const [cats, setCats] = useState(false);
+  const [view, setView] = useState<Expense | null>(null);
+  const [del, setDel] = useState<Expense | null>(null);
   const [move, setMove] = useState<null | 'in' | 'out'>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const notify = useCallback((kind: Toast['kind'], text: string) => setToast({ id: Date.now(), kind, text }), []);
@@ -122,10 +119,6 @@ export function ExpenseScreen({ onNavigate, onDrawerChanged }: Props) {
     (id: string): ExpenseCategory => data?.categories.find((c) => c.id === id) ?? { id, name: id, icon: '📝', color: '#94A3B8' },
     [data],
   );
-  const activeRange = RANGES.find((r) => {
-    const x = r.get();
-    return x.from === range.from && x.to === range.to;
-  })?.label;
   const openShift = ledger?.shift?.status === 'open' ? ledger.shift : null;
   const sum = data?.summary;
   const drawerTotal = sum?.bySource.find((x) => x.source === 'drawer')?.total ?? 0;
@@ -156,6 +149,16 @@ export function ExpenseScreen({ onNavigate, onDrawerChanged }: Props) {
                 {!mobile ? <Text style={s.ghostText}>หมวด</Text> : null}
               </Pressable>
             ) : null}
+            {manager && Platform.OS === 'web' && tab === 'list' ? (
+              <Pressable
+                style={[s.actBtn, s.excelBtn]}
+                onPress={() => downloadFile(api.expensesXlsxUrl(filter))}
+                accessibilityLabel="ส่งออก Excel"
+              >
+                <Icon name="download-outline" size={17} color="#1F7A4D" />
+                <Text style={s.excelText}>Excel</Text>
+              </Pressable>
+            ) : null}
             <Pressable style={[s.actBtn, s.primary]} onPress={() => setForm({ edit: null })} accessibilityLabel="บันทึกค่าใช้จ่าย">
               <Icon name="add" size={18} color="#fff" />
               <Text style={s.primaryText}>บันทึกค่าใช้จ่าย</Text>
@@ -180,32 +183,22 @@ export function ExpenseScreen({ onNavigate, onDrawerChanged }: Props) {
 
         {tab === 'list' ? (
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 12, paddingBottom: 16 }}>
-            {/* ---------- ตัวกรอง ---------- */}
+            {/* ---------- ตัวกรอง: ค้นหา · ช่วงวันที่ · ตัวเลือก ---------- */}
             <View style={s.filters}>
               <View style={[s.row, { flexWrap: 'wrap' }]}>
+                <View style={[s.search, { height: 40 }]}>
+                  <Icon name="search" size={16} color={colors.sub} />
+                  <TextInput value={q} onChangeText={setQ} placeholder="ค้นหา รายการ ร้านค้า เลขที่ใบเสร็จ" placeholderTextColor={colors.faint} style={s.searchInput} />
+                  {q ? (
+                    <Pressable onPress={() => setQ('')} hitSlop={6} accessibilityLabel="ล้างคำค้นหา">
+                      <Icon name="close-circle" size={16} color={colors.faint} />
+                    </Pressable>
+                  ) : null}
+                </View>
                 <DateField grow={mobile} type="date" label="ตั้งแต่วันที่" value={range.from} onChange={(v) => setRange((r) => ({ ...r, from: v }))} width={150} />
                 <Text style={s.sub}>–</Text>
                 <DateField grow={mobile} type="date" label="ถึงวันที่" value={range.to} onChange={(v) => setRange((r) => ({ ...r, to: v }))} width={150} />
-                {RANGES.map((r) => (
-                  <Pressable key={r.label} style={[s.chip, activeRange === r.label && s.chipOn]} onPress={() => setRange(r.get())}>
-                    <Text style={[s.chipText, activeRange === r.label && s.chipTextOn]}>{r.label}</Text>
-                  </Pressable>
-                ))}
-              </View>
-              <View style={[s.row, { flexWrap: 'wrap' }]}>
-                <View style={s.search}>
-                  <Icon name="search" size={16} color={colors.sub} />
-                  <TextInput value={q} onChangeText={setQ} placeholder="ค้นหา รายการ ร้านค้า เลขที่ใบเสร็จ" placeholderTextColor={colors.faint} style={s.searchInput} />
-                </View>
-                <Pressable style={[s.chip, !source && s.chipOn]} onPress={() => setSource('')}>
-                  <Text style={[s.chipText, !source && s.chipTextOn]}>ทุกแหล่งเงิน</Text>
-                </Pressable>
-                {SOURCES.map((x) => (
-                  <Pressable key={x.id} style={[s.chip, source === x.id && s.chipOn]} onPress={() => setSource(source === x.id ? '' : x.id)}>
-                    <Text style={[s.chipText, source === x.id && s.chipTextOn]}>{x.short}</Text>
-                  </Pressable>
-                ))}
-                <Pressable style={s.row} onPress={() => setShowVoid((v) => !v)}>
+                <Pressable style={[s.row, { marginLeft: 4 }]} onPress={() => setShowVoid((v) => !v)}>
                   <Icon name={showVoid ? 'checkbox' : 'square-outline'} size={18} color={showVoid ? colors.primary : colors.faint} />
                   <Text style={s.sub}>แสดงที่ยกเลิก</Text>
                 </Pressable>
@@ -213,12 +206,6 @@ export function ExpenseScreen({ onNavigate, onDrawerChanged }: Props) {
                   <Pressable style={s.row} onPress={() => setAllBranches((v) => !v)}>
                     <Icon name={allBranches ? 'checkbox' : 'square-outline'} size={18} color={allBranches ? colors.primary : colors.faint} />
                     <Text style={s.sub}>รวมทุกสาขา</Text>
-                  </Pressable>
-                ) : null}
-                {manager && Platform.OS === 'web' ? (
-                  <Pressable style={[s.chip, s.row]} onPress={() => window.open(api.expensesCsvUrl(filter), '_blank')} accessibilityLabel="ส่งออก CSV">
-                    <Icon name="download-outline" size={14} color={colors.text} />
-                    <Text style={s.chipText}>CSV</Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -278,40 +265,16 @@ export function ExpenseScreen({ onNavigate, onDrawerChanged }: Props) {
                 </Pressable>
               </View>
             ) : null}
-            <View style={s.list}>
-              {data?.rows.map((r) => {
-                const cat = catOf(r.category);
-                const src = srcOf(r.source);
-                return (
-                  <Pressable
-                    key={r.id}
-                    onPress={() => setForm({ edit: r })}
-                    style={({ hovered }: { hovered?: boolean }) => [s.item, hovered && { backgroundColor: '#F8FAFF' }, r.voidedAt && { opacity: 0.55 }]}
-                  >
-                    <View style={[s.catIcon, { backgroundColor: cat.color + '1F' }]}><Text style={{ fontSize: 18 }}>{cat.icon}</Text></View>
-                    <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                      <Text style={[s.itemTitle, r.voidedAt && { textDecorationLine: 'line-through' }]} numberOfLines={1}>{r.description}</Text>
-                      <Text style={s.sub} numberOfLines={1}>
-                        {r.items.length > 1 ? `${r.items.length} รายการ · ` : ''}{[...new Set(r.items.map((x) => catOf(x.category).name))].join(', ') || cat.name}{r.vendor ? ` · ${r.vendor}` : ''}{r.refNo ? ` · #${r.refNo}` : ''}{allBranches ? ` · ${r.branchName}` : ''}
-                      </Text>
-                      <View style={[s.row, { gap: 6, flexWrap: 'wrap' }]}>
-                        <View style={[s.tag, r.source === 'drawer' && { backgroundColor: '#FFF4E0' }]}>
-                          <Icon name={src.icon} size={12} color={r.source === 'drawer' ? '#B26A00' : colors.sub} />
-                          <Text style={[s.tagText, r.source === 'drawer' && { color: '#B26A00' }]}>{src.short}{r.shiftNo ? ` · กะ #${r.shiftNo}` : ''}</Text>
-                        </View>
-                        {r.photo ? <View style={s.tag}><Icon name="image-outline" size={12} color={colors.sub} /><Text style={s.tagText}>มีใบเสร็จ</Text></View> : null}
-                        {r.voidedAt ? <View style={[s.tag, { backgroundColor: colors.dangerSoft }]}><Text style={[s.tagText, { color: colors.danger }]}>ยกเลิก: {r.voidReason}</Text></View> : null}
-                        <Text style={s.hint}>{r.staff}</Text>
-                      </View>
-                    </View>
-                    <View style={{ alignItems: 'flex-end', gap: 2 }}>
-                      <Text style={[s.amount, r.voidedAt && { textDecorationLine: 'line-through' }]}>−{baht(r.amount)}</Text>
-                      <Text style={s.sub}>{shortDate(r.date)}</Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
+            {data && data.rows.length ? (
+              <ExpenseTable
+                rows={data.rows}
+                allBranches={allBranches}
+                manager={manager}
+                onView={setView}
+                onEdit={(r) => setForm({ edit: r })}
+                onDelete={setDel}
+              />
+            ) : null}
           </ScrollView>
         ) : (
           <DrawerTab
@@ -342,6 +305,33 @@ export function ExpenseScreen({ onNavigate, onDrawerChanged }: Props) {
             changed();
           }}
           notify={notify}
+        />
+      ) : null}
+      {view && data ? (
+        <ExpenseView
+          expense={view}
+          catOf={catOf}
+          manager={manager}
+          onClose={() => setView(null)}
+          onEdit={() => {
+            setForm({ edit: view });
+            setView(null);
+          }}
+          onDelete={() => {
+            setDel(view);
+            setView(null);
+          }}
+        />
+      ) : null}
+      {del ? (
+        <DeleteExpense
+          expense={del}
+          onClose={() => setDel(null)}
+          onDone={(msg) => {
+            setDel(null);
+            notify('success', msg);
+            changed();
+          }}
         />
       ) : null}
       {cats && data ? (
@@ -376,6 +366,332 @@ const daysBetween = (a: string, b: string) => {
   const ms = new Date(`${b}T12:00:00`).getTime() - new Date(`${a}T12:00:00`).getTime();
   return Math.max(1, Math.round(ms / 86400000) + 1);
 };
+
+/** เลขที่เอกสารค่าใช้จ่าย: EXP + ปี พ.ศ. 2 หลัก (ตามวันที่สร้าง) + เลขลำดับ 6 หลัก เช่น EXP69000143 */
+export const expenseDocNo = (r: Pick<Expense, 'id' | 'createdAt' | 'date'>) => {
+  const y = Number((r.createdAt || r.date).slice(0, 4)) + 543;
+  return `EXP${String(y % 100).padStart(2, '0')}${String(r.id).padStart(6, '0')}`;
+};
+/** '2026-10-31' หรือ '2026-10-31 14:05:00' → '31/10/2569' (EN: 31/10/2026) */
+const dmy = (s: string) => {
+  const [y, m, d] = s.slice(0, 10).split('-');
+  return `${d}/${m}/${Number(y) + (uiLang() === 'en' ? 0 : 543)}`;
+};
+
+type SortKey = 'doc' | 'total' | 'created' | 'date' | 'qty';
+// ความกว้างขั้นต่ำ (min) + สัดส่วนที่ขยายเมื่อจอกว้าง (grow) — ทุกคอลัมน์ขยายตามสัดส่วน ไม่ให้รายละเอียดกินที่ว่างทั้งหมด
+type ColAlign = 'left' | 'center' | 'right';
+const COLS: { key: SortKey | 'status' | 'detail' | 'action'; label: string; min: number; grow: number; align: ColAlign }[] = [
+  { key: 'doc', label: 'เลขที่เอกสาร', min: 118, grow: 1.1, align: 'left' },
+  { key: 'status', label: 'สถานะ', min: 84, grow: 0.8, align: 'center' },
+  { key: 'total', label: 'ยอดรวม', min: 104, grow: 1, align: 'right' },
+  { key: 'created', label: 'วันที่สร้าง', min: 112, grow: 0.9, align: 'center' },
+  { key: 'date', label: 'วันที่จ่าย', min: 112, grow: 0.9, align: 'center' },
+  { key: 'qty', label: 'จำนวน', min: 76, grow: 0.6, align: 'center' },
+  { key: 'detail', label: 'รายละเอียด', min: 150, grow: 2.6, align: 'left' },
+  { key: 'action', label: 'จัดการ', min: 132, grow: 0.8, align: 'center' },
+];
+const MIN_TABLE = COLS.reduce((t, c) => t + c.min, 0);
+const JUSTIFY = { left: 'flex-start', center: 'center', right: 'flex-end' } as const;
+
+/** ตารางค่าใช้จ่าย — เลขที่เอกสาร · สถานะ · ยอดรวม · วันที่สร้าง · วันที่จ่าย · จำนวนรายการ · รายละเอียดย่อ */
+function ExpenseTable({ rows, allBranches, manager, onView, onEdit, onDelete }: {
+  rows: Expense[]; allBranches: boolean; manager: boolean;
+  onView: (r: Expense) => void; onEdit: (r: Expense) => void; onDelete: (r: Expense) => void;
+}) {
+  const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'doc', desc: true });
+  const sorted = useMemo(() => {
+    const val = (r: Expense): number | string =>
+      sort.key === 'doc' ? r.id : sort.key === 'total' ? r.amount : sort.key === 'created' ? r.createdAt : sort.key === 'date' ? r.date : r.items.length || 1;
+    return [...rows].sort((a, b) => {
+      const x = val(a);
+      const y = val(b);
+      const c = x < y ? -1 : x > y ? 1 : a.id - b.id;
+      return sort.desc ? -c : c;
+    });
+  }, [rows, sort]);
+  const total = rows.reduce((t, r) => t + (r.voidedAt ? 0 : r.amount), 0);
+  const qty = rows.reduce((t, r) => t + (r.voidedAt ? 0 : r.items.length || 1), 0);
+  const cell = (c: (typeof COLS)[number]) => [{ flexGrow: c.grow, flexShrink: 0, flexBasis: c.min, minWidth: c.min, alignItems: JUSTIFY[c.align] }];
+
+  return (
+    <ScrollView horizontal contentContainerStyle={{ flexGrow: 1 }} style={s.tableWrap}>
+      <View style={{ flex: 1, minWidth: MIN_TABLE }}>
+        <View style={[s.trow, s.thead]}>
+          {COLS.map((c) => {
+            const sortable = c.key !== 'status' && c.key !== 'detail' && c.key !== 'action';
+            const on = sortable && sort.key === c.key;
+            return (
+              <Pressable
+                key={c.key}
+                disabled={!sortable}
+                onPress={() => setSort((x) => ({ key: c.key as SortKey, desc: x.key === c.key ? !x.desc : true }))}
+                style={[s.tcell, ...cell(c), { flexDirection: 'row', alignItems: 'center', gap: 4, justifyContent: JUSTIFY[c.align] }]}
+                accessibilityRole={sortable ? 'button' : undefined}
+              >
+                <Text style={s.th} numberOfLines={1}>{c.label}</Text>
+                {sortable ? <Icon name={on ? (sort.desc ? 'arrow-down' : 'arrow-up') : 'swap-vertical'} size={12} color={on ? colors.primary : colors.faint} /> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+        {sorted.map((r, i) => {
+          const voided = !!r.voidedAt;
+          const n = r.items.length || 1;
+          const detail = [r.description, r.vendor, allBranches ? r.branchName : ''].filter(Boolean).join(' · ');
+          return (
+            <Pressable
+              key={r.id}
+              onPress={() => onView(r)}
+              style={({ hovered }: { hovered?: boolean }) => [s.trow, i % 2 === 1 && { backgroundColor: '#F7F9FC' }, hovered && { backgroundColor: '#EEF3FF' }]}
+              accessibilityLabel={`ค่าใช้จ่าย ${expenseDocNo(r)}`}
+            >
+              <View style={[s.tcell, ...cell(COLS[0])]}>
+                <Text style={[s.td, s.docNo, voided && s.strike]}>{expenseDocNo(r)}</Text>
+              </View>
+              <View style={[s.tcell, ...cell(COLS[1]), { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }]}>
+                <Icon name={voided ? 'close-circle-outline' : 'checkbox-outline'} size={14} color={voided ? colors.danger : colors.text} />
+                <Text style={[s.td, voided && { color: colors.danger }]}>{voided ? 'ยกเลิก' : 'สำเร็จ'}</Text>
+              </View>
+              <View style={[s.tcell, ...cell(COLS[2])]}>
+                <Text style={[s.td, s.money, voided && s.strike]}>{baht(r.amount)}</Text>
+              </View>
+              <View style={[s.tcell, ...cell(COLS[3]), { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 }]}>
+                <Icon name="calendar-outline" size={13} color={colors.sub} />
+                <Text style={s.td}>{dmy(r.createdAt || r.date)}</Text>
+              </View>
+              <View style={[s.tcell, ...cell(COLS[4]), { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 }]}>
+                <Icon name="calendar-outline" size={13} color={colors.sub} />
+                <Text style={s.td}>{dmy(r.date)}</Text>
+              </View>
+              <View style={[s.tcell, ...cell(COLS[5])]}>
+                <Text style={s.td}>{n}</Text>
+              </View>
+              <View style={[s.tcell, ...cell(COLS[6])]}>
+                <Text style={[s.td, voided && s.strike]} numberOfLines={1}>{detail || '—'}</Text>
+              </View>
+              <View style={[s.tcell, ...cell(COLS[7]), { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 6 }]}>
+                <RowBtn icon="eye-outline" label="ดู" tone="view" onPress={() => onView(r)} />
+                <RowBtn icon="grid-outline" label="แก้ไข" tone="edit" disabled={!manager || voided} onPress={() => onEdit(r)} />
+                <RowBtn icon="trash-outline" label="ลบ" tone="del" disabled={!manager || voided} onPress={() => onDelete(r)} />
+              </View>
+            </Pressable>
+          );
+        })}
+        <View style={[s.trow, s.tfoot]}>
+          {COLS.map((c) => (
+            <View key={c.key} style={[s.tcell, ...cell(c)]}>
+              {c.key === 'doc' ? <Text style={s.tfootText}>รวม (฿)</Text>
+                : c.key === 'total' ? <Text style={[s.tfootText, s.money]}>{baht(total)}</Text>
+                : c.key === 'qty' ? <Text style={s.tfootText}>{qty}</Text>
+                : c.key === 'detail' ? <Text style={s.hint} numberOfLines={1}>ไม่รวมที่ยกเลิก · แตะแถวเพื่อดูรายการทั้งหมด</Text>
+                : null}
+            </View>
+          ))}
+        </View>
+      </View>
+    </ScrollView>
+  );
+}
+
+/** ปุ่มไอคอนในคอลัมน์จัดการ — ดู (ฟ้า) · แก้ไข (เขียว) · ลบ (แดง) */
+const ROW_BTN = {
+  view: { fg: '#2F6BFF', bg: '#EEF3FF', line: '#D6E2FF' },
+  edit: { fg: '#1F9D63', bg: '#E9F7EF', line: '#C9EBD7' },
+  del: { fg: '#E5484D', bg: '#FDEDED', line: '#F8CFD0' },
+} as const;
+function RowBtn({ icon, label, tone, onPress, disabled }: { icon: IconName; label: string; tone: keyof typeof ROW_BTN; onPress: () => void; disabled?: boolean }) {
+  const t = ROW_BTN[tone];
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={3}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      {...(Platform.OS === 'web' ? ({ title: label } as object) : {})}
+      style={({ hovered, pressed }: { hovered?: boolean; pressed?: boolean }) => [
+        s.rowBtn,
+        disabled ? s.rowBtnOff : { backgroundColor: t.bg, borderColor: hovered ? t.fg : t.line },
+        pressed && !disabled && { transform: [{ scale: 0.94 }] },
+      ]}
+    >
+      <Icon name={icon} size={17} color={disabled ? '#C3CAD5' : t.fg} />
+    </Pressable>
+  );
+}
+
+/** popup ดูค่าใช้จ่าย (อ่านอย่างเดียว) — ข้อมูลเอกสาร + รายการทั้งหมด */
+function ExpenseView({ expense: e, catOf, manager, onClose, onEdit, onDelete }: {
+  expense: Expense; catOf: (id: string) => ExpenseCategory; manager: boolean;
+  onClose: () => void; onEdit: () => void; onDelete: () => void;
+}) {
+  const voided = !!e.voidedAt;
+  const items = e.items.length
+    ? e.items
+    : [{ description: e.description, category: e.category, qty: 1, unit: '', unitPrice: e.amount, amount: e.amount }];
+  const info: [string, string][] = [
+    ['วันที่จ่าย', dmy(e.date)],
+    ['วันที่สร้าง', thaiDateTime(e.createdAt)],
+    ['จ่ายจาก', `${srcOf(e.source).label}${e.shiftNo ? ` · กะ #${e.shiftNo}` : ''}`],
+    ['ร้านค้า / ผู้รับเงิน', e.vendor || '—'],
+    ['เลขที่ใบเสร็จ / บิล', e.refNo || '—'],
+    ['บันทึกโดย', e.staff || '—'],
+  ];
+  if (e.updatedAt && e.updatedAt !== e.createdAt) info.push(['แก้ไขล่าสุด', thaiDateTime(e.updatedAt)]);
+  if (e.branchName) info.push(['สาขา', e.branchName]);
+  return (
+    <Sheet
+      visible
+      onClose={onClose}
+      title={expenseDocNo(e)}
+      width={820}
+      footer={
+        <View style={[s.row, { flex: 1 }]}>
+          {manager && !voided ? (
+            <Pressable style={[s.actBtn, s.ghost]} onPress={onDelete}>
+              <Icon name="trash-outline" size={16} color={colors.danger} />
+              <Text style={[s.ghostText, { color: colors.danger }]}>ลบ</Text>
+            </Pressable>
+          ) : null}
+          <View style={{ flex: 1 }} />
+          <Pressable style={[s.actBtn, s.ghost]} onPress={onClose}><Text style={s.ghostText}>ปิด</Text></Pressable>
+          {manager && !voided ? (
+            <Pressable style={[s.actBtn, s.primary]} onPress={onEdit}>
+              <Icon name="create-outline" size={16} color="#fff" />
+              <Text style={s.primaryText}>แก้ไข</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      }
+    >
+      <ScrollView style={{ maxHeight: 620 }} contentContainerStyle={{ gap: 14, paddingBottom: 4 }}>
+        <View style={[s.row, { flexWrap: 'wrap', gap: 8 }]}>
+          <View style={[s.tag, voided ? { backgroundColor: colors.dangerSoft } : { backgroundColor: '#E6F6EE' }]}>
+            <Icon name={voided ? 'close-circle-outline' : 'checkmark-circle-outline'} size={13} color={voided ? colors.danger : '#1F9D63'} />
+            <Text style={[s.tagText, { color: voided ? colors.danger : '#1F9D63' }]}>{voided ? 'ยกเลิก' : 'สำเร็จ'}</Text>
+          </View>
+          <Text style={[s.viewTotal, voided && s.strike]}>{baht(e.amount)}</Text>
+        </View>
+        {voided ? (
+          <View style={[s.notice, { backgroundColor: colors.dangerSoft }]}>
+            <Text style={[s.td, { color: colors.danger }]}>ยกเลิกแล้วโดย {e.voidedBy} · {thaiDateTime(e.voidedAt!)} · {e.voidReason}</Text>
+          </View>
+        ) : null}
+
+        <View style={s.infoGrid}>
+          {info.map(([k, v]) => (
+            <View key={k} style={s.infoItem}>
+              <Text style={s.hint}>{k}</Text>
+              <Text style={s.td}>{v}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={s.tableWrap}>
+          <View style={[s.trow, s.thead]}>
+            <View style={[s.tcell, { width: 44 }]}><Text style={s.th}>#</Text></View>
+            <View style={[s.tcell, { flex: 1, minWidth: 160 }]}><Text style={s.th}>รายละเอียด</Text></View>
+            <View style={[s.tcell, { width: 170 }]}><Text style={s.th}>หมวดหมู่</Text></View>
+            <View style={[s.tcell, { width: 110, alignItems: 'flex-end' }]}><Text style={s.th}>จำนวน / หน่วย</Text></View>
+            <View style={[s.tcell, { width: 110, alignItems: 'flex-end' }]}><Text style={s.th}>ราคา / หน่วย</Text></View>
+            <View style={[s.tcell, { width: 110, alignItems: 'flex-end' }]}><Text style={s.th}>รวม</Text></View>
+          </View>
+          {items.map((x, i) => {
+            const c = catOf(x.category);
+            return (
+              <View key={i} style={[s.trow, i % 2 === 1 && { backgroundColor: '#F7F9FC' }]}>
+                <View style={[s.tcell, { width: 44 }]}><Text style={s.td}>{i + 1}</Text></View>
+                <View style={[s.tcell, { flex: 1, minWidth: 160 }]}><Text style={s.td}>{x.description || '—'}</Text></View>
+                <View style={[s.tcell, { width: 170 }]}><Text style={s.td} numberOfLines={1}>{c.icon} {c.name}</Text></View>
+                <View style={[s.tcell, { width: 110, alignItems: 'flex-end' }]}><Text style={s.td}>{x.qty} {x.unit}</Text></View>
+                <View style={[s.tcell, { width: 110, alignItems: 'flex-end' }]}><Text style={[s.td, s.money]}>{baht(x.unitPrice)}</Text></View>
+                <View style={[s.tcell, { width: 110, alignItems: 'flex-end' }]}><Text style={[s.td, s.money]}>{baht(x.amount)}</Text></View>
+              </View>
+            );
+          })}
+          <View style={[s.trow, s.tfoot]}>
+            <View style={[s.tcell, { flex: 1 }]}><Text style={s.tfootText}>รวม {items.length} รายการ</Text></View>
+            <View style={[s.tcell, { width: 110, alignItems: 'flex-end' }]}><Text style={[s.tfootText, s.money]}>{baht(e.amount)}</Text></View>
+          </View>
+        </View>
+
+        {e.note ? (
+          <View style={{ gap: 4 }}>
+            <Text style={s.label}>หมายเหตุ</Text>
+            <Text style={s.td}>{e.note}</Text>
+          </View>
+        ) : null}
+        {e.photo ? (
+          <View style={{ gap: 6 }}>
+            <Text style={s.label}>รูปใบเสร็จ / หลักฐาน</Text>
+            <Pressable onPress={() => Platform.OS === 'web' && window.open(e.photo, '_blank')} accessibilityLabel="ดูรูปใบเสร็จ">
+              <Image source={{ uri: e.photo }} style={s.viewPhoto} resizeMode="contain" />
+            </Pressable>
+          </View>
+        ) : null}
+      </ScrollView>
+    </Sheet>
+  );
+}
+
+/** ยืนยันลบค่าใช้จ่าย — เป็นการยกเลิก (เก็บเอกสารไว้ในประวัติ · คืนเงินเข้าลิ้นชักให้อัตโนมัติ) */
+function DeleteExpense({ expense: e, onClose, onDone }: { expense: Expense; onClose: () => void; onDone: (msg: string) => void }) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const go = async () => {
+    if (!reason.trim()) return setError('กรุณาระบุเหตุผลที่ลบ');
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.voidExpense(e.id, reason.trim());
+      onDone(r.refunded ? `ลบ ${expenseDocNo(e)} แล้ว · คืนเงินเข้าลิ้นชักให้อัตโนมัติ` : `ลบ ${expenseDocNo(e)} แล้ว`);
+    } catch (x) {
+      setError((x as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Sheet
+      visible
+      onClose={onClose}
+      title={`ลบ ${expenseDocNo(e)}?`}
+      width={460}
+      footer={
+        <View style={[s.row, { flex: 1, justifyContent: 'flex-end' }]}>
+          <Pressable style={[s.actBtn, s.ghost]} onPress={onClose}><Text style={s.ghostText}>ไม่ลบ</Text></Pressable>
+          <Pressable style={[s.actBtn, { backgroundColor: colors.danger }, busy && { opacity: 0.6 }]} onPress={go} disabled={busy}>
+            {busy ? <ActivityIndicator color="#fff" /> : (
+              <>
+                <Icon name="trash-outline" size={16} color="#fff" />
+                <Text style={s.primaryText}>ยืนยันลบ</Text>
+              </>
+            )}
+          </Pressable>
+        </View>
+      }
+    >
+      <View style={{ gap: 10 }}>
+        <Text style={s.td}>{e.description} · {baht(e.amount)}</Text>
+        <Text style={s.hint}>
+          รายการจะหายจากยอดค่าใช้จ่าย แต่เอกสารยังเก็บไว้ในประวัติ (ติ๊ก "แสดงที่ยกเลิก" เพื่อดู){e.source === 'drawer' ? ' · จ่ายจากลิ้นชัก: คืนเงินเข้าลิ้นชักให้อัตโนมัติ' : ''}
+        </Text>
+        <TextInput
+          value={reason}
+          onChangeText={setReason}
+          placeholder="เหตุผลที่ลบ เช่น ลงซ้ำ / ลงผิด"
+          placeholderTextColor={colors.faint}
+          style={s.input}
+          autoFocus
+          onSubmitEditing={go}
+        />
+        {error ? <Text style={s.error}>{error}</Text> : null}
+      </View>
+    </Sheet>
+  );
+}
 
 function SumCard({ label, value, icon }: { label: string; value: string; icon: IconName }) {
   return (
@@ -948,6 +1264,24 @@ function CategoryEditor({ categories, onClose, onSaved, notify }: {
 }
 
 const s = StyleSheet.create({
+  rowBtn: { width: 32, height: 32, borderRadius: 9, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  excelBtn: { backgroundColor: '#E9F7EF', borderWidth: 1.5, borderColor: '#BFE6CF' },
+  excelText: { fontFamily: font, fontSize: 14, color: '#1F7A4D', fontWeight: '600' },
+  rowBtnOff: { backgroundColor: '#F4F6F9', borderColor: '#E7EBF0' },
+  viewTotal: { fontFamily: font, fontSize: 22, fontWeight: '800', color: colors.text },
+  infoGrid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 10, columnGap: 16, padding: 12, borderRadius: radius.md, backgroundColor: colors.surface },
+  infoItem: { flexBasis: 220, flexGrow: 1, gap: 2 },
+  viewPhoto: { width: '100%', height: 260, borderRadius: radius.md, backgroundColor: colors.surface },
+  tableWrap: { borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, backgroundColor: '#fff' },
+  trow: { flexDirection: 'row', alignItems: 'center', minHeight: 36, borderBottomWidth: 1, borderBottomColor: '#EEF1F5', backgroundColor: '#fff' },
+  thead: { backgroundColor: '#EEF1F5', minHeight: 38 },
+  tfoot: { backgroundColor: '#F7F9FC', borderBottomWidth: 0 },
+  tcell: { paddingHorizontal: 10, paddingVertical: 7, justifyContent: 'center' },
+  th: { fontFamily: font, fontSize: 13, fontWeight: '700', color: colors.text },
+  docNo: { fontVariant: ['tabular-nums'] },
+  money: { fontVariant: ['tabular-nums'], textAlign: 'right' },
+  strike: { textDecorationLine: 'line-through', color: colors.faint },
+  tfootText: { fontFamily: font, fontSize: 13, fontWeight: '700', color: colors.text },
   root: { flex: 1, flexDirection: 'row', gap: 14, backgroundColor: colors.bg },
   main: { flex: 1, minWidth: 0, backgroundColor: colors.panel, borderRadius: radius.xl, padding: 16, gap: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' },

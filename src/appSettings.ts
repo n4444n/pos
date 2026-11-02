@@ -87,7 +87,10 @@ export interface PublicSettings {
     swatchSize: ControlSize; optionSize: ControlSize;
   };
   payments: {
-    methods: PayMethod[]; promptpayId: string; vat: { enabled: boolean; rate: number }; feePayer: 'customer' | 'shop';
+    methods: PayMethod[]; promptpayId: string;
+    /** ชื่อบัญชีพร้อมเพย์ · ล็อคยอดใน QR */
+    promptpayName?: string; promptpayLock?: boolean;
+    vat: { enabled: boolean; rate: number }; feePayer: 'customer' | 'shop';
     /** เปิด/ปิดกะ: ต้องนับเงินในลิ้นชักเป็นธนบัตร/เหรียญ */
     requireDenominations?: boolean;
   };
@@ -120,6 +123,8 @@ export const DEFAULT_SETTINGS: PublicSettings = {
       { id: 'transfer', label: 'โอนผ่านธนาคาร', enabled: true, feePercent: 0, feeFixed: 0 },
     ],
     promptpayId: '',
+    promptpayName: '',
+    promptpayLock: true,
     // อัตราจริงมาจากเซิร์ฟเวอร์ (ตารางอัตรา VAT)
     vat: { enabled: true, rate: 0 },
     feePayer: 'customer',

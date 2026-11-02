@@ -3,12 +3,13 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { baht, bahtShort, PAYMENT_LABEL, variantLabel } from '../format';
 import { sellableStock, useAppSettings } from '../appSettings';
-import { api, imageSrc, type PromoPreview } from '../api';
+import { api, imageSrc, type AvailablePromo, type PromoPreview } from '../api';
 import type { CartRow, Pos } from '../store/usePos';
 import { colors, font, radius } from '../theme';
 import { GarmentArt } from './GarmentArt';
 import { Icon } from './Icon';
 import { Select } from './Select';
+import { Sheet } from './Sheet';
 
 interface Props {
   pos: Pos;
@@ -76,6 +77,21 @@ export function CartPanel({ pos, onPayment, onPlace }: Props) {
   const apply = async () => {
     setApplying(true);
     await pos.applyPromo(code);
+    setApplying(false);
+  };
+
+  // ปุ่มป้ายราคา: มีโค้ดที่พิมพ์ไว้ → ใช้โค้ดนั้น · ช่องว่าง → แสดงโปรโมชั่นที่ใช้ได้กับบิลนี้ให้เลือก
+  const [picker, setPicker] = useState(false);
+  const [offers, setOffers] = useState<AvailablePromo[] | null>(null);
+  const openPicker = () => {
+    setPicker(true);
+    setOffers(null);
+    api.availablePromos(totals.subtotal).then(setOffers).catch(() => setOffers([]));
+  };
+  const pick = async (o: AvailablePromo) => {
+    setPicker(false);
+    setApplying(true);
+    await pos.applyPromo(o.code);
     setApplying(false);
   };
 
@@ -232,8 +248,13 @@ export function CartPanel({ pos, onPayment, onPlace }: Props) {
             autoCapitalize="characters"
             onSubmitEditing={apply}
           />
-          <Pressable onPress={apply} disabled={!code || applying || rows.length === 0} style={s.promoBtn} accessibilityLabel="ใช้โค้ด">
-            {applying ? <ActivityIndicator size="small" color={colors.primary} /> : <Icon name="pricetag-outline" size={17} color={code ? colors.primary : colors.sub} />}
+          <Pressable
+            onPress={code ? apply : openPicker}
+            disabled={applying || rows.length === 0}
+            style={({ hovered }: { hovered?: boolean }) => [s.promoBtn, hovered && rows.length > 0 && { borderColor: colors.primary }]}
+            accessibilityLabel={code ? 'ใช้โค้ด' : 'เลือกโปรโมชั่น'}
+          >
+            {applying ? <ActivityIndicator size="small" color={colors.primary} /> : <Icon name="pricetag-outline" size={17} color={rows.length ? colors.primary : colors.faint} />}
           </Pressable>
         </View>
         <Pressable style={[s.payBtn, pos.payment && s.payBtnOn]} onPress={onPayment} disabled={rows.length === 0}>
@@ -253,6 +274,57 @@ export function CartPanel({ pos, onPayment, onPlace }: Props) {
           <Text style={s.placeText}>{pos.payment ? `ชำระเงิน ${baht(totals.total)}` : 'ยืนยันการขาย'}</Text>
         )}
       </Pressable>
+      <Sheet visible={picker} onClose={() => setPicker(false)} title="เลือกโปรโมชั่น" width={440}>
+        <View style={{ gap: 10 }}>
+          <Text style={s.pickSub}>ยอดสินค้าในบิลนี้ {baht(totals.subtotal)} · แตะเพื่อใช้ส่วนลด</Text>
+          {offers == null ? (
+            <ActivityIndicator style={{ marginVertical: 24 }} color={colors.primary} />
+          ) : offers.length === 0 ? (
+            <View style={s.pickEmpty}>
+              <Icon name="pricetags-outline" size={28} color={colors.faint} />
+              <Text style={s.pickSub}>ยังไม่มีโค้ดส่วนลดที่เปิดใช้งาน</Text>
+            </View>
+          ) : (
+            <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ gap: 8 }}>
+              {offers.map((o) => {
+                const using = promo?.code === o.code;
+                return (
+                  <Pressable
+                    key={o.code}
+                    disabled={!o.eligible || using}
+                    onPress={() => pick(o)}
+                    style={({ hovered }: { hovered?: boolean }) => [
+                      s.offer,
+                      using && s.offerOn,
+                      !o.eligible && { opacity: 0.55 },
+                      hovered && o.eligible && !using && { borderColor: colors.primary },
+                    ]}
+                    accessibilityLabel={`ใช้โปรโมชั่น ${o.code}`}
+                  >
+                    <View style={[s.offerIcon, !o.eligible && { backgroundColor: colors.surface }]}>
+                      <Icon name="pricetag" size={18} color={o.eligible ? colors.success : colors.faint} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                      <Text style={s.offerTitle} numberOfLines={2}>{o.label}</Text>
+                      <Text style={s.offerMeta} numberOfLines={1}>
+                        {o.code} · ลด {o.type === 'percent' ? `${o.value}%` : bahtShort(o.value)}
+                        {o.minTotal > 0 ? ` · ขั้นต่ำ ${bahtShort(o.minTotal)}` : ''}
+                      </Text>
+                      {!o.eligible ? <Text style={[s.offerMeta, { color: colors.danger }]}>ซื้ออีก {baht(o.missing)} จึงใช้ได้</Text> : null}
+                    </View>
+                    {using ? (
+                      <Text style={s.offerUsing}>ใช้อยู่</Text>
+                    ) : o.eligible ? (
+                      <Text style={s.offerSave}>−{baht(o.discount)}</Text>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          )}
+          <Text style={s.pickHint}>มีโค้ดคูปองอยู่แล้ว? พิมพ์ในช่อง "โค้ดส่วนลด / คูปอง" แล้วกด Enter · โปรอัตโนมัติ (ของแถม / ส่วนลดตามยอด) ระบบใส่ให้เองตอนบันทึกบิล</Text>
+        </View>
+      </Sheet>
     </View>
   );
 }
@@ -288,6 +360,16 @@ const s = StyleSheet.create({
   totals: { paddingHorizontal: 14, paddingVertical: 10, gap: 6 },
   promoHint: { marginHorizontal: 14, marginTop: 8, padding: 9, borderRadius: radius.md, backgroundColor: colors.surface, gap: 5 },
   hintRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  pickSub: { fontFamily: font, fontSize: 12.5, color: colors.sub, textAlign: 'center' },
+  pickHint: { fontFamily: font, fontSize: 11, color: colors.faint, lineHeight: 16 },
+  pickEmpty: { alignItems: 'center', gap: 8, paddingVertical: 24 },
+  offer: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.line, backgroundColor: '#fff' },
+  offerOn: { borderColor: colors.success, backgroundColor: colors.successSoft },
+  offerIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.successSoft, alignItems: 'center', justifyContent: 'center' },
+  offerTitle: { fontFamily: font, fontSize: 14, fontWeight: '600', color: colors.text },
+  offerMeta: { fontFamily: font, fontSize: 11.5, color: colors.sub },
+  offerSave: { fontFamily: font, fontSize: 15, fontWeight: '700', color: colors.success },
+  offerUsing: { fontFamily: font, fontSize: 12, fontWeight: '700', color: colors.success },
   hintText: { fontFamily: font, fontSize: 11.5, color: colors.sub, flex: 1, lineHeight: 16 },
   tRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   tLabel: { fontFamily: font, fontSize: 13, color: colors.text },

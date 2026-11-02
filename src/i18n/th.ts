@@ -37,7 +37,7 @@ export const th = {
     taxReport: 'ภาษีขาย (VAT)',
     history: 'ประวัติการขาย',
     shifts: 'กะการขาย',
-    expenses: 'ค่าใช้จ่าย / ลิ้นชัก',
+    expenses: 'ค่าใช้จ่าย',
     promos: 'โปรโมชั่น',
     staff: 'พนักงาน',
     stockGroup: 'สต็อกสินค้า',

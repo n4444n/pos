@@ -9,6 +9,7 @@ import { Icon } from '../components/Icon';
 import { thaiDateTime } from '../format';
 import { colors, font, radius } from '../theme';
 import { Card, s, type Notify } from './ui';
+import { downloadFile } from '../download';
 
 const n = (x: number) => x.toLocaleString('th-TH');
 const when = (at: string | null) => (at ? thaiDateTime(at) : '—');
@@ -37,7 +38,7 @@ function BackupCard() {
     api.branches().then((r) => setBranches(r.list)).catch(() => setBranches([]));
   }, []);
   const download = (branch?: number) => {
-    if (Platform.OS === 'web') window.open(api.backupUrl(branch), '_blank');
+    downloadFile(api.backupUrl(branch));
   };
   const row = (title: string, sub: string, branch?: number) => (
     <View key={branch ?? 'all'} style={st.dlRow}>

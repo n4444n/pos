@@ -5,6 +5,7 @@
 import { countChanges, currentBranch, db, tx } from './db.ts';
 import { HttpError, round2 } from './common.ts';
 import { requireShift } from './shifts.ts';
+import { buildXlsx, type Col } from './xlsx.ts';
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS expenses (
@@ -451,4 +452,74 @@ export function expensesCsv(f: ExpenseQuery) {
     ),
   );
   return '﻿' + [head.join(','), ...lines].join('\n');
+}
+
+/** เลขที่เอกสารค่าใช้จ่าย (ตรงกับหน้าจอ): EXP + ปี พ.ศ. 2 หลักตามวันที่สร้าง + ลำดับ 6 หลัก เช่น EXP69000143 */
+export const expenseDocNo = (r: { id: number; createdAt?: string; date: string }) =>
+  `EXP${String((Number((r.createdAt || r.date).slice(0, 4)) + 543) % 100).padStart(2, '0')}${String(r.id).padStart(6, '0')}`;
+
+/** ส่งออกค่าใช้จ่ายเป็น Excel — ชีต "ค่าใช้จ่าย" (รายเอกสาร) + "รายการ" (ทุกบรรทัด) · ยอดรวมไม่นับที่ยกเลิก */
+export function expensesXlsx(f: ExpenseQuery): Buffer {
+  const { rows, categories } = listExpenses(f);
+  const catName = (id: string) => categories.find((c) => c.id === id)?.name ?? id;
+  type R = (typeof rows)[number];
+  const live = rows.filter((r) => !r.voidedAt);
+  const total = round2(live.reduce((t, r) => t + r.amount, 0));
+  const lineCount = (r: R) => r.items?.length || 1;
+  const range = `${f.from ?? '…'} ถึง ${f.to ?? '…'}${f.q ? ` · ค้นหา "${f.q}"` : ''}`;
+  const docCols: Col<R>[] = [
+    { header: 'เลขที่เอกสาร', value: (r) => (r.id ? expenseDocNo(r) : 'รวม'), width: 15 },
+    { header: 'สถานะ', value: (r) => (!r.id ? '' : r.voidedAt ? `ยกเลิก: ${r.voidReason ?? ''}` : 'สำเร็จ') },
+    { header: 'วันที่สร้าง', value: (r) => r.createdAt, type: 'datetime' },
+    { header: 'วันที่จ่าย', value: (r) => r.date, type: 'date' },
+    { header: 'สาขา', value: (r) => r.branchName },
+    { header: 'จำนวนรายการ', value: (r) => (r.id ? lineCount(r) : live.reduce((t, x) => t + lineCount(x), 0)), type: 'int' },
+    { header: 'รายละเอียด', value: (r) => r.description, width: 36 },
+    { header: 'หมวดหมู่', value: (r) => !r.id ? '' : [...new Set((r.items?.length ? r.items : [{ category: r.category }]).map((x) => catName(x.category)))].join(', ') },
+    { header: 'ร้านค้า / ผู้รับเงิน', value: (r) => r.vendor },
+    { header: 'เลขที่ใบเสร็จ', value: (r) => r.refNo },
+    { header: 'จ่ายจาก', value: (r) => EXPENSE_SOURCES[r.source] ?? r.source },
+    { header: 'กะ', value: (r) => r.shiftNo ?? '', type: 'int' },
+    { header: 'บันทึกโดย', value: (r) => r.staff },
+    { header: 'หมายเหตุ', value: (r) => r.note },
+    { header: 'ยอดรวม', value: (r) => r.amount, type: 'money' },
+  ];
+  type L = { doc: string; status: string; date: string; branch: string; no: number; description: string; category: string; qty: number; unit: string; unitPrice: number; amount: number };
+  const lines: L[] = rows.flatMap((r) =>
+    (r.items?.length ? r.items : [{ description: r.description, category: r.category, qty: 1, unit: '', unitPrice: r.amount, amount: r.amount }]).map((it, i) => ({
+      doc: expenseDocNo(r), status: r.voidedAt ? 'ยกเลิก' : 'สำเร็จ', date: r.date, branch: r.branchName, no: i + 1,
+      description: it.description, category: catName(it.category), qty: it.qty, unit: it.unit, unitPrice: it.unitPrice, amount: it.amount,
+    })),
+  );
+  const lineCols: Col<L>[] = [
+    { header: 'เลขที่เอกสาร', value: (r) => r.doc, width: 15 },
+    { header: 'สถานะ', value: (r) => r.status },
+    { header: 'วันที่จ่าย', value: (r) => r.date, type: 'date' },
+    { header: 'สาขา', value: (r) => r.branch },
+    { header: 'ลำดับ', value: (r) => r.no, type: 'int' },
+    { header: 'รายละเอียด', value: (r) => r.description, width: 36 },
+    { header: 'หมวดหมู่', value: (r) => r.category },
+    { header: 'จำนวน', value: (r) => r.qty, type: 'num' },
+    { header: 'หน่วย', value: (r) => r.unit },
+    { header: 'ราคา / หน่วย', value: (r) => r.unitPrice, type: 'money' },
+    { header: 'รวม', value: (r) => r.amount, type: 'money' },
+  ];
+  return buildXlsx([
+    {
+      name: 'ค่าใช้จ่าย',
+      intro: ['รายงานค่าใช้จ่ายร้าน', range, 'ยอดรวมไม่นับรายการที่ยกเลิก'],
+      cols: docCols,
+      rows,
+      freezeCols: 1,
+      totals: { id: 0, date: '', createdAt: '', description: `รวม ${live.length} เอกสาร`, amount: total, items: [], category: '', source: '', branchName: '', vendor: '', refNo: '', staff: '', note: '', shiftNo: null, voidedAt: null } as unknown as R,
+    },
+    {
+      name: 'รายการ',
+      intro: ['ทุกรายการในเอกสารค่าใช้จ่าย', range],
+      cols: lineCols,
+      rows: lines,
+      freezeCols: 1,
+      totals: { doc: '', status: '', date: '', branch: '', no: 0, description: `รวม ${lines.filter((x) => x.status !== 'ยกเลิก').length} รายการ`, category: '', qty: 0, unit: '', unitPrice: 0, amount: round2(lines.filter((x) => x.status !== 'ยกเลิก').reduce((t, x) => t + x.amount, 0)) } as L,
+    },
+  ]);
 }

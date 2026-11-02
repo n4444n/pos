@@ -123,16 +123,15 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
   };
   const stockBadgeView = (on: boolean) =>
     badge > 0 ? (
-      <View style={[s.badge, on && { backgroundColor: '#fff' }]} accessibilityLabel={`สินค้าเหลือน้อยหรือหมด ${badge} รายการ`}>
-        <Text style={[s.badgeText, on && { color: colors.danger }]}>{badge > 99 ? '99+' : badge}</Text>
-      </View>
+      // จุดแดงเล็ก ๆ = มีสินค้าเหลือน้อย/หมด (จำนวนดูได้ที่หน้าสต็อก · ตัวอ่านหน้าจอยังอ่านจำนวนได้)
+      <View style={[s.dot, on && { backgroundColor: '#fff' }]} accessibilityLabel={`สินค้าเหลือน้อยหรือหมด ${badge} รายการ`} />
     ) : null;
   return (
     <View style={s.menu}>
       <BranchChip block />
       {header}
       {/* รายการเมนูเลื่อนขึ้น-ลงได้เมื่อยาวเกินจอ (เช่น เปิดเมนูย่อยหลายกลุ่ม) — ส่วนผู้ใช้/ท้ายเมนูอยู่กับที่ด้านล่าง */}
-      <ScrollView style={s.items} contentContainerStyle={{ gap: 8 }} showsVerticalScrollIndicator>
+      <ScrollView style={s.items} contentContainerStyle={{ gap: 8 }} showsVerticalScrollIndicator={false}>
         {visibleItems(me).map((it) => {
           if (it.children) {
             const expanded = isOpen(it);
@@ -147,7 +146,7 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
                   accessibilityLabel={`${t(it.label)} — ${expanded ? 'ย่อ' : 'แสดง'}เมนูย่อย`}
                 >
                   <Icon name={it.icon} size={19} color={inGroup ? colors.primary : colors.text} />
-                  <Text style={[s.itemText, inGroup && { color: colors.primary, fontWeight: '600' }]}>{t(it.label)}</Text>
+                  <Text style={[s.itemText, inGroup && { color: colors.primary, fontWeight: '600' }]} numberOfLines={1}>{t(it.label)}</Text>
                   {it.id === 'stockGroup' && !expanded ? stockBadgeView(false) : null}
                   <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={inGroup ? colors.primary : colors.sub} />
                 </Pressable>
@@ -185,7 +184,7 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
               accessibilityState={{ selected: on, disabled: it.soon }}
             >
               <Icon name={it.icon} size={19} color={on ? '#fff' : it.soon ? colors.faint : colors.text} />
-              <Text style={[s.itemText, on && { color: '#fff' }, it.soon && { color: colors.faint }]}>{t(it.label)}</Text>
+              <Text style={[s.itemText, on && { color: '#fff' }, it.soon && { color: colors.faint }]} numberOfLines={1}>{t(it.label)}</Text>
               {it.soon ? <Text style={s.soon}>เร็ว ๆ นี้</Text> : null}
             </Pressable>
           );
@@ -213,7 +212,7 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={s.userName} numberOfLines={1}>{me.name}</Text>
-          <Text style={s.userRole}>{t(`role.${me.role}`)}</Text>
+          <Text style={s.userRole} numberOfLines={1}>{t(`role.${me.role}`)}</Text>
         </View>
         <Pressable
           onPress={logout}
@@ -279,9 +278,8 @@ const s = StyleSheet.create({
   groupOn: { backgroundColor: colors.primarySoft },
   sub: { gap: 6, marginLeft: 18, paddingLeft: 10, borderLeftWidth: 2, borderLeftColor: colors.line },
   subItem: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 44, paddingHorizontal: 14, borderRadius: radius.md, backgroundColor: colors.surface },
-  itemText: { fontFamily: font, fontSize: 14, color: colors.text, flex: 1 },
-  badge: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center' },
-  badgeText: { fontFamily: font, fontSize: 11, fontWeight: '700', color: '#fff' },
+  itemText: { fontFamily: font, fontSize: 14, color: colors.text, flex: 1, minWidth: 0 },
+  dot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.danger },
   soon: { fontFamily: font, fontSize: 10, color: colors.faint },
   user: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: radius.md, backgroundColor: colors.surface },
   langRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4, paddingBottom: 2 },

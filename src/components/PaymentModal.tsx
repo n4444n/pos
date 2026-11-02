@@ -7,6 +7,8 @@ import type { PaymentMethod } from '../types';
 import { Icon, type IconName } from './Icon';
 import { Sheet } from './Sheet';
 import { feeOf, useAppSettings } from '../appSettings';
+import { maskPromptPay, promptPayPayload } from '../promptpay';
+import { QrView } from './QrView';
 
 const METHODS: { id: PaymentMethod; icon: IconName }[] = [
   { id: 'cash', icon: 'cash-outline' },
@@ -122,13 +124,13 @@ export function PaymentModal({ visible, total: base, initial, mode, onClose, onC
             </View>
           )}
         </View>
+      ) : method === 'promptpay' ? (
+        <PromptPayBox id={settings.payments.promptpayId} name={settings.payments.promptpayName || settings.shop.name} amount={total} lock={settings.payments.promptpayLock !== false} />
       ) : (
         <View style={s.note}>
           <Icon name="information-circle-outline" size={18} color={colors.sub} />
           <Text style={s.noteText}>
-            {method === 'promptpay'
-              ? `ให้ลูกค้าสแกน QR พร้อมเพย์ของร้าน${settings.payments.promptpayId ? ` (${settings.payments.promptpayId})` : ''} แล้วกดยืนยันเมื่อได้รับยอดโอน`
-              : method === 'card'
+            {method === 'card'
                 ? 'รูดบัตรที่เครื่อง EDC แล้วกดยืนยันเมื่อรายการผ่าน'
                 : 'ตรวจสอบสลิปโอนเงินของลูกค้าก่อนกดยืนยัน'}
           </Text>
@@ -138,6 +140,39 @@ export function PaymentModal({ visible, total: base, initial, mode, onClose, onC
         <Text style={s.feeText}>ค่าธรรมเนียม{fee.label} {fee.rule} = {baht(fee.fee)} (ร้านเป็นผู้จ่าย · ลูกค้าจ่ายเท่าเดิม)</Text>
       ) : null}
     </Sheet>
+  );
+}
+
+/** QR พร้อมเพย์ — ยอดเงินฝังใน QR (ลูกค้าแก้ยอดไม่ได้) · พนักงานกดยืนยันเมื่อเห็นยอดเข้า */
+function PromptPayBox({ id, name, amount, lock }: { id: string; name: string; amount: number; lock: boolean }) {
+  const payload = useMemo(() => promptPayPayload(id, lock ? amount : undefined), [id, amount, lock]);
+  if (!payload) {
+    return (
+      <View style={[s.note, { backgroundColor: colors.dangerSoft }]}>
+        <Icon name="alert-circle-outline" size={18} color={colors.danger} />
+        <Text style={[s.noteText, { color: colors.danger }]}>
+          ยังไม่ได้ตั้งหมายเลขพร้อมเพย์ของร้าน — ตั้งได้ที่ ตั้งค่า → วิธีชำระเงิน → พร้อมเพย์ (QR)
+        </Text>
+      </View>
+    );
+  }
+  return (
+    <View style={s.ppBox}>
+      <View style={s.ppHead}>
+        <Text style={s.ppBrand}>PromptPay</Text>
+        <Text style={s.ppBrandTh}>พร้อมเพย์</Text>
+      </View>
+      <View style={s.ppQr}>
+        <QrView value={payload} size={208} />
+      </View>
+      <Text style={s.ppName} numberOfLines={1}>{name}</Text>
+      <Text style={s.ppId}>{maskPromptPay(id)}</Text>
+      <View style={[s.ppLock, !lock && { backgroundColor: colors.surface }]}>
+        <Icon name={lock ? 'lock-closed' : 'lock-open-outline'} size={14} color={lock ? colors.success : colors.sub} />
+        <Text style={[s.ppLockText, !lock && { color: colors.sub }]}>{lock ? `ล็อคยอด ${baht(amount)} · ลูกค้าแก้ยอดไม่ได้` : 'ไม่ล็อคยอด · ลูกค้ากรอกยอดเอง'}</Text>
+      </View>
+      <Text style={s.ppHint}>ให้ลูกค้าสแกนด้วยแอปธนาคาร แล้วกดยืนยันเมื่อเห็นยอดเข้าบัญชี</Text>
+    </View>
   );
 }
 
@@ -172,4 +207,14 @@ const s = StyleSheet.create({
   noteText: { fontFamily: font, fontSize: 13, color: colors.sub, flex: 1, lineHeight: 20 },
   confirm: { height: 54, borderRadius: radius.md, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   confirmText: { fontFamily: font, fontSize: 16, color: '#fff', fontWeight: '600' },
+  ppBox: { marginTop: 14, alignItems: 'center', borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, overflow: 'hidden', paddingBottom: 12 },
+  ppHead: { alignSelf: 'stretch', backgroundColor: '#113566', paddingVertical: 8, flexDirection: 'row', justifyContent: 'center', alignItems: 'baseline', gap: 8 },
+  ppBrand: { fontFamily: font, fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
+  ppBrandTh: { fontFamily: font, fontSize: 12, color: '#C9D6EA' },
+  ppQr: { marginTop: 12, padding: 6, backgroundColor: '#fff', borderRadius: 8 },
+  ppName: { fontFamily: font, fontSize: 14, fontWeight: '600', color: colors.text, marginTop: 6, paddingHorizontal: 12 },
+  ppId: { fontFamily: font, fontSize: 12, color: colors.sub, marginTop: 2 },
+  ppLock: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, backgroundColor: colors.successSoft, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 },
+  ppLockText: { fontFamily: font, fontSize: 12, fontWeight: '600', color: colors.success },
+  ppHint: { fontFamily: font, fontSize: 11, color: colors.sub, marginTop: 8, textAlign: 'center', paddingHorizontal: 12 },
 });

@@ -49,6 +49,8 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
   const [key, setKey] = useState(0);
   const [step, setStep] = useState<'count' | 'confirm'>('count');
   const [printing, setPrinting] = useState(false);
+  /** ยอดไม่ตรง → ถามยืนยันอีกครั้งก่อนไปขั้นปิดกะ (ไม่บังคับหมายเหตุ) */
+  const [warn, setWarn] = useState(false);
   const [tab, setTab] = useState<'cash' | 'other'>('cash');
   const [tend, setTend] = useState<Record<string, string>>({});
 
@@ -62,6 +64,7 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
     setError(null);
     setResult(null);
     setStep('count');
+    setWarn(false);
     setKey((k) => k + 1);
   }, [visible]);
 
@@ -86,7 +89,7 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
   const otherDiff = missing.length ? null : Math.round(others.reduce((a, o) => a + (o.actual != null ? o.actual - o.system : 0), 0) * 100) / 100;
   const ov = otherDiff == null ? null : verdictOf(otherDiff);
   const mismatch = (diff != null && diff !== 0) || (otherDiff != null && otherDiff !== 0);
-  const ready = counted != null && otherDiff != null && (!mismatch || note.trim().length > 0);
+  const ready = counted != null && otherDiff != null;
   const fillAll = () => setTend(Object.fromEntries(others.map((o) => [o.id, String(o.system < 0 ? 0 : o.system)])));
 
   /** พิมพ์สรุปยอดของวันนี้ (หน้าต่างพิมพ์ต้องเปิดตอนกดปุ่ม) */
@@ -339,11 +342,11 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
       <View style={tab === 'cash' ? null : { display: 'none' }}>{cashPanel}</View>
       <View style={tab === 'other' ? null : { display: 'none' }}>{otherPanel}</View>
 
-      <FieldLabel required={mismatch}>หมายเหตุ</FieldLabel>
+      <FieldLabel>หมายเหตุ</FieldLabel>
       <TextInput
         value={note}
         onChangeText={setNote}
-        placeholder={mismatch ? 'ยอดไม่ตรง: ระบุสาเหตุ เช่น ทอนเงินผิด / สลิป EDC ไม่ครบ' : 'ไม่บังคับ'}
+        placeholder={mismatch ? 'ไม่บังคับ · ยอดไม่ตรง ระบุสาเหตุได้ เช่น ทอนเงินผิด / สลิป EDC ไม่ครบ' : 'ไม่บังคับ'}
         placeholderTextColor={colors.faint}
         style={s.input}
         maxLength={300}
@@ -353,6 +356,7 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
   );
 
   return (
+    <>
     <Sheet
       visible={visible}
       onClose={onClose}
@@ -366,7 +370,9 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
             // ยังไม่ครบ → พาไปช่องที่ต้องกรอก
             if (counted == null) return setTab('cash');
             if (missing.length) return setTab('other');
-            if (ready) setStep('confirm');
+            if (!ready) return;
+            if (mismatch) setWarn(true); // ยอดไม่ตรง → ถามยืนยันก่อน
+            else setStep('confirm');
           }}
         >
           <Text style={s.btnText}>
@@ -374,9 +380,7 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
               ? 'แจงเงินสดในลิ้นชักก่อน'
               : missing.length
                 ? 'กรอกยอดบัตร / สแกนจ่าย ก่อน'
-                : mismatch && !note.trim()
-                  ? 'ยอดไม่ตรง — ระบุหมายเหตุก่อน'
-                  : `ถัดไป · เงินสด ${baht(counted)} · บัตร/QR/โอน ${baht(otherActual)}`}
+                : `ถัดไป · เงินสด ${baht(counted)} · บัตร/QR/โอน ${baht(otherActual)}`}
           </Text>
           {ready ? <Icon name="arrow-forward" size={18} color="#fff" /> : null}
         </Pressable>
@@ -395,6 +399,45 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
         </ScrollView>
       )}
     </Sheet>
+    <Sheet visible={visible && warn} onClose={() => setWarn(false)} title="ยอดปิดกะไม่ตรงกับระบบ" width={460}>
+      <View style={{ gap: 14 }}>
+        <View style={s.warnHead}>
+          <View style={s.warnIcon}><Icon name="alert-circle" size={30} color="#B26A00" /></View>
+          <Text style={s.warnTitle}>ยอดปิดกะของคุณไม่ตรงตามที่เราคำนวณในระบบ</Text>
+        </View>
+        <View style={s.warnBox}>
+          {diff != null && diff !== 0 ? (
+            <Text style={s.warnLine}>
+              เงินสดในลิ้นชัก: นับได้ {baht(counted ?? 0)} · ระบบ {baht(shift.expectedCash)} ·{' '}
+              <Text style={{ fontWeight: '700', color: diff < 0 ? colors.danger : '#B26A00' }}>{diff < 0 ? 'ขาด' : 'เกิน'} {baht(Math.abs(diff))}</Text>
+            </Text>
+          ) : null}
+          {otherDiff != null && otherDiff !== 0 ? (
+            <Text style={s.warnLine}>
+              บัตร / สแกนจ่าย: ยอดจริง {baht(otherActual)} · ระบบ {baht(otherSystem)} ·{' '}
+              <Text style={{ fontWeight: '700', color: otherDiff < 0 ? colors.danger : '#B26A00' }}>{otherDiff < 0 ? 'ขาด' : 'เกิน'} {baht(Math.abs(otherDiff))}</Text>
+            </Text>
+          ) : null}
+        </View>
+        <Text style={s.warnAsk}>คุณไม่ได้หลงลืม นับเงินผิดพลาด หรือลืมลงค่าใช้จ่ายใช่หรือไม่?</Text>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <Pressable style={[s.btn, s.ghost, { height: 48 }]} onPress={() => setWarn(false)} accessibilityLabel="กลับไปตรวจสอบ">
+            <Text style={s.ghostText}>กลับไปตรวจสอบ</Text>
+          </Pressable>
+          <Pressable
+            style={[s.btn, { backgroundColor: colors.primary, height: 48 }]}
+            onPress={() => {
+              setWarn(false);
+              setStep('confirm');
+            }}
+            accessibilityLabel="ยืนยัน ปิดกะต่อ"
+          >
+            <Text style={s.btnText}>ใช่ ยืนยันปิดกะ</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Sheet>
+    </>
   );
 }
 
@@ -463,6 +506,12 @@ const s = StyleSheet.create({
   result: { alignItems: 'center', padding: 22, borderRadius: radius.lg, gap: 4, marginTop: 6 },
   resultTitle: { fontFamily: font, fontSize: 22, fontWeight: '700', marginTop: 6 },
   resultDiff: { fontFamily: font, fontSize: 18, fontWeight: '700' },
+  warnHead: { alignItems: 'center', gap: 10 },
+  warnIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#FFF4E0', alignItems: 'center', justifyContent: 'center' },
+  warnTitle: { fontFamily: font, fontSize: 16, fontWeight: '700', color: colors.text, textAlign: 'center' },
+  warnBox: { gap: 6, padding: 12, borderRadius: radius.md, backgroundColor: colors.surface },
+  warnLine: { fontFamily: font, fontSize: 13, color: colors.text, lineHeight: 20 },
+  warnAsk: { fontFamily: font, fontSize: 14, color: colors.text, textAlign: 'center', lineHeight: 21 },
   ask: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line },
   askIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
   askTitle: { fontFamily: font, fontSize: 15, fontWeight: '700', color: colors.text },

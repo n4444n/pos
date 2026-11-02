@@ -55,7 +55,10 @@ export interface Settings {
     sync: { role: 'off' | 'master' | 'branch'; masterUrl: string; apiKey: string; intervalMin: number; syncPrice: boolean; syncCost: boolean; syncImages: boolean };
   };
   payments: {
-    methods: PayMethod[]; promptpayId: string; vat: { enabled: boolean; rate: number }; feePayer: 'customer' | 'shop';
+    methods: PayMethod[]; promptpayId: string;
+    /** ชื่อบัญชีพร้อมเพย์ที่แสดงให้ลูกค้าดู · ล็อคยอดเงินใน QR อัตโนมัติ */
+    promptpayName: string; promptpayLock: boolean;
+    vat: { enabled: boolean; rate: number }; feePayer: 'customer' | 'shop';
     /** เปิด/ปิดกะ: ต้องนับเงินในลิ้นชักเป็นธนบัตร/เหรียญทีละชนิด (กรอกยอดรวมเองไม่ได้) */
     requireDenominations: boolean;
   };
@@ -232,6 +235,8 @@ export const DEFAULTS: Settings = {
       { id: 'transfer', label: 'โอนผ่านธนาคาร', enabled: true, feePercent: 0, feeFixed: 0 },
     ],
     promptpayId: '',
+    promptpayName: '',
+    promptpayLock: true,
     // อัตรา VAT อยู่ในตารางอัตรา VAT (ตั้งค่า → ภาษี) — rate ตรงนี้คงไว้ให้ข้อมูลเดิมอ่านได้ ไม่ได้ใช้คิดภาษี
     vat: { enabled: true, rate: 0 },
     feePayer: 'customer',
@@ -382,9 +387,9 @@ function clean(section: keyof Settings, v: Record<string, any>, old: Settings): 
       methods.sort((a, b) => list.findIndex((x: { id?: string }) => x?.id === a.id) - list.findIndex((x: { id?: string }) => x?.id === b.id));
       if (!methods.some((m) => m.enabled)) throw new HttpError(422, 'ต้องเปิดใช้วิธีชำระเงินอย่างน้อย 1 แบบ');
       const pp = str(v.promptpayId, 20).replace(/[^0-9]/g, '');
-      if (pp && ![10, 13, 15].includes(pp.length)) throw new HttpError(422, 'พร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก หรือเลขบัตร/เลขผู้เสียภาษี 13 หลัก');
+      if (pp && !((pp.length === 10 && pp.startsWith('0')) || pp.length === 13 || pp.length === 15)) throw new HttpError(422, 'พร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก เลขบัตร/เลขผู้เสียภาษี 13 หลัก หรือ e-Wallet 15 หลัก');
       const vat = { enabled: bool(v.vat?.enabled, true), rate: Math.round(num(v.vat?.rate ?? old.payments.vat.rate, 0, 30, 0) * 100) / 100 };
-      return { methods, promptpayId: pp, vat, feePayer: pick(v.feePayer, ['customer', 'shop'] as const, 'customer'), requireDenominations: bool(v.requireDenominations, false) };
+      return { methods, promptpayId: pp, promptpayName: str(v.promptpayName, 60), promptpayLock: bool(v.promptpayLock, true), vat, feePayer: pick(v.feePayer, ['customer', 'shop'] as const, 'customer'), requireDenominations: bool(v.requireDenominations, false) };
     }
     case 'barcode': {
       const prefix = str(v.ean13Prefix, 6).replace(/[^0-9]/g, '') || '2';

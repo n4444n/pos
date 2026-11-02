@@ -280,6 +280,7 @@ export const api = {
   dashboard: (f: { from: string; to: string; branch?: string }) => request<Dashboard>(`/api/dashboard${qs(f)}`),
   // ----- ค่าใช้จ่าย & สมุดลิ้นชัก -----
   expenses: (f: ExpenseFilter) => request<ExpenseList>(`/api/expenses${qs(f)}`),
+  expensesXlsxUrl: (f: ExpenseFilter) => `${BASE}/api/expenses.xlsx${qs({ ...f, token: auth.get() ?? '' })}`,
   expensesCsvUrl: (f: ExpenseFilter) => `${BASE}/api/expenses.csv${qs({ ...f, token: auth.get() ?? '' })}`,
   createExpense: (body: ExpenseInput) => request<Expense>('/api/expenses', { method: 'POST', body: JSON.stringify(body) }),
   updateExpense: (id: number, body: ExpenseInput) => request<Expense>(`/api/expenses/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
@@ -321,6 +322,7 @@ export const api = {
   createPromo: (b: PromoInput) => request<PromoRule>('/api/promos', { method: 'POST', body: JSON.stringify(b) }),
   updatePromo: (code: string, b: Partial<PromoRule>) => request<PromoRule>(`/api/promos/${code}`, { method: 'PUT', body: JSON.stringify(b) }),
   deletePromo: (code: string) => request<{ ok: true }>(`/api/promos/${code}`, { method: 'DELETE' }),
+  availablePromos: (subtotal: number) => request<AvailablePromo[]>(`/api/promos/available?subtotal=${subtotal}`),
   promoPreview: (subtotal: number) => request<PromoPreview>(`/api/promos/preview?subtotal=${subtotal}`),
   createStaff: (b: { name: string; pin: string; role: Role; canVoid: boolean; branchIds: number[] }) =>
     request<StaffMember>('/api/staff', { method: 'POST', body: JSON.stringify(b) }),
@@ -353,6 +355,11 @@ export interface PromoRule {
   giftName?: string | null;
 }
 export type PromoInput = Omit<PromoRule, 'giftName'>;
+/** โค้ดส่วนลดที่เลือกใช้ได้ในบิลนี้ (ปุ่มป้ายราคาในตะกร้า) */
+export interface AvailablePromo {
+  code: string; label: string; type: 'percent' | 'amount'; value: number; minTotal: number; endsAt: string | null;
+  eligible: boolean; discount: number; missing: number;
+}
 export interface PromoPreview {
   subtotal: number;
   gifts: { variantId: number; qty: number; promoCode: string; label: string; name: string }[];
@@ -433,7 +440,7 @@ export interface AdminSettings extends PublicSettings {
   };
   api: { enabled: boolean };
 }
-export type NotifyEventKey = 'sale' | 'void' | 'edit' | 'lowStock' | 'outStock' | 'shiftOpen' | 'shiftClose' | 'cash' | 'expense' | 'daily';
+export type NotifyEventKey = 'sale' | 'promptpay' | 'void' | 'edit' | 'lowStock' | 'outStock' | 'shiftOpen' | 'shiftClose' | 'cash' | 'expense' | 'daily';
 export interface NotifyChannels { on: boolean; line: boolean; whatsapp: boolean; webhook: boolean }
 export interface CardLine { label: string; value: string }
 export interface CardTemplate { emoji: string; title: string; subtitle: string; color: string; lines: CardLine[]; showItems: boolean; itemsTitle: string; footer: string }

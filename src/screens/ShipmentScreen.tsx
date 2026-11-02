@@ -14,6 +14,7 @@ import { thaiDateTime } from '../format';
 import { printShipment } from '../print';
 import type { Toast } from '../store/usePos';
 import { colors, font, radius } from '../theme';
+import { downloadFile } from '../download';
 
 const STATUS = {
   draft: { label: 'กำลังจัดเตรียม', bg: '#FFF4E0', fg: '#B26A00' },
@@ -227,7 +228,7 @@ export function ShipmentScreen({ onNavigate, onStockChanged }: { onNavigate: (r:
               </Pressable>
               <Pressable
                 style={[s.pillBtn, { backgroundColor: colors.successSoft, borderColor: colors.successSoft }]}
-                onPress={() => cur && Platform.OS === 'web' && window.open(api.shipmentXlsxUrl(cur.shipment.id), '_blank')}
+                onPress={() => cur && downloadFile(api.shipmentXlsxUrl(cur.shipment.id))}
                 accessibilityLabel="ส่งออกใบส่งของเป็น Excel"
               >
                 <Icon name="grid-outline" size={16} color={colors.success} />
