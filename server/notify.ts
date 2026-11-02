@@ -1,7 +1,7 @@
 // การแจ้งเตือน: รายการเหตุการณ์ · ตัวแปรในข้อความ · แม่แบบการ์ด LINE (Flex Message) · ข้อความ WhatsApp
 // ใช้ร่วมกันระหว่าง settings.ts (ค่าเริ่มต้น/ตรวจค่า) และ events.ts (ส่งจริง)
 
-export type EventKey = 'sale' | 'void' | 'edit' | 'lowStock' | 'outStock' | 'shiftOpen' | 'shiftClose' | 'cash' | 'expense' | 'daily';
+export type EventKey = 'sale' | 'promptpay' | 'void' | 'edit' | 'lowStock' | 'outStock' | 'shiftOpen' | 'shiftClose' | 'cash' | 'expense' | 'daily';
 
 export interface CardLine { label: string; value: string }
 export interface CardTemplate {
@@ -65,6 +65,17 @@ export const EVENTS: EventMeta[] = [
     template: t({
       emoji: '🛍️', title: 'ขายสำเร็จ {total}', showItems: true, itemsTitle: 'สินค้า',
       lines: [{ label: 'เลขที่บิล', value: '{orderNo}' }, { label: 'ชำระด้วย', value: '{payment}' }, { label: 'จำนวน', value: '{count} ชิ้น' }, { label: 'พนักงาน', value: '{staff}' }],
+    }),
+  },
+  {
+    key: 'promptpay', name: 'payment.promptpay', label: 'รับชำระพร้อมเพย์ (QR)', desc: 'บิลที่ลูกค้าสแกน QR พร้อมเพย์แบบล็อคยอด — ใช้ตรวจยอดเข้าบัญชี', hasItems: false,
+    placeholders: [['orderNo', 'เลขที่บิล'], ['amount', 'ยอดที่ล็อคใน QR'], ['account', 'ชื่อบัญชี'], ['promptpay', 'หมายเลขพร้อมเพย์ (ซ่อนบางหลัก)'], ['locked', 'ล็อคยอด (ใช่/ไม่)']],
+    sample: { orderNo: 'INV-B02-261011-0012', amount: '฿1,280', account: 'ร้านเสื้อผ้า ABC', promptpay: '081-xxx-5678', locked: 'ใช่' },
+    sampleItems: [],
+    defaults: { on: true, line: true, whatsapp: true, webhook: true },
+    template: t({
+      emoji: '📲', title: 'รับพร้อมเพย์ {amount}', color: '#113566',
+      lines: [{ label: 'เลขที่บิล', value: '{orderNo}' }, { label: 'เข้าบัญชี', value: '{account}' }, { label: 'พร้อมเพย์', value: '{promptpay}' }, { label: 'ล็อคยอด', value: '{locked}' }, { label: 'พนักงาน', value: '{staff}' }],
     }),
   },
   {

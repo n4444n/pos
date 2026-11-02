@@ -40,7 +40,7 @@ export const en: Deep<typeof th> = {
     taxReport: 'Output VAT',
     history: 'Sales history',
     shifts: 'Shifts',
-    expenses: 'Expenses / Cash drawer',
+    expenses: 'Expenses',
     promos: 'Promotions',
     staff: 'Staff',
     stockGroup: 'Stock',

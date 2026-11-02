@@ -257,10 +257,8 @@ export function closeShift(body: { staff?: string; countedCash?: number; denomin
     if (!Number.isFinite(actual) || actual < 0) throw new HttpError(422, `ยอดจริงของ ${g.label} ไม่ถูกต้อง`);
     tenders[g.id] = { label: g.label, system, count, actual, diff: round2(actual - system) };
   }
-  const tenderMismatch = Object.values(tenders).some((t) => t.diff !== 0);
   const note = body.note?.trim() || null;
-  if ((diff !== 0 || tenderMismatch) && !note)
-    throw new HttpError(422, diff !== 0 ? 'ยอดเงินสดไม่ตรง กรุณาระบุหมายเหตุ' : 'ยอดบัตร / สแกนจ่าย ไม่ตรง กรุณาระบุหมายเหตุ');
+  // ยอดไม่ตรงปิดกะได้โดยไม่บังคับหมายเหตุ (หน้าจอถามยืนยันอีกครั้งแทน) · ส่วนต่างยังบันทึกไว้ในกะเหมือนเดิม
   const clean = cleanDenoms(body.denominations);
   requireCounted(counted, clean);
   const denoms = clean ? JSON.stringify(clean) : null;

@@ -14,6 +14,7 @@ import { Sheet } from '../components/Sheet';
 import { baht, isoDate, n0, n2, pctChange, PAYMENT_LABEL, thaiDate, variantLabel } from '../format';
 import { categoryChip, colors, font, radius } from '../theme';
 import type { Dashboard, SeriesPoint } from '../types';
+import { downloadFile } from '../download';
 
 type Metric = 'sales' | 'profit' | 'bills' | 'units';
 const METRICS: { id: Metric; label: string; unit: string }[] = [
@@ -121,7 +122,7 @@ export function DashboardScreen({ onNavigate }: Props) {
   const download = (kind: 'xlsx' | 'csv') => {
     setPickDownload(false);
     const f = { ...range, branch: scope || undefined };
-    if (Platform.OS === 'web') window.open(kind === 'xlsx' ? api.dashboardXlsxUrl(f) : api.dashboardCsvUrl(f), '_blank');
+    downloadFile(kind === 'xlsx' ? api.dashboardXlsxUrl(f) : api.dashboardCsvUrl(f));
   };
 
   const m = METRICS.find((x) => x.id === metric)!;

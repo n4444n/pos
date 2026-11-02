@@ -14,6 +14,7 @@ import { baht, isoDate, PAYMENT_LABEL, STATUS_LABEL, STATUS_TONE, thaiDate, thai
 import type { Toast } from '../store/usePos';
 import { colors, font, radius } from '../theme';
 import type { Bootstrap, HistoryFilter, HistoryRow, HistorySummary, OrderStatus, PaymentMethod } from '../types';
+import { downloadFile } from '../download';
 
 const PAGE = 50;
 
@@ -108,7 +109,7 @@ export function HistoryScreen({ onNavigate, onStockChanged }: Props) {
 
   const download = () => {
     const url = api.historyCsvUrl(filter);
-    if (Platform.OS === 'web') window.open(url, '_blank');
+    downloadFile(url);
   };
 
   const searchBox = (

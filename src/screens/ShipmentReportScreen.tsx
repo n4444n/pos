@@ -13,6 +13,7 @@ import { Sheet } from '../components/Sheet';
 import { n0 } from '../format';
 import { printShipment } from '../print';
 import { colors, font, radius } from '../theme';
+import { downloadFile } from '../download';
 
 export function ShipmentReportScreen({ onNavigate }: { onNavigate: (r: Route) => void }) {
   const p = usePeriod('month');
@@ -182,7 +183,7 @@ export function ShipmentReportScreen({ onNavigate }: { onNavigate: (r: Route) =>
 
 /** เปิดไฟล์ Excel ของใบส่งของใบเดียว */
 function openXlsx(id: number) {
-  if (Platform.OS === 'web') window.open(api.shipmentXlsxUrl(id), '_blank');
+  downloadFile(api.shipmentXlsxUrl(id));
 }
 
 /** ปุ่มเล็กในคอลัมน์ "จัดการ" */

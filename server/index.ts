@@ -10,7 +10,7 @@ import { emit, notifyCatalog, testNotify } from './events.ts';
 import { daySummary } from './dayreport.ts';
 import { deleteHeld, holdBill, listHeld, recallHeld } from './held.ts';
 import {
-  createExpense, drawerLedger, expenseCategories, expensesCsv, listExpenses, recentShifts, saveExpenseCategories, updateExpense, voidExpense,
+  createExpense, drawerLedger, expenseCategories, expensesCsv, expensesXlsx, listExpenses, recentShifts, saveExpenseCategories, updateExpense, voidExpense,
   EXPENSE_SOURCES, type ExpenseQuery,
 } from './expenses.ts';
 import { apiKeyOf, authenticateKey, createKey, listKeys, revokeKey } from './apikeys.ts';
@@ -42,7 +42,7 @@ import { internalAllowed, shopStats } from './internal.ts';
 import { backupBuffer, backupFileName, dropUpload, newUploadPath, previewUpload, restoreBranches } from './backup.ts';
 import { docFloor } from './docFloor.ts';
 import { permCatalog, resetPerms, savePerms } from './perms.ts';
-import { bestAutoDiscount, createPromo, deletePromo, giftsFor, listPromos, previewFor, updatePromo } from './promos.ts';
+import { availablePromos, bestAutoDiscount, createPromo, deletePromo, giftsFor, listPromos, previewFor, updatePromo } from './promos.ts';
 import { cancelShipment, createShipment, deleteShippedShipment, holdShipment, listShipments, restoreShipment, resumeShipment, scanShipment, setShipmentItem, shipmentDetail, shipShipment, updateShipment } from './shipments.ts';
 import {
   createCategory, getProduct, listCategories, saveBranchStock, listProducts, listSkus, patchVariant, bulkUpdateSkus, stockCommand, bulkProducts, readUpload, saveProduct, saveUpload, saveUploadVariants, uploadsMissingVariants, setProductActive, stockSummary,
@@ -278,6 +278,15 @@ function createOrder(body: OrderBody, terminalHeader?: unknown) {
         salesperson: body.salesperson ?? null, itemCount: lines.reduce((a, l) => a + l.qty, 0),
         items: lines.map((l) => ({ sku: l.sku, name: l.name, label: variantLabel(l), qty: l.qty, price: l.price })),
       });
+      if (payment === 'promptpay') {
+        const pp = getSettings().payments;
+        const id = pp.promptpayId;
+        emit('payment.promptpay', {
+          id: orderId, orderNo, amount: total, locked: pp.promptpayLock !== false, account: pp.promptpayName || publicSettings().shop.name,
+          promptpayMasked: id.length === 10 ? `${id.slice(0, 3)}-xxx-${id.slice(6)}` : id ? `${id.slice(0, 3)}…${id.slice(-4)}` : '',
+          salesperson: body.salesperson ?? null,
+        });
+      }
       if (lowOnly.length) emit('stock.low', { items: lowOnly });
       if (outNow.length) emit('stock.out', { items: outNow });
     }));
@@ -519,6 +528,9 @@ const server = createServer(async (req, res) => {
       // ----- โปรโมชั่น / ส่วนลด -----
       if (path === '/api/promos' && req.method === 'GET') { requireFeature(me, 'promos', 'view'); return json(req, res, 200, listPromos()); }
       if (path === '/api/promos' && req.method === 'POST') { requireFeature(me, 'promos', 'edit'); return json(req, res, 201, createPromo((await readBody(req)) as never)); }
+      if (path === '/api/promos/available' && req.method === 'GET') {
+        return json(req, res, 200, availablePromos(Math.max(0, Number(url.searchParams.get('subtotal') ?? 0) || 0)));
+      }
       if (path === '/api/promos/preview' && req.method === 'GET') {
         return json(req, res, 200, previewFor(Math.max(0, Number(url.searchParams.get('subtotal') ?? 0) || 0)));
       }
@@ -763,7 +775,7 @@ const server = createServer(async (req, res) => {
       }
 
       // ----- ค่าใช้จ่าย & สมุดลิ้นชัก -----
-      if ((path === '/api/expenses' || path === '/api/expenses.csv') && req.method === 'GET') {
+      if ((path === '/api/expenses' || path === '/api/expenses.csv' || path === '/api/expenses.xlsx') && req.method === 'GET') {
         const sp = url.searchParams;
         const f: ExpenseQuery = {
           from: sp.get('from') ?? undefined, to: sp.get('to') ?? undefined, category: sp.get('category') ?? undefined,
@@ -771,6 +783,10 @@ const server = createServer(async (req, res) => {
         };
         if (sp.get('branch') === 'all' && allBranchRole(me.role)) setBranch(0);
         if (path === '/api/expenses') return json(req, res, 200, listExpenses(f));
+        if (path === '/api/expenses.xlsx') {
+          res.setHeader('Content-Disposition', `attachment; filename="expenses-${f.from ?? ''}-${f.to ?? ''}.xlsx"`);
+          return send(req, res, 200, expensesXlsx(f), XLSX_TYPE);
+        }
         res.setHeader('Content-Disposition', `attachment; filename="expenses-${f.from ?? ''}-${f.to ?? ''}.csv"`);
         return send(req, res, 200, expensesCsv(f), 'text/csv; charset=utf-8');
       }

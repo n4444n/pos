@@ -204,3 +204,20 @@ export const previewFor = (subtotal: number) => {
       .slice(0, 3),
   };
 };
+
+/** โค้ดส่วนลดที่พนักงานเลือกใช้ได้ที่หน้าขาย (ปุ่มป้ายราคาในตะกร้า)
+ *  เฉพาะโปรส่วนลดที่เปิดอยู่ ในช่วงวันที่ และไม่ใช่โปรอัตโนมัติ (โปรอัตโนมัติระบบใส่ให้เองตอนบันทึกบิล)
+ *  eligible = ยอดถึงขั้นต่ำแล้ว · missing = ต้องซื้อเพิ่มอีกเท่าไร */
+export function availablePromos(subtotal: number) {
+  return listPromos()
+    .filter((p) => p.active && p.kind === 'discount' && !p.auto && inPeriod(p))
+    .map((p) => {
+      const eligible = subtotal >= p.minTotal;
+      const discount = eligible ? round2(Math.min(p.type === 'percent' ? (subtotal * p.value) / 100 : p.value, subtotal)) : 0;
+      return {
+        code: p.code, label: p.label, type: p.type, value: p.value, minTotal: p.minTotal, endsAt: p.endsAt,
+        eligible, discount, missing: eligible ? 0 : round2(p.minTotal - subtotal),
+      };
+    })
+    .sort((a, b) => Number(b.eligible) - Number(a.eligible) || b.discount - a.discount || a.missing - b.missing);
+}

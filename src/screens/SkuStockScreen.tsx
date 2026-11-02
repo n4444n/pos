@@ -20,6 +20,7 @@ import { randomBarcode } from '../stockDraft';
 import type { Toast } from '../store/usePos';
 import { colors, font, radius } from '../theme';
 import type { SkuCell, SkuPage, SkuProduct } from '../types';
+import { downloadFile } from '../download';
 
 type Status = '' | 'active' | 'inactive' | 'low' | 'out' | 'nobarcode';
 const STATUS: { id: Status; label: string }[] = [
@@ -793,7 +794,7 @@ export function SkuStockScreen({ onNavigate, onStockChanged }: Props) {
             style={s.xlOpt}
             onPress={() => {
               setExcelMenu(false);
-              if (Platform.OS === 'web') window.open(api.stockXlsxUrl(), '_blank');
+              downloadFile(api.stockXlsxUrl());
             }}
             accessibilityLabel="ส่งออกสต็อกเป็น Excel"
           >

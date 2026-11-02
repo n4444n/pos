@@ -5,6 +5,8 @@ import { Icon, type IconName } from '../components/Icon';
 import { baht } from '../format';
 import { colors } from '../theme';
 import { Card, Field, Input, Seg, Switch, type Upd, s } from './ui';
+import { QrView } from '../components/QrView';
+import { PROMPTPAY_KIND_LABEL, promptPayKind, promptPayPayload } from '../promptpay';
 
 /** สาขาหลัก: รายชื่อสาขาย่อย + ปุ่มเพิ่มสาขา (สร้าง key เชื่อมสาขาให้อัตโนมัติ) */
 export function PaymentsSection({ v, set, goTax }: { v: AdminSettings['payments']; set: Upd<AdminSettings['payments']>; goTax: () => void }) {
@@ -17,6 +19,8 @@ export function PaymentsSection({ v, set, goTax }: { v: AdminSettings['payments'
     [a[i], a[j]] = [a[j], a[i]];
     set({ methods: a });
   };
+  const ppKind = promptPayKind(v.promptpayId);
+  const ppSample = ppKind ? promptPayPayload(v.promptpayId, v.promptpayLock !== false ? 100 : undefined) : null;
   return (
     <>
       <Card title="วิธีชำระเงิน">
@@ -91,10 +95,46 @@ export function PaymentsSection({ v, set, goTax }: { v: AdminSettings['payments'
           <Text style={s.link} onPress={goTax}>ภาษี (VAT)</Text>
         </Text>
       </Card>
-      <Card title="พร้อมเพย์">
-        <Field label="หมายเลขพร้อมเพย์ของร้าน" hint="เบอร์มือถือ 10 หลัก หรือเลขบัตร/เลขผู้เสียภาษี 13 หลัก — แสดงในหน้าชำระเงิน">
-          <Input value={v.promptpayId} onChange={(t) => set({ promptpayId: t.replace(/[^0-9]/g, '') })} keyboard="number-pad" max={15} placeholder="08xxxxxxxx" />
-        </Field>
+      <Card title="พร้อมเพย์ (QR)">
+        <View style={[s.row, { gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }]}>
+          <View style={{ flex: 1, minWidth: 260, gap: 4 }}>
+            <Field label="หมายเลขพร้อมเพย์ของร้าน" hint={ppKind ? `ประเภท: ${PROMPTPAY_KIND_LABEL[ppKind]}` : v.promptpayId ? 'ต้องเป็นเบอร์มือถือ 10 หลัก (ขึ้นต้น 0) · เลขบัตร/เลขผู้เสียภาษี 13 หลัก · หรือ e-Wallet 15 หลัก' : 'เบอร์มือถือ 10 หลัก · เลขบัตร/เลขผู้เสียภาษี 13 หลัก · e-Wallet 15 หลัก'}>
+              <Input value={v.promptpayId} onChange={(t) => set({ promptpayId: t.replace(/[^0-9]/g, '') })} keyboard="number-pad" max={15} placeholder="08xxxxxxxx" />
+            </Field>
+            <Field label="ชื่อบัญชี (แสดงใต้ QR)" hint="ให้ลูกค้าตรวจว่าโอนถูกบัญชี — เว้นว่าง = ใช้ชื่อร้าน">
+              <Input value={v.promptpayName ?? ''} onChange={(t) => set({ promptpayName: t })} max={60} placeholder="เช่น บจก. ร้านเสื้อผ้า" />
+            </Field>
+            <View style={s.optRow}>
+              <Icon name="lock-closed-outline" size={22} color={colors.text} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={s.optTitle}>ล็อคยอดเงินใน QR อัตโนมัติ</Text>
+                <Text style={s.sub}>
+                  {v.promptpayLock !== false
+                    ? 'เปิดอยู่ — QR สร้างใหม่ทุกบิลพร้อมยอดที่ต้องชำระ (รวมค่าธรรมเนียม) ลูกค้าสแกนแล้วแอปธนาคารกรอกยอดให้ แก้ยอดไม่ได้'
+                    : 'ปิดอยู่ — QR ไม่มียอดเงิน ลูกค้าต้องพิมพ์ยอดเองในแอปธนาคาร (เสี่ยงโอนผิดยอด)'}
+                </Text>
+              </View>
+              <Switch value={v.promptpayLock !== false} onChange={(x) => set({ promptpayLock: x })} label="ล็อคยอดเงินใน QR อัตโนมัติ" />
+            </View>
+            <Text style={[s.sub, { fontSize: 11 }]}>
+              แจ้งเตือนเมื่อรับชำระพร้อมเพย์ (LINE / WhatsApp / Webhook API) ตั้งได้ที่ ตั้งค่า → การแจ้งเตือน & API → เหตุการณ์ “รับชำระพร้อมเพย์ (QR)”
+            </Text>
+          </View>
+          <View style={{ alignItems: 'center', gap: 6, width: 200 }}>
+            <Text style={[s.sub, { fontWeight: '600' }]}>ตัวอย่าง QR (ยอด ฿100)</Text>
+            {ppSample ? (
+              <View style={{ padding: 8, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: colors.line }}>
+                <QrView value={ppSample} size={160} />
+              </View>
+            ) : (
+              <View style={{ width: 176, height: 176, borderRadius: 10, borderWidth: 1, borderColor: colors.line, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', padding: 12 }}>
+                <Icon name="qr-code-outline" size={36} color={colors.faint} />
+                <Text style={[s.sub, { textAlign: 'center', fontSize: 11, marginTop: 6 }]}>กรอกหมายเลขพร้อมเพย์ให้ถูกต้องเพื่อดูตัวอย่าง</Text>
+              </View>
+            )}
+            {ppSample ? <Text style={[s.sub, { fontSize: 11, textAlign: 'center' }]}>ลองสแกนด้วยแอปธนาคาร (ไม่ต้องโอนจริง) เพื่อตรวจชื่อบัญชี</Text> : null}
+          </View>
+        </View>
       </Card>
     </>
   );
