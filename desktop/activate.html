@@ -65,6 +65,12 @@
   .row + .row { border-top: 1px solid var(--line); }
   .row > span { color: var(--muted); }
   .row b { font-weight: 600; text-align: right; word-break: break-all; }
+  /* กล่อง QR ดาวน์โหลดแอปมือถือ */
+  .appbox { display: flex; gap: 14px; align-items: center; margin: 16px 0 0; padding: 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); }
+  .appbox b { font-size: 14px; }
+  .appbox small { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+  .appbox .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 11px; color: var(--faint); }
+  .appqr { flex: none; line-height: 0; padding: 4px; background: #fff; border-radius: 8px; }
   .chip { display: inline-block; margin-left: 6px; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--ok-soft); color: var(--ok); }
   .chip.warn { background: var(--warn-soft); color: var(--warn); }
   .chip.warn::before { content: none; }
@@ -123,14 +129,35 @@
         <b id="dPin"></b>
       </div>
       <p class="pin-note" id="pinNote" hidden>เข้าสู่ระบบด้วย PIN พนักงานที่ร้านตั้งไว้</p>
+
+      <!-- แอปมือถือ — สแกนติดตั้งได้เลย ใช้รหัส license ตัวเดียวกับเครื่องนี้ -->
+      <div class="appbox" id="appBox" hidden>
+        <div class="appqr" id="appQr"></div>
+        <div>
+          <b>แอปดูรายงานบนมือถือ</b>
+          <small>สแกนด้วยกล้องมือถือเพื่อติดตั้ง แล้วกรอกรหัส license ตัวเดียวกันนี้</small>
+          <small class="mono" id="appUrl"></small>
+        </div>
+      </div>
+
       <button class="primary" id="start">เริ่มใช้งาน</button>
     </div>
 
   </div>
   <div class="foot"><span id="machine"></span><button class="ghost" id="settings" type="button">ตั้งค่าเครื่องนี้</button></div>
 </div></div>
+<script src="qr.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
+  /** QR ดาวน์โหลดแอปมือถือ — สร้างในเครื่อง ไม่ต้องต่อเน็ต ไม่ส่งข้อมูลออกไปไหน */
+  function showAppQr(url) {
+    if (!url || typeof qrSvg !== 'function') return;
+    const svg = qrSvg(url, '104px');
+    if (!svg) return;
+    $('appQr').innerHTML = svg;
+    $('appUrl').textContent = String(url).replace(/^https?:\/\//, '');
+    $('appBox').hidden = false;
+  }
   const shell = window.desktopShell;
   const views = ['formView', 'waitView', 'doneView'];
   const view = (v) => views.forEach((id) => ($(id).hidden = id !== v));
@@ -187,6 +214,7 @@
     $('dPin').textContent = r.managerPin || '';
     $('pinBox').hidden = !r.managerPin;
     $('pinNote').hidden = !!r.managerPin;
+    showAppQr(r.appUrl);
     view('doneView');
     $('start').focus();
   };

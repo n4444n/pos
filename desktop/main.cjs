@@ -200,6 +200,14 @@ async function licenseCall(endpoint, code) {
     return { ok: false, error: `ติดต่อเซิร์ฟเวอร์ license ไม่ได้ — ตรวจอินเทอร์เน็ต (${e.message})`, code: 'NETWORK' };
   }
 }
+/** หน้าดาวน์โหลดแอปมือถือ (QR ในหน้าเปิดใช้งาน / ตั้งค่า) — โดเมนเดียวกับประตูร้าน ทุกร้านอยู่หลังประตูเดียว */
+function mobileAppUrl() {
+  try {
+    return new URL('/app', licenseServer() || DEFAULT_SERVER).href;
+  } catch {
+    return '';
+  }
+}
 /** ได้คำตอบจาก license → จำที่อยู่ระบบของร้าน (แอปเปิดหน้า PIN ของร้านนี้ทุกครั้ง) */
 function rememberLicense(r) {
   saveConfig({ serverUrl: r.url, license: { code: r.code || config.license?.code, shop: r.shop, expiresAt: r.expiresAt, route: r.route || '' } });
@@ -744,12 +752,15 @@ ipcMain.handle('shell:save-config', async (e, c) => {
 });
 ipcMain.on('shell:retry', (e) => fromShell(e) && startShop());
 // ---- หน้าเปิดใช้งาน (ชุดทดลอง)
-ipcMain.handle('shell:license-state', (e) => (fromShell(e) ? { code: config.license?.code || '', shop: config.license?.shop || '', machineName: machineName(), licenseServer: licenseServer() } : null));
+ipcMain.handle('shell:license-state', (e) =>
+  fromShell(e) ? { code: config.license?.code || '', shop: config.license?.shop || '', machineName: machineName(), licenseServer: licenseServer(), appUrl: mobileAppUrl() } : null,
+);
 ipcMain.handle('shell:activate', async (e, code) => {
   if (!fromShell(e)) return deny;
+  const appUrl = mobileAppUrl(); // ต้องอ่านก่อน rememberLicense — หลังจากนั้น serverUrl จะกลายเป็นที่อยู่ร้าน
   const r = await licenseCall('activate', String(code || ''));
   if (r.ok) rememberLicense(r);
-  return r;
+  return r.ok ? { ...r, appUrl } : r;
 });
 ipcMain.on('shell:start-pos', (e) => fromShell(e) && config.license && openServer());
 ipcMain.on('shell:open-settings', (e) => fromShell(e) && openSettings());
