@@ -102,7 +102,7 @@ export function listProducts(f: { q?: string; category?: string; status?: string
          ${where}
         GROUP BY p.id ORDER BY p.active DESC, p.updated_at DESC, p.id DESC`,
     )
-    .all(...args) as (ProductRow & { category: string; skuCount: number; skuActive: number; stock: number; outCount: number; lowCount: number; minPrice: number; maxPrice: number; stockValue: number })[];
+    .all(...args) as unknown as (ProductRow & { category: string; skuCount: number; skuActive: number; stock: number; outCount: number; lowCount: number; minPrice: number; maxPrice: number; stockValue: number })[];
 
   const showCost = can(me, 'stock', 'edit'); // คิดครั้งเดียว ไม่ใช่ทุกแถว
   let list = rows.map((r) => ({
@@ -145,7 +145,7 @@ export function getProduct(id: number, me: Me) {
          FROM stock_moves m JOIN variants v ON v.id = m.variant_id WHERE v.product_id = ? ORDER BY m.id DESC LIMIT 30`,
     )
     .all(id);
-  return { ...present(p, me, q.variants.all(id) as VariantRow[]), moves };
+  return { ...present(p, me, q.variants.all(id) as unknown as VariantRow[]), moves };
 }
 
 export function listCategories() {
@@ -349,10 +349,10 @@ export function saveProduct(id: number | null, body: ProductIn, me: Me, opts: { 
         typeof body.vatExempt === 'boolean' ? (body.vatExempt ? 1 : 0) : cur.vatExempt, pid);
     }
 
-    const existing = q.variants.all(pid) as VariantRow[];
+    const existing = q.variants.all(pid) as unknown as VariantRow[];
     const byId = new Map(existing.map((v) => [v.id, v]));
     const byKey = new Map(existing.map((v) => [`${v.color}|${v.size}|${v.extra}`, v]));
-    const skuBase = (q.product.get(pid) as ProductRow).sku;
+    const skuBase = (q.product.get(pid) as unknown as ProductRow).sku;
     // ล้างบาร์โค้ด SKU ของสินค้านี้ชั่วคราว (สลับบาร์โค้ดระหว่าง SKU ได้โดยไม่ชน UNIQUE)
     const oldBarcode = new Map(existing.map((v) => [v.id, v.barcode]));
     db.prepare('UPDATE variants SET barcode = NULL WHERE product_id = ?').run(pid);
@@ -483,7 +483,7 @@ export function skuProduct(id: number, me: Me) {
     )
     .get(id) as (Record<string, unknown> & { attrs: string | null; price: number; cost: number | null }) | undefined;
   if (!p) throw new HttpError(404, 'ไม่พบสินค้า');
-  const vs = q.variants.all(id) as VariantRow[];
+  const vs = q.variants.all(id) as unknown as VariantRow[];
   return {
     id: p.id, code: p.code, name: p.name, barcode: p.barcode, categoryId: p.categoryId, category: p.category, art: p.art,
     tint: p.tint, imageUrl: p.imageUrl, active: !!p.active, lowStock: p.lowStock,
@@ -506,7 +506,7 @@ export function bulkUpdateSkus(
 ) {
   requireFeature(me, 'stock', 'edit');
   const list = Array.isArray(body.variants) ? body.variants : [];
-  const existing = new Map((q.variants.all(pid) as VariantRow[]).map((v) => [v.id, v]));
+  const existing = new Map((q.variants.all(pid) as unknown as VariantRow[]).map((v) => [v.id, v]));
   if (!existing.size) throw new HttpError(404, 'ไม่พบสินค้า');
   const seen = new Set<string>();
   const lines = list.map((x) => {
@@ -771,7 +771,9 @@ export function bulkProducts(body: { ids?: number[]; action?: string; categoryId
   if (!action) throw new HttpError(422, 'ไม่รู้จักคำสั่ง');
   const ids = [...new Set((Array.isArray(body.ids) ? body.ids : []).map(Number).filter((n) => Number.isInteger(n) && n > 0))].slice(0, 1000);
   if (!ids.length) throw new HttpError(422, 'ยังไม่ได้เลือกสินค้า');
-  if (action === 'category' && !db.prepare('SELECT 1 FROM categories WHERE id = ?').get(String(body.categoryId ?? ''))) {
+  // ตรวจหมวดหมู่ครั้งเดียวแล้วใช้ค่านี้ต่อ — เดิมส่ง body.categoryId (อาจเป็น undefined) เข้า .run() ตรง ๆ
+  const categoryId = String(body.categoryId ?? '');
+  if (action === 'category' && !db.prepare('SELECT 1 FROM categories WHERE id = ?').get(categoryId)) {
     throw new HttpError(422, 'กรุณาเลือกหมวดหมู่');
   }
   const now = "datetime('now', 'localtime')";
@@ -787,7 +789,7 @@ export function bulkProducts(body: { ids?: number[]; action?: string; categoryId
           db.prepare(`UPDATE products SET active = ?, updated_at = ${now} WHERE id = ?`).run(action === 'activate' ? 1 : 0, id);
           break;
         case 'category':
-          db.prepare(`UPDATE products SET category_id = ?, updated_at = ${now} WHERE id = ?`).run(body.categoryId, id);
+          db.prepare(`UPDATE products SET category_id = ?, updated_at = ${now} WHERE id = ?`).run(categoryId, id);
           break;
         // เสีย VAT / ยกเว้น VAT (มีผลกับบิลใหม่ — บิลเดิมเก็บค่าตอนขายไว้แล้ว)
         case 'vat':
@@ -795,7 +797,7 @@ export function bulkProducts(body: { ids?: number[]; action?: string; categoryId
           db.prepare(`UPDATE products SET vat_exempt = ?, updated_at = ${now} WHERE id = ?`).run(action === 'exempt' ? 1 : 0, id);
           break;
         case 'zero': {
-          const vs = q.variants.all(id) as VariantRow[];
+          const vs = q.variants.all(id) as unknown as VariantRow[];
           for (const v of vs) {
             if (v.stock === 0) continue;
             db.prepare('UPDATE variants SET stock = 0 WHERE id = ?').run(v.id);

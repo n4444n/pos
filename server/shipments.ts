@@ -149,8 +149,8 @@ function branchId(v: unknown, label: string, allowNull: boolean): number | null 
 /** รายการใบส่งของ + สาขาทั้งหมด (ใช้เลือกปลายทาง / สาขาที่ตัดสต็อก) */
 export function listShipments() {
   return {
-    list: (q.list.all() as Row[]).map(present),
-    cancelled: (q.listCancelled.all() as Row[]).map(present),
+    list: (q.list.all() as unknown as Row[]).map(present),
+    cancelled: (q.listCancelled.all() as unknown as Row[]).map(present),
     keepDays: CANCEL_KEEP_DAYS,
     branches: listBranches().map((b) => ({ id: b.id, name: b.name, code: b.code, isMain: b.isMain })),
   };

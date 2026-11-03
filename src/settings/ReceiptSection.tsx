@@ -114,7 +114,7 @@ export function ReceiptSection({ v, shop, vat, set, goPrinter }: { v: AdminSetti
   return (
     <View style={[{ gap: 12 }, Platform.OS === 'web' && { flexDirection: 'row', flexWrap: 'wrap' }]}>
       <View style={{ flex: 1, minWidth: 300, gap: 12 }}>
-        <Pressable style={({ hovered }: { hovered?: boolean }) => [s.linkCard, hovered && { backgroundColor: '#E3EBFF' }]} onPress={goPrinter} accessibilityRole="link">
+        <Pressable style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.linkCard, hovered && { backgroundColor: '#E3EBFF' }]} onPress={goPrinter} accessibilityRole="link">
           <Icon name="print-outline" size={20} color={colors.primary} />
           <View style={{ flex: 1 }}>
             <Text style={s.linkTitle}>ตั้งค่าเครื่องพิมพ์ใบเสร็จ</Text>

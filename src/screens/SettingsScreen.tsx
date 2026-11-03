@@ -148,7 +148,7 @@ export function SettingsScreen({ onNavigate, onSettingsChanged }: Props) {
               if (dirty) notify('info', 'มีการแก้ไขที่ยังไม่บันทึกในหมวดเดิม — เปลี่ยนหมวดแล้ว ค่าที่แก้ยังอยู่จนกว่าจะออกจากหน้านี้');
               setSection(it.id);
             }}
-            style={({ hovered }: { hovered?: boolean }) => [twoPane ? s.navItem : s.navChip, twoPane && it.sub && s.navSub, on && s.navOn, hovered && !on && { backgroundColor: '#EEF1F6' }]}
+            style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [twoPane ? s.navItem : s.navChip, twoPane && it.sub && s.navSub, on && s.navOn, hovered && !on && { backgroundColor: '#EEF1F6' }]}
             accessibilityRole="tab"
             accessibilityState={{ selected: on }}
           >

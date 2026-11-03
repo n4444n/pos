@@ -215,7 +215,7 @@ export function BillEditor({ visible, order, catalog, onClose, onSaved, notify }
           {results.map((p) => (
             <Pressable
               key={p.id}
-              style={({ hovered }: { hovered?: boolean }) => [s.result, hovered && { backgroundColor: colors.surface }]}
+              style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.result, hovered && { backgroundColor: colors.surface }]}
               onPress={() => {
                 setPicker({ product: p });
                 setSearch('');

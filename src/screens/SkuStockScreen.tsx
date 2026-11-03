@@ -339,7 +339,7 @@ export function SkuStockScreen({ onNavigate, onStockChanged }: Props) {
       <Pressable
         key={key}
         onPress={() => openCell(p, cell)}
-        style={({ hovered }: { hovered?: boolean }) => [s.qty, tone, !cell.active && s.qtyOff, hovered && manager && s.qtyHover]}
+        style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.qty, tone, !cell.active && s.qtyOff, hovered && manager && s.qtyHover]}
         accessibilityLabel={`${p.name} ${cell.color} ${cell.size} คงเหลือ ${cell.stock}`}
       >
         <Text style={[s.qtyText, cell.stock === 0 && { color: colors.danger }, cell.stock > 0 && cell.stock <= p.lowStock && { color: '#B26A00' }, !cell.active && s.strike]}>

@@ -359,7 +359,7 @@ export function StockScreen({ onNavigate, onStockChanged }: Props) {
                   <Pressable
                     key={r.id}
                     onPress={open}
-                    style={({ hovered }: { hovered?: boolean }) => [s.tr, !r.active && { opacity: 0.6 }, hovered && { backgroundColor: '#F8FAFF' }, selected.has(r.id) && s.trSel]}
+                    style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.tr, !r.active && { opacity: 0.6 }, hovered && { backgroundColor: '#F8FAFF' }, selected.has(r.id) && s.trSel]}
                   >
                     {manager ? (
                       <View style={[s.td, { width: 44 }]}>

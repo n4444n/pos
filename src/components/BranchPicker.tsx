@@ -48,7 +48,7 @@ export function BranchChip({ compact, block }: { compact?: boolean; block?: bool
     <>
       <Pressable
         onPress={() => setOpen(true)}
-        style={({ hovered }: { hovered?: boolean }) => [s.chip, block && s.chipBlock, hovered && { backgroundColor: '#E0E9FF' }]}
+        style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.chip, block && s.chipBlock, hovered && { backgroundColor: '#E0E9FF' }]}
         accessibilityLabel={`สาขาปัจจุบัน ${label}${shop.branchCode ? ` รหัส ${shop.branchCode}` : ''} — กดเพื่อเลือกสาขา`}
       >
         <View style={s.chipIcon}>
@@ -185,7 +185,7 @@ function BranchCard({ b, no, grid, busy, onPress }: { b: Item; no: number; grid:
     <Pressable
       onPress={onPress}
       disabled={busy}
-      style={({ hovered }: { hovered?: boolean }) => [s.item, grid && s.itemGrid, on && s.itemOn, hovered && !on && s.itemHover]}
+      style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.item, grid && s.itemGrid, on && s.itemOn, hovered && !on && s.itemHover]}
       accessibilityLabel={`${no}. ${b.name}${on ? ' (สาขาปัจจุบัน)' : ''}`}
       accessibilityState={{ selected: on }}
     >

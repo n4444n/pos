@@ -443,7 +443,7 @@ function ExpenseTable({ rows, allBranches, manager, onView, onEdit, onDelete }: 
             <Pressable
               key={r.id}
               onPress={() => onView(r)}
-              style={({ hovered }: { hovered?: boolean }) => [s.trow, i % 2 === 1 && { backgroundColor: '#F7F9FC' }, hovered && { backgroundColor: '#EEF3FF' }]}
+              style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.trow, i % 2 === 1 && { backgroundColor: '#F7F9FC' }, hovered && { backgroundColor: '#EEF3FF' }]}
               accessibilityLabel={`ค่าใช้จ่าย ${expenseDocNo(r)}`}
             >
               <View style={[s.tcell, ...cell(COLS[0])]}>
@@ -791,11 +791,11 @@ function DrawerTab({ ledger, loading, wide, mobile, onPickShift, onExpense, onMo
       <View style={s.list}>
         {wide ? (
           <View style={[s.ledgerRow, s.ledgerHead]}>
-            <Text style={[s.th, { width: 64 }]}>เวลา</Text>
-            <Text style={[s.th, { flex: 1 }]}>รายการ</Text>
-            <Text style={[s.th, { width: 140 }]}>โดย</Text>
-            <Text style={[s.th, { width: 120, textAlign: 'right' }]}>เข้า / ออก</Text>
-            <Text style={[s.th, { width: 120, textAlign: 'right' }]}>คงเหลือ</Text>
+            <Text style={[s.ledgerTh, { width: 64 }]}>เวลา</Text>
+            <Text style={[s.ledgerTh, { flex: 1 }]}>รายการ</Text>
+            <Text style={[s.ledgerTh, { width: 140 }]}>โดย</Text>
+            <Text style={[s.ledgerTh, { width: 120, textAlign: 'right' }]}>เข้า / ออก</Text>
+            <Text style={[s.ledgerTh, { width: 120, textAlign: 'right' }]}>คงเหลือ</Text>
           </View>
         ) : null}
         {entries.map((e, i) => {
@@ -1338,7 +1338,7 @@ const s = StyleSheet.create({
   statValue: { fontFamily: font, fontSize: 16, fontWeight: '700', color: colors.text, marginTop: 2 },
   ledgerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#F2F4F7', backgroundColor: '#fff' },
   ledgerHead: { backgroundColor: colors.surface, paddingVertical: 7 },
-  th: { fontFamily: font, fontSize: 11, fontWeight: '700', color: colors.sub },
+  ledgerTh: { fontFamily: font, fontSize: 11, fontWeight: '700', color: colors.sub },
   td: { fontFamily: font, fontSize: 13, color: colors.text },
   pickRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line },
   amountBox: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1.5, borderColor: colors.line, borderRadius: radius.lg, paddingHorizontal: 16, height: 64, backgroundColor: '#fff' },

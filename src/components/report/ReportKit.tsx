@@ -276,7 +276,7 @@ export function DataTable<T>({ cols, rows, keyOf, sort, onSort, empty, renderAft
             {onRowPress ? (
               <Pressable
                 onPress={() => onRowPress(r)}
-                style={({ hovered }: { hovered?: boolean }) => [k.tr, rowStyle?.(r), hovered && { backgroundColor: colors.primarySoft }]}
+                style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [k.tr, rowStyle?.(r), hovered && { backgroundColor: colors.primarySoft }]}
                 accessibilityRole="button"
                 accessibilityLabel={rowHint?.(r)}
               >

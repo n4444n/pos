@@ -118,7 +118,7 @@ export function StaffScreen({ onNavigate }: { onNavigate: (r: Route) => void }) 
               <Pressable
                 key={r.id}
                 onPress={() => setEditing(r)}
-                style={({ hovered }: { hovered?: boolean }) => [s.tr, !r.active && { opacity: 0.55 }, hovered && { backgroundColor: '#F8FAFF' }]}
+                style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.tr, !r.active && { opacity: 0.55 }, hovered && { backgroundColor: '#F8FAFF' }]}
               >
                 <View style={[s.td, { flex: 2, flexDirection: 'row', justifyContent: 'flex-start', gap: 10 }]}>
                   <Avatar name={r.name} manager={allBranch(r.role)} />

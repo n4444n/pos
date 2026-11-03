@@ -47,7 +47,7 @@ export function UpdateButton({ compact, block }: { compact?: boolean; block?: bo
     <>
       <Pressable
         onPress={() => setOpen(true)}
-        style={({ hovered }: { hovered?: boolean }) => [s.btn, s.ready, block && s.block, hovered && { backgroundColor: '#178A55' }]}
+        style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.btn, s.ready, block && s.block, hovered && { backgroundColor: '#178A55' }]}
         accessibilityLabel={`อัปเดตเป็นเวอร์ชัน ${u.version}`}
       >
         <Icon name="arrow-up-circle-outline" size={17} color="#fff" />
