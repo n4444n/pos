@@ -176,7 +176,7 @@ export function NavMenu({ route, onNavigate, header, mini, showCollapse }: MenuP
                   <Pressable
                     onPress={() => toggle(it)}
                     ref={(el) => webTitle(el, t(it.label))}
-                    style={({ hovered }: { hovered?: boolean }) => [s.miniItem, inGroup && s.groupOn, hovered && !inGroup && s.itemHover]}
+                    style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.miniItem, inGroup && s.groupOn, hovered && !inGroup && s.itemHover]}
                     accessibilityRole="button"
                     accessibilityState={{ expanded }}
                     accessibilityLabel={`${t(it.label)} — ${expanded ? 'ย่อ' : 'แสดง'}เมนูย่อย`}
@@ -193,7 +193,7 @@ export function NavMenu({ route, onNavigate, header, mini, showCollapse }: MenuP
                             key={c.id}
                             onPress={() => onNavigate(c.id as Route)}
                             ref={(el) => webTitle(el, t(c.label))}
-                            style={({ hovered }: { hovered?: boolean }) => [s.miniSubItem, on && s.itemOn, hovered && !on && s.itemHover]}
+                            style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.miniSubItem, on && s.itemOn, hovered && !on && s.itemHover]}
                             accessibilityRole="link"
                             accessibilityState={{ selected: on }}
                             accessibilityLabel={t(c.label)}
@@ -215,7 +215,7 @@ export function NavMenu({ route, onNavigate, header, mini, showCollapse }: MenuP
                 disabled={it.soon}
                 onPress={() => onNavigate(it.id as Route)}
                 ref={(el) => webTitle(el, t(it.label))}
-                style={({ hovered }: { hovered?: boolean }) => [s.miniItem, on && s.itemOn, hovered && !on && !it.soon && s.itemHover]}
+                style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.miniItem, on && s.itemOn, hovered && !on && !it.soon && s.itemHover]}
                 accessibilityRole="link"
                 accessibilityState={{ selected: on, disabled: it.soon }}
                 accessibilityLabel={t(it.label)}
@@ -229,7 +229,7 @@ export function NavMenu({ route, onNavigate, header, mini, showCollapse }: MenuP
         <Pressable
           onPress={() => setLang(LANGS[(LANGS.findIndex((l) => l.id === lang) + 1) % LANGS.length].id)}
           ref={(el) => webTitle(el, LANGS.find((l) => l.id === lang)?.label ?? '')}
-          style={({ hovered }: { hovered?: boolean }) => [s.miniLang, hovered && s.itemHover]}
+          style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.miniLang, hovered && s.itemHover]}
           accessibilityLabel={`ภาษา ${LANGS.find((l) => l.id === lang)?.label ?? ''} — กดเพื่อสลับ`}
         >
           <Icon name="language-outline" size={14} color={colors.sub} />
@@ -243,7 +243,7 @@ export function NavMenu({ route, onNavigate, header, mini, showCollapse }: MenuP
         <Pressable
           onPress={logout}
           ref={(el) => webTitle(el, t('nav.logout'))}
-          style={({ hovered }: { hovered?: boolean }) => [s.miniItem, { height: 40, backgroundColor: 'transparent' }, hovered && { backgroundColor: colors.dangerSoft }]}
+          style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.miniItem, { height: 40, backgroundColor: 'transparent' }, hovered && { backgroundColor: colors.dangerSoft }]}
           accessibilityLabel="ออกจากระบบ"
         >
           <Icon name="log-out-outline" size={19} color={colors.danger} />
@@ -252,7 +252,7 @@ export function NavMenu({ route, onNavigate, header, mini, showCollapse }: MenuP
         {showCollapse ? <Pressable
           onPress={toggleNavMode}
           ref={(el) => webTitle(el, t('ขยายเมนู'))}
-          style={({ hovered }: { hovered?: boolean }) => [s.miniToggle, hovered && s.itemHover]}
+          style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.miniToggle, hovered && s.itemHover]}
           accessibilityLabel="ขยายเมนู (แสดงชื่อเมนู)"
         >
           <Icon name="chevron-forward" size={18} color={colors.sub} />
@@ -367,7 +367,7 @@ export function NavMenu({ route, onNavigate, header, mini, showCollapse }: MenuP
             <Pressable
               onPress={toggleNavMode}
               ref={(el) => webTitle(el, t('ย่อเมนู'))}
-              style={({ hovered }: { hovered?: boolean }) => [s.collapse, hovered && s.itemHover]}
+              style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.collapse, hovered && s.itemHover]}
               accessibilityLabel="ย่อเมนู (ไอคอนอย่างเดียว)"
             >
               <Icon name="chevron-back" size={16} color={colors.sub} />

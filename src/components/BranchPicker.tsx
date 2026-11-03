@@ -52,7 +52,7 @@ export function BranchChip({ compact, block, iconOnly }: { compact?: boolean; bl
         <Pressable
           onPress={() => setOpen(true)}
           ref={(el) => webTitle(el, `${label}${shop.branchCode ? ` (${shop.branchCode})` : ''}`)}
-          style={({ hovered }: { hovered?: boolean }) => [s.chipMini, hovered && { backgroundColor: '#E0E9FF' }]}
+          style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.chipMini, hovered && { backgroundColor: '#E0E9FF' }]}
           accessibilityLabel={`สาขาปัจจุบัน ${label}${shop.branchCode ? ` รหัส ${shop.branchCode}` : ''} — กดเพื่อเลือกสาขา`}
         >
           <View style={s.chipIcon}>
