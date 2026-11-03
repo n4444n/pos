@@ -4,11 +4,12 @@ import { ActivityIndicator, Pressable, ScrollView, Text, useWindowDimensions, Vi
 import { api, type AdminSettings, type ApiKeyRow } from '../api';
 import { setAppSettings, getAppSettings } from '../appSettings';
 import { Icon, type IconName } from '../components/Icon';
-import { NavDrawer, Sidebar, type Route } from '../components/NavMenu';
+import { NavDrawer, Sidebar, toggleNavMode, type Route } from '../components/NavMenu';
 import { ToastView } from '../components/ToastView';
 import type { Toast } from '../store/usePos';
 import { colors } from '../theme';
 import { TaxSection } from '../settings/TaxSection';
+import { BillNoSection } from '../settings/BillNoSection';
 import { TabScroller, s } from '../settings/ui';
 import { ShopSection } from '../settings/ShopSection';
 import { DisplaySection } from '../settings/DisplaySection';
@@ -22,7 +23,7 @@ import { PrinterSection } from '../settings/PrinterSection';
 import { NotifySection } from '../settings/notify/NotifySection';
 import { BackupSection } from '../settings/BackupSection';
 
-type SectionId = 'shop' | 'display' | 'stock' | 'payments' | 'tax' | 'barcode' | 'labels' | 'labelPrinter' | 'receipt' | 'printer' | 'notify' | 'backup';
+type SectionId = 'shop' | 'display' | 'stock' | 'payments' | 'tax' | 'billNo' | 'barcode' | 'labels' | 'labelPrinter' | 'receipt' | 'printer' | 'notify' | 'backup';
 
 /** หมวดที่บันทึกลงตั้งค่าร้านชุดเดียวกัน (กระดาษบาร์โค้ด → barcode) */
 const dataKey = (id: SectionId) => (id === 'labels' ? 'barcode' : id) as keyof AdminSettings;
@@ -34,6 +35,7 @@ export const SECTIONS: { id: SectionId; label: string; icon: IconName; desc: str
   { id: 'stock', label: 'สต็อก', icon: 'cube-outline', desc: 'จุดแจ้งเตือนสินค้าเหลือน้อย · รูปแบบรหัส SKU' },
   { id: 'payments', label: 'วิธีชำระเงิน & ค่าธรรมเนียม', icon: 'wallet-outline', desc: 'เปิด/ปิดวิธีชำระ ตั้งชื่อ ค่าธรรมเนียม % / บาท' },
   { id: 'tax', label: 'ภาษี (VAT)', icon: 'document-text-outline', desc: 'ไม่บังคับ — ตั้งเมื่อร้านจด VAT: เลขผู้เสียภาษี · สำนักงานใหญ่/สาขาที่ · อัตรา VAT (วันเริ่ม/สิ้นสุด) · หมายเลขเครื่อง POS · ห้ามแก้ไขบิล', local: true },
+  { id: 'billNo', label: 'เลขที่บิล', icon: 'reader-outline', desc: 'รูปแบบเลขที่บิล ตั้งแยกแต่ละสาขา — ตัวนำหน้า · รหัสสาขา · วันที่ · จำนวนหลัก (ทำให้เลขบิลสั้นลงได้)', local: true },
   { id: 'barcode', label: 'บาร์โค้ด', icon: 'barcode-outline', desc: 'ประเภทบาร์โค้ด · สร้างบาร์โค้ดอัตโนมัติ' },
   { id: 'labels', label: 'กระดาษบาร์โค้ด', icon: 'pricetags-outline', desc: 'หน้าตาป้าย: โปรไฟล์ · ขนาดสติ๊กเกอร์/ดวงต่อแถว · ขนาดบาร์โค้ด · ข้อมูลและตัวอักษรบนป้าย · รูปแบบป้าย' },
   { id: 'labelPrinter', label: 'ตั้งค่าเครื่องพิมพ์บาร์โค้ด', icon: 'print-outline', desc: 'เครื่องพิมพ์ป้ายบาร์โค้ดของคอมพิวเตอร์เครื่องนี้ (แยกจากเครื่องพิมพ์ใบเสร็จ) · พิมพ์ทันทีไม่ถาม · ขนาดกระดาษในไดรเวอร์ · ทดสอบพิมพ์ป้าย', local: true },
@@ -167,7 +169,7 @@ export function SettingsScreen({ onNavigate, onSettingsChanged }: Props) {
       <View style={[s.main, mobile && { padding: 10 }]}>
         <View style={s.header}>
           <View style={[s.row, { flexShrink: 1 }]}>
-            <Pressable style={s.iconBtn} onPress={() => (showSidebar ? setSidebarOpen((o) => !o) : setDrawer(true))} accessibilityLabel="เมนู">
+            <Pressable style={s.iconBtn} onPress={() => (showSidebar ? toggleNavMode() : setDrawer(true))} accessibilityLabel="เมนู">
               <Icon name="menu-outline" size={24} color={colors.primary} />
             </Pressable>
             <View style={{ flexShrink: 1 }}>
@@ -199,6 +201,7 @@ export function SettingsScreen({ onNavigate, onSettingsChanged }: Props) {
                 ) : null}
                 {section === 'payments' ? <PaymentsSection v={draft.payments} set={(v) => patch('payments', v)} goTax={() => setSection('tax')} /> : null}
                 {section === 'tax' ? <TaxSection notify={notify} onChanged={() => { load(); onSettingsChanged(); }} /> : null}
+                {section === 'billNo' ? <BillNoSection notify={notify} onChanged={onSettingsChanged} goTax={() => setSection('tax')} /> : null}
                 {section === 'barcode' ? <BarcodeSection v={draft.barcode} set={(v) => patch('barcode', v)} stock={draft.stock} goStock={() => setSection('stock')} goLabels={() => setSection('labels')} /> : null}
                 {section === 'labels' ? <LabelsSection v={draft.barcode} set={(v) => patch('barcode', v)} goLabelPrinter={() => setSection('labelPrinter')} /> : null}
                 {section === 'labelPrinter' ? <LabelPrinterSection barcode={draft.barcode} notify={notify} goLabels={() => setSection('labels')} /> : null}

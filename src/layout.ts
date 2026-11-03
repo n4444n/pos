@@ -31,9 +31,12 @@ export function maxCartW(width: number) {
 /**
  * @param cartWidth ความกว้างตะกร้าที่ผู้ใช้ลากปรับเอง (null = ใช้ค่าเริ่มต้นตามจอ)
  */
-export function useResponsive(viewMode: ViewMode, cartWidth: number | null = null) {
-  const { width, height } = useWindowDimensions();
-  const device: Device = width < 768 ? 'mobile' : width < 1200 ? 'tablet' : 'pc';
+/** reserve = พื้นที่ที่กันไว้ด้านซ้าย (เช่น เมนูแบบย่อ) — คิดกริด/ตะกร้าจากพื้นที่ที่เหลือ */
+export function useResponsive(viewMode: ViewMode, cartWidth: number | null = null, reserve = 0) {
+  const win = useWindowDimensions();
+  const height = win.height;
+  const width = win.width - reserve;
+  const device: Device = win.width < 768 ? 'mobile' : width < 1200 ? 'tablet' : 'pc';
   const sideCart = width >= 900;
   const cartW = cartWidth == null ? defaultCartW(width) : Math.round(Math.min(maxCartW(width), Math.max(CART_MIN, cartWidth)));
   const pad = device === 'mobile' ? 10 : 16;

@@ -7,7 +7,7 @@ import {
 import { api, type ShipBranch, type Shipment, type ShipmentDetail } from '../api';
 import { beep } from '../appSettings';
 import { Icon } from '../components/Icon';
-import { NavDrawer, Sidebar, type Route } from '../components/NavMenu';
+import { NavDrawer, Sidebar, toggleNavMode, type Route } from '../components/NavMenu';
 import { Sheet } from '../components/Sheet';
 import { ToastView } from '../components/ToastView';
 import { thaiDateTime } from '../format';
@@ -182,7 +182,7 @@ export function ShipmentScreen({ onNavigate, onStockChanged }: { onNavigate: (r:
       <View style={[s.main, mobile && { padding: 10 }]}>
         <View style={s.header}>
           <View style={s.row}>
-            <Pressable style={s.iconBtn} onPress={() => (showSidebar ? setSidebarOpen((o) => !o) : setDrawer(true))} accessibilityLabel="เมนู">
+            <Pressable style={s.iconBtn} onPress={() => (showSidebar ? toggleNavMode() : setDrawer(true))} accessibilityLabel="เมนู">
               <Icon name="menu-outline" size={24} color={colors.primary} />
             </Pressable>
             <View>

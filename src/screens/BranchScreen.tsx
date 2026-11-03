@@ -7,8 +7,9 @@ import {
 } from 'react-native';
 import { api, imageSrc, type Branch, type BranchInput, type BranchManage } from '../api';
 import { switchToBranch } from '../components/BranchPicker';
+import { reloadPage } from '../reload';
 import { Icon, type IconName } from '../components/Icon';
-import { NavDrawer, Sidebar, type Route } from '../components/NavMenu';
+import { NavDrawer, Sidebar, toggleNavMode, type Route } from '../components/NavMenu';
 import { Sheet } from '../components/Sheet';
 import { resizeToDataUrl } from '../components/stock/ImagePicker';
 import { ToastView } from '../components/ToastView';
@@ -111,7 +112,7 @@ export function BranchScreen({ onNavigate }: { onNavigate: (r: Route) => void })
     load();
     setPanel(null);
     // แก้สาขาที่กำลังใช้งาน → โหลดใหม่ให้ป้าย/ใบเสร็จ/VAT เปลี่ยนตาม
-    if (!isNew && rec.id === data?.currentId && Platform.OS === 'web') setTimeout(() => window.location.reload(), 600);
+    if (!isNew && rec.id === data?.currentId && Platform.OS === 'web') setTimeout(reloadPage, 600);
     if (isNew) setSwitching(rec);
   };
 
@@ -124,7 +125,7 @@ export function BranchScreen({ onNavigate }: { onNavigate: (r: Route) => void })
       <View style={[s.main, mobile && { padding: 10 }]}>
         <View style={s.header}>
           <View style={s.row}>
-            <Pressable style={s.iconBtn} onPress={() => (showSidebar ? setSidebarOpen((o) => !o) : setDrawer(true))} accessibilityLabel="เมนู">
+            <Pressable style={s.iconBtn} onPress={() => (showSidebar ? toggleNavMode() : setDrawer(true))} accessibilityLabel="เมนู">
               <Icon name="menu-outline" size={24} color={colors.primary} />
             </Pressable>
             <View style={s.titleIcon}>

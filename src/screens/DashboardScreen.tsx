@@ -9,7 +9,7 @@ import { DateField } from '../components/DateField';
 import { GarmentArt } from '../components/GarmentArt';
 import { Badge } from '../components/history/Badge';
 import { Icon, type IconName } from '../components/Icon';
-import { NavDrawer, Sidebar, type Route } from '../components/NavMenu';
+import { NavDrawer, Sidebar, toggleNavMode, type Route } from '../components/NavMenu';
 import { Sheet } from '../components/Sheet';
 import { baht, isoDate, n0, n2, pctChange, PAYMENT_LABEL, thaiDate, variantLabel } from '../format';
 import { categoryChip, colors, font, radius } from '../theme';
@@ -159,7 +159,7 @@ export function DashboardScreen({ onNavigate }: Props) {
         {/* ---------- header ---------- */}
         <View style={s.header}>
           <View style={s.row}>
-            <Pressable style={s.iconBtn} onPress={() => (showSidebar ? setSidebarOpen((o) => !o) : setDrawer(true))} accessibilityLabel="เมนู">
+            <Pressable style={s.iconBtn} onPress={() => (showSidebar ? toggleNavMode() : setDrawer(true))} accessibilityLabel="เมนู">
               <Icon name="menu-outline" size={24} color={colors.primary} />
             </Pressable>
             <Text style={s.title}>รายงานรวม</Text>

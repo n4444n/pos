@@ -8,7 +8,7 @@ import { DateField } from '../components/DateField';
 import { Badge } from '../components/history/Badge';
 import { OrderDetailModal } from '../components/history/OrderDetailModal';
 import { Icon } from '../components/Icon';
-import { NavDrawer, Sidebar, type Route } from '../components/NavMenu';
+import { NavDrawer, Sidebar, toggleNavMode, type Route } from '../components/NavMenu';
 import { ToastView } from '../components/ToastView';
 import { baht, isoDate, PAYMENT_LABEL, STATUS_LABEL, STATUS_TONE, thaiDate, thaiDateTime } from '../format';
 import type { Toast } from '../store/usePos';
@@ -146,7 +146,7 @@ export function HistoryScreen({ onNavigate, onStockChanged }: Props) {
           <View style={s.row}>
             <Pressable
               style={s.iconBtn}
-              onPress={() => (showSidebar ? setSidebarOpen((o) => !o) : setDrawer(true))}
+              onPress={() => (showSidebar ? toggleNavMode() : setDrawer(true))}
               accessibilityLabel="เมนู"
             >
               <Icon name="menu-outline" size={24} color={colors.primary} />
