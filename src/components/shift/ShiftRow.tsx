@@ -84,7 +84,7 @@ function ShiftRowImpl({ shift: s, layout, onPress }: Props) {
   return (
     <Pressable
       onPress={() => onPress(s)}
-      style={({ hovered }: { hovered?: boolean }) => [s_.row, stack && s_.rowStack, open && s_.rowOpen, hovered && s_.hover]}
+      style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s_.row, stack && s_.rowStack, open && s_.rowOpen, hovered && s_.hover]}
       accessibilityLabel={`กะที่ ${s.shiftNo} ${v.label}`}
     >
       {stack ? (

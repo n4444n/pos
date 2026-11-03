@@ -42,7 +42,7 @@ function ViewModeToggleImpl({ value, maxCols, onChange }: Props) {
             key={m}
             disabled={disabled}
             onPress={() => onChange(m)}
-            style={({ hovered }: { hovered?: boolean }) => [s.btn, on && s.btnOn, hovered && !on && !disabled && s.btnHover, disabled && { opacity: 0.5 }]}
+            style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.btn, on && s.btnOn, hovered && !on && !disabled && s.btnHover, disabled && { opacity: 0.5 }]}
             accessibilityRole="radio"
             accessibilityState={{ selected: on, disabled }}
             accessibilityLabel={`มุมมอง ${m}×${m}`}

@@ -205,12 +205,12 @@ export function BranchScreen({ onNavigate }: { onNavigate: (r: Route) => void })
             const actions = (
               <View style={[s.row, { gap: 6 }]}>
                 {!current ? (
-                  <Pressable onPress={() => doSwitch(b)} disabled={busy} style={({ hovered }: { hovered?: boolean }) => [s.switchBtn, hovered && { backgroundColor: '#DCE6FF' }]} accessibilityLabel={`สลับไป ${b.name}`}>
+                  <Pressable onPress={() => doSwitch(b)} disabled={busy} style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.switchBtn, hovered && { backgroundColor: '#DCE6FF' }]} accessibilityLabel={`สลับไป ${b.name}`}>
                     <Icon name="swap-horizontal" size={14} color={colors.primary} />
                     <Text style={s.switchText}>สลับไปสาขานี้</Text>
                   </Pressable>
                 ) : null}
-                <Pressable onPress={() => openNew(b)} style={({ hovered }: { hovered?: boolean }) => [s.copyBtn, hovered && { borderColor: colors.primary }]} accessibilityLabel={`ทำสำเนา ${b.name}`}>
+                <Pressable onPress={() => openNew(b)} style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.copyBtn, hovered && { borderColor: colors.primary }]} accessibilityLabel={`ทำสำเนา ${b.name}`}>
                   <Icon name="copy-outline" size={16} color={colors.sub} />
                 </Pressable>
               </View>
@@ -225,7 +225,7 @@ export function BranchScreen({ onNavigate }: { onNavigate: (r: Route) => void })
               <Pressable
                 key={b.id}
                 onPress={open}
-                style={({ hovered }: { hovered?: boolean }) => [s.tr, current && s.trCurrent, checked && s.trChecked, hovered && !current && { backgroundColor: '#F8FAFF' }]}
+                style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.tr, current && s.trCurrent, checked && s.trChecked, hovered && !current && { backgroundColor: '#F8FAFF' }]}
                 accessibilityLabel={`${i + 1}. ${b.name}${current ? ' (สาขาปัจจุบัน)' : ''}`}
               >
                 <View style={[s.td, { width: 52 }]}>{canSel ? <Check on={checked} onPress={() => toggle(b.id)} label={`เลือก ${b.name}`} /> : null}</View>
@@ -308,7 +308,7 @@ function Check({ on, onPress, label }: { on: boolean; onPress: () => void; label
 
 function MenuItem({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={({ hovered }: { hovered?: boolean }) => [s.menuItem, hovered && { backgroundColor: colors.surface }]}>
+    <Pressable onPress={onPress} style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.menuItem, hovered && { backgroundColor: colors.surface }]}>
       <Icon name={icon} size={16} color={colors.primary} />
       <Text style={s.menuText}>{label}</Text>
     </Pressable>

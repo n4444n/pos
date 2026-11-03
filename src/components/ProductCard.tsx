@@ -150,7 +150,7 @@ function ProductCardImpl({ product, categoryName, variants, cartQty, width, onAd
         <Pressable
           onPress={add}
           disabled={soldOut}
-          style={({ hovered }: { hovered?: boolean }) => [s.cartBtn, compact && s.cartBtnCompact, ready && s.cartBtnReady, hovered && !soldOut && s.cartBtnHover]}
+          style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.cartBtn, compact && s.cartBtnCompact, ready && s.cartBtnReady, hovered && !soldOut && s.cartBtnHover]}
           accessibilityLabel="เพิ่มลงตะกร้า"
         >
           <Icon name="cart-outline" size={18} color={ready ? '#fff' : colors.text} />

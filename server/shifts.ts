@@ -213,7 +213,7 @@ export function openShift(body: { staff?: string; openingCash?: number; note?: s
     const { n } = q.countOnDate.get(date) as { n: number };
     return Number(q.insShift.run(n + 1, date, staff.slice(0, 80), cash, body.note?.trim().slice(0, 200) || null).lastInsertRowid);
   });
-  return present(q.byId.get(id) as ShiftRow);
+  return present(q.byId.get(id) as unknown as ShiftRow);
 }
 
 export function cashMove(body: { kind?: string; amount?: number; reason?: string; staff?: string }) {
@@ -269,7 +269,7 @@ export function closeShift(body: { staff?: string; countedCash?: number; denomin
     ),
   );
   if (n !== 1) throw new HttpError(409, 'กะนี้ถูกปิดไปแล้ว');
-  return present(q.byId.get(s.id) as ShiftRow);
+  return present(q.byId.get(s.id) as unknown as ShiftRow);
 }
 
 export function shiftDetail(id: number) {
@@ -301,8 +301,8 @@ export function listShifts(f: { from?: string; to?: string; limit?: number; offs
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
   const limit = Math.min(Math.max(Number(f.limit) || 50, 1), 200);
   const offset = Math.max(Number(f.offset) || 0, 0);
-  const rows = (db.prepare(`SELECT ${SHIFT_COLS} FROM shifts ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...args, limit, offset) as ShiftRow[]).map(present);
-  const all = (db.prepare(`SELECT ${SHIFT_COLS} FROM shifts ${where}`).all(...args) as ShiftRow[]).map(present);
+  const rows = (db.prepare(`SELECT ${SHIFT_COLS} FROM shifts ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...args, limit, offset) as unknown as ShiftRow[]).map(present);
+  const all = (db.prepare(`SELECT ${SHIFT_COLS} FROM shifts ${where}`).all(...args) as unknown as ShiftRow[]).map(present);
   const closed = all.filter((x) => x.status === 'closed');
   const summary = {
     count: all.length,

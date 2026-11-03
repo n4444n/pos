@@ -302,7 +302,7 @@ export function HistoryScreen({ onNavigate, onStockChanged }: Props) {
                 <Pressable
                   key={r.id}
                   onPress={() => setSelected(r.id)}
-                  style={({ hovered }: { hovered?: boolean }) => [s.tr, hovered && { backgroundColor: '#F8FAFF' }]}
+                  style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.tr, hovered && { backgroundColor: '#F8FAFF' }]}
                 >
                   <Td w={44} text={String(i + 1).padStart(3, '0')} dim={r.status === 'void'} />
                   <Td flex={1.5} text={thaiDateTime(r.createdAt)} dim={r.status === 'void'} />

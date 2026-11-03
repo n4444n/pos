@@ -195,7 +195,7 @@ function ActBtn({ icon, label, onPress, tone = colors.primary }: {
 }) {
   return (
     <Pressable
-      style={({ hovered }: { hovered?: boolean }) => [s.actBtn, hovered && { backgroundColor: colors.surface, borderColor: tone }]}
+      style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.actBtn, hovered && { backgroundColor: colors.surface, borderColor: tone }]}
       onPress={(e) => {
         // กันไม่ให้ไปโดนการกดทั้งแถว (ซึ่งเปิดใบส่งของ)
         (e as unknown as { stopPropagation?: () => void }).stopPropagation?.();

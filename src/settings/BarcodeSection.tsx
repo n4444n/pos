@@ -30,7 +30,7 @@ export function BarcodeSection({ v, set, stock, goStock, goLabels }: { v: AdminS
           รูปแบบรหัส SKU (ตัวคั่น/จำนวนหลัก) ตั้งได้ที่ <Text style={s.link} onPress={goStock}>สต็อก & เชื่อมสาขา</Text>
         </Text>
       </Card>
-      <Pressable style={({ hovered }: { hovered?: boolean }) => [s.linkCard, hovered && { backgroundColor: '#E3EBFF' }]} onPress={goLabels} accessibilityRole="link">
+      <Pressable style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.linkCard, hovered && { backgroundColor: '#E3EBFF' }]} onPress={goLabels} accessibilityRole="link">
         <Icon name="pricetags-outline" size={20} color={colors.primary} />
         <View style={{ flex: 1 }}>
           <Text style={s.linkTitle}>กระดาษบาร์โค้ด (ป้ายติดสินค้า)</Text>

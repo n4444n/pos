@@ -130,7 +130,7 @@ export function LabelsSection({ v, set, goLabelPrinter }: { v: AdminSettings['ba
             const on = (p.layout ?? 'standard') === id;
             return (
               <View key={id} style={{ width: '33.333%', paddingHorizontal: 4 }}>
-                <Pressable onPress={() => upd({ layout: id })} style={({ hovered }: { hovered?: boolean }) => [s.profileChip, { minWidth: 0, maxWidth: undefined, flex: 1, alignItems: 'center', justifyContent: 'center' }, on && s.profileOn, hovered && !on && { borderColor: colors.primary }]} accessibilityRole="radio" accessibilityState={{ checked: on }}>
+                <Pressable onPress={() => upd({ layout: id })} style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.profileChip, { minWidth: 0, maxWidth: undefined, flex: 1, alignItems: 'center', justifyContent: 'center' }, on && s.profileOn, hovered && !on && { borderColor: colors.primary }]} accessibilityRole="radio" accessibilityState={{ checked: on }}>
                   <Text style={[s.profileName, { textAlign: 'center' }, on && { color: colors.primary }]}>{label}</Text>
                 </Pressable>
               </View>
@@ -145,7 +145,7 @@ export function LabelsSection({ v, set, goLabelPrinter }: { v: AdminSettings['ba
             const on = p.symbology === id;
             return (
               <View key={id} style={{ width: '33.333%', paddingHorizontal: 4 }}>
-                <Pressable onPress={() => upd({ symbology: id })} style={({ hovered }: { hovered?: boolean }) => [s.profileChip, { minWidth: 0, maxWidth: undefined, flex: 1, alignItems: 'center', justifyContent: 'center' }, on && s.profileOn, hovered && !on && { borderColor: colors.primary }]} accessibilityRole="radio" accessibilityState={{ checked: on }} accessibilityLabel={x.label}>
+                <Pressable onPress={() => upd({ symbology: id })} style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.profileChip, { minWidth: 0, maxWidth: undefined, flex: 1, alignItems: 'center', justifyContent: 'center' }, on && s.profileOn, hovered && !on && { borderColor: colors.primary }]} accessibilityRole="radio" accessibilityState={{ checked: on }} accessibilityLabel={x.label}>
                   <Text style={[s.profileName, { textAlign: 'center' }, on && { color: colors.primary }]}>{x.label}</Text>
                 </Pressable>
               </View>
@@ -251,7 +251,7 @@ function PaperSizeCard({ p, upd, presets, setPresets }: {
         {open ? (
           <View style={s.ddList}>
             {LABEL_PRESETS.map((x) => (
-              <Pressable key={x.id} onPress={() => choose(x.apply)} style={({ hovered }: { hovered?: boolean }) => [s.ddItem, hovered && s.ddHover, builtIn?.id === x.id && !mine && s.ddOn]}>
+              <Pressable key={x.id} onPress={() => choose(x.apply)} style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.ddItem, hovered && s.ddHover, builtIn?.id === x.id && !mine && s.ddOn]}>
                 <Text style={s.presetT}>{x.label}</Text>
                 <Text style={[s.hint, { flex: 1 }]} numberOfLines={1}>{x.hint}</Text>
               </Pressable>
@@ -267,7 +267,7 @@ function PaperSizeCard({ p, upd, presets, setPresets }: {
                 </Pressable>
               </View>
             ))}
-            <Pressable onPress={() => setOpen(false)} style={({ hovered }: { hovered?: boolean }) => [s.ddItem, hovered && s.ddHover, !mine && !builtIn && s.ddOn]}>
+            <Pressable onPress={() => setOpen(false)} style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.ddItem, hovered && s.ddHover, !mine && !builtIn && s.ddOn]}>
               <Text style={s.presetT}>กำหนดเอง</Text>
               <Text style={[s.hint, { flex: 1 }]}>กรอกขนาดในช่องด้านล่าง</Text>
             </Pressable>

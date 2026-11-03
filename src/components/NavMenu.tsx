@@ -140,7 +140,7 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
               <View key={it.id} style={{ gap: 6 }}>
                 <Pressable
                   onPress={() => toggle(it)}
-                  style={({ hovered }: { hovered?: boolean }) => [s.item, inGroup && s.groupOn, hovered && !inGroup && s.itemHover]}
+                  style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.item, inGroup && s.groupOn, hovered && !inGroup && s.itemHover]}
                   accessibilityRole="button"
                   accessibilityState={{ expanded }}
                   accessibilityLabel={`${t(it.label)} — ${expanded ? 'ย่อ' : 'แสดง'}เมนูย่อย`}
@@ -158,7 +158,7 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
                         <Pressable
                           key={c.id}
                           onPress={() => onNavigate(c.id as Route)}
-                          style={({ hovered }: { hovered?: boolean }) => [s.subItem, on && s.itemOn, hovered && !on && s.itemHover]}
+                          style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.subItem, on && s.itemOn, hovered && !on && s.itemHover]}
                           accessibilityRole="link"
                           accessibilityState={{ selected: on }}
                         >
@@ -179,7 +179,7 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
               key={it.id}
               disabled={it.soon}
               onPress={() => onNavigate(it.id as Route)}
-              style={({ hovered }: { hovered?: boolean }) => [s.item, on && s.itemOn, hovered && !on && !it.soon && s.itemHover]}
+              style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.item, on && s.itemOn, hovered && !on && !it.soon && s.itemHover]}
               accessibilityRole="link"
               accessibilityState={{ selected: on, disabled: it.soon }}
             >
@@ -216,7 +216,7 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
         </View>
         <Pressable
           onPress={logout}
-          style={({ hovered }: { hovered?: boolean }) => [s.logout, hovered && { backgroundColor: colors.dangerSoft }]}
+          style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.logout, hovered && { backgroundColor: colors.dangerSoft }]}
           accessibilityLabel="ออกจากระบบ"
         >
           <Icon name="log-out-outline" size={18} color={colors.danger} />

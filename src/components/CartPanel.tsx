@@ -251,7 +251,7 @@ export function CartPanel({ pos, onPayment, onPlace }: Props) {
           <Pressable
             onPress={code ? apply : openPicker}
             disabled={applying || rows.length === 0}
-            style={({ hovered }: { hovered?: boolean }) => [s.promoBtn, hovered && rows.length > 0 && { borderColor: colors.primary }]}
+            style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.promoBtn, hovered && rows.length > 0 && { borderColor: colors.primary }]}
             accessibilityLabel={code ? 'ใช้โค้ด' : 'เลือกโปรโมชั่น'}
           >
             {applying ? <ActivityIndicator size="small" color={colors.primary} /> : <Icon name="pricetag-outline" size={17} color={rows.length ? colors.primary : colors.faint} />}
@@ -293,7 +293,7 @@ export function CartPanel({ pos, onPayment, onPlace }: Props) {
                     key={o.code}
                     disabled={!o.eligible || using}
                     onPress={() => pick(o)}
-                    style={({ hovered }: { hovered?: boolean }) => [
+                    style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [
                       s.offer,
                       using && s.offerOn,
                       !o.eligible && { opacity: 0.55 },

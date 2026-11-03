@@ -66,7 +66,7 @@ function TopBarImpl({ onMenu, onCloseOrder, onRefresh, canClose, compact, shiftO
         <UpdateButton compact={compact} />
         {onHeld ? (
           <Pressable
-            style={({ hovered }: { hovered?: boolean }) => [s.closeBtn, hovered && { backgroundColor: '#FFF7E8' }, !canHold && !heldCount && { opacity: 0.45 }]}
+            style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.closeBtn, hovered && { backgroundColor: '#FFF7E8' }, !canHold && !heldCount && { opacity: 0.45 }]}
             onPress={onHeld}
             disabled={!canHold && !heldCount}
             accessibilityLabel={`พักบิล (${heldCount} บิลที่พักไว้)`}
@@ -88,7 +88,7 @@ function TopBarImpl({ onMenu, onCloseOrder, onRefresh, canClose, compact, shiftO
           <Text style={s.closeText}>{compact ? 'ยกเลิก' : 'ยกเลิกรายการ'}</Text>
         </Pressable>
         <Pressable
-          style={({ hovered }: { hovered?: boolean }) => [s.closeBtn, hovered && { backgroundColor: shiftOpen ? '#EEF3FF' : '#E9F8F0' }]}
+          style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.closeBtn, hovered && { backgroundColor: shiftOpen ? '#EEF3FF' : '#E9F8F0' }]}
           onPress={onShift}
           accessibilityLabel={shiftOpen ? 'ปิดกะทำงาน' : 'เปิดกะ'}
         >

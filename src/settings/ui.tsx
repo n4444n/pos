@@ -92,7 +92,7 @@ export function TabScroller({ children, active, dragRef }: { children: ReactNode
   const arrow = (dir: -1 | 1) => (
     <Pressable
       onPress={() => by(dir * 260)}
-      style={({ hovered }: { hovered?: boolean }) => [s.tabArrow, hovered && { backgroundColor: '#E3EBFF' }]}
+      style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.tabArrow, hovered && { backgroundColor: '#E3EBFF' }]}
       accessibilityLabel={dir < 0 ? 'เลื่อนแท็บไปทางซ้าย' : 'เลื่อนแท็บไปทางขวา'}
     >
       <Icon name={dir < 0 ? 'chevron-back' : 'chevron-forward'} size={18} color={colors.primary} />

@@ -85,7 +85,7 @@ export function SkuMatrix({ productCode, productName = '', attrs, rows, lowStock
   const tools = (
     <View style={s.tools}>
       <Pressable
-        style={({ hovered }: { hovered?: boolean }) => [s.toolBtn, showBc && s.toolOn, hovered && !showBc && { backgroundColor: colors.surface }]}
+        style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.toolBtn, showBc && s.toolOn, hovered && !showBc && { backgroundColor: colors.surface }]}
         onPress={() => setShowBc((v) => !v)}
         accessibilityRole="switch"
         accessibilityState={{ checked: showBc }}
@@ -95,7 +95,7 @@ export function SkuMatrix({ productCode, productName = '', attrs, rows, lowStock
         <Text style={[s.toolText, showBc && { color: '#fff' }]}>{showBc ? 'ซ่อนบาร์โค้ด' : 'แสดงบาร์โค้ด'}</Text>
       </Pressable>
       <Pressable
-        style={({ hovered }: { hovered?: boolean }) => [s.toolBtn, hovered && { backgroundColor: colors.surface }, !labelItems.length && { opacity: 0.45 }]}
+        style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.toolBtn, hovered && { backgroundColor: colors.surface }, !labelItems.length && { opacity: 0.45 }]}
         disabled={!labelItems.length}
         onPress={() => setPrintOpen(true)}
         accessibilityLabel={pickedKeys.length ? `พิมพ์บาร์โค้ด ${pickedKeys.length} รุ่นที่เลือก` : 'พิมพ์บาร์โค้ดทุกรุ่น'}
