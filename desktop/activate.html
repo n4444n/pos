@@ -151,10 +151,11 @@
   const $ = (id) => document.getElementById(id);
   /** QR ดาวน์โหลดแอปมือถือ — สร้างในเครื่อง ไม่ต้องต่อเน็ต ไม่ส่งข้อมูลออกไปไหน */
   function showAppQr(url) {
-    if (!url || typeof qrSvg !== 'function') return;
-    const svg = qrSvg(url, '104px');
-    if (!svg) return;
+    if (!url) return;
+    // วาด QR ไม่ได้ (qr.js ไม่ถูกแพ็กมา) ก็ยังโชว์ที่อยู่เว็บให้พิมพ์เองได้ ดีกว่าหายไปเงียบ ๆ
+    const svg = typeof qrSvg === 'function' ? qrSvg(url, '104px') : '';
     $('appQr').innerHTML = svg;
+    $('appQr').hidden = !svg;
     $('appUrl').textContent = String(url).replace(/^https?:\/\//, '');
     $('appBox').hidden = false;
   }

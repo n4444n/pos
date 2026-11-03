@@ -10,6 +10,8 @@ data/
 
 *.js
 !babel.config.js
+# QR สำหรับหน้าจอของแอป .exe — เป็นโค้ดจริง ไม่ใช่ไฟล์ที่ build ออกมา (สร้างจาก src/qr.ts ด้วย scripts/qr-sync.mjs)
+!desktop/qr.js
 .pin-secret
 uploads/
 desktop/release/
