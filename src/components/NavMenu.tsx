@@ -8,6 +8,7 @@ import { colors, font, radius } from '../theme';
 import { BranchChip } from './BranchPicker';
 import { Icon, type IconName } from './Icon';
 import { AppVersionChip, UpdateButton } from './UpdateButton';
+import { webTitle } from '../webTitle';
 
 export type Route =
   | 'sales' | 'dashboard' | 'salesReport' | 'billReport' | 'productReport' | 'taxReport' | 'history' | 'shifts' | 'expenses' | 'promos' | 'staff' | 'stock' | 'skus' | 'shipments' | 'shipmentReport' | 'branches' | 'settings';
@@ -57,6 +58,39 @@ function useStockBadge() {
   return n;
 }
 
+// ---- รูปแบบเมนูด้านซ้าย: แบบใหญ่ (ไอคอน + ข้อความ) / แบบย่อ (ไอคอนอย่างเดียว) — จำไว้ในเครื่องนี้ ----
+export type NavMode = 'full' | 'mini';
+const NAV_KEY = 'pos.navMode';
+let navMode: NavMode = 'full';
+try {
+  if (typeof localStorage !== 'undefined' && localStorage.getItem(NAV_KEY) === 'mini') navMode = 'mini';
+} catch {
+  /* ไม่มี storage ก็ใช้แบบใหญ่ */
+}
+const modeListeners = new Set<(m: NavMode) => void>();
+export function setNavMode(m: NavMode) {
+  navMode = m;
+  try {
+    localStorage.setItem(NAV_KEY, m);
+  } catch {
+    /* เก็บไม่ได้ก็ใช้ได้เฉพาะรอบนี้ */
+  }
+  modeListeners.forEach((f) => f(m));
+}
+/** สลับ แบบใหญ่ ⇄ แบบย่อ (ปุ่มเมนู ☰ ที่หัวแต่ละหน้า และปุ่มในเมนู) */
+export const toggleNavMode = () => setNavMode(navMode === 'mini' ? 'full' : 'mini');
+export function useNavMode() {
+  const [m, setM] = useState(navMode);
+  useEffect(() => {
+    modeListeners.add(setM);
+    setM(navMode);
+    return () => {
+      modeListeners.delete(setM);
+    };
+  }, []);
+  return m;
+}
+
 interface Item { id: Route | 'report' | 'stockGroup' | 'shipGroup'; label: string; icon: IconName; soon?: boolean; children?: Item[] }
 const ITEMS: Item[] = [
   { id: 'sales', label: 'nav.sales', icon: 'storefront-outline' },
@@ -98,6 +132,8 @@ interface MenuProps {
   onNavigate: (r: Route) => void;
   /** ช่องค้นหาด้านบนเมนู (หน้าประวัติการขายใช้ค้นหาบิล) */
   header?: ReactNode;
+  /** แบบย่อ: ไอคอนอย่างเดียว (ชี้เมาส์เพื่อดูชื่อเมนู) */
+  mini?: boolean;
 }
 
 /** เมนูที่บทบาทนี้เห็น (กลุ่มเมนูเหลือเฉพาะลูกที่เปิดได้) */
@@ -110,7 +146,7 @@ function visibleItems(me: Me): Item[] {
 }
 
 /** รายการเมนู + ส่วนท้าย ใช้ร่วมกันทั้ง sidebar และ drawer */
-export function NavMenu({ route, onNavigate, header }: MenuProps) {
+export function NavMenu({ route, onNavigate, header, mini, showCollapse }: MenuProps & { /** มีปุ่มย่อเมนู (เฉพาะเมนูด้านซ้าย ไม่ใช่เมนูมือถือ) */ showCollapse?: boolean }) {
   const { me, logout } = useSession();
   const { t, lang, setLang } = useT();
   const badge = useStockBadge();
@@ -124,8 +160,107 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
   const stockBadgeView = (on: boolean) =>
     badge > 0 ? (
       // จุดแดงเล็ก ๆ = มีสินค้าเหลือน้อย/หมด (จำนวนดูได้ที่หน้าสต็อก · ตัวอ่านหน้าจอยังอ่านจำนวนได้)
-      <View style={[s.dot, on && { backgroundColor: '#fff' }]} accessibilityLabel={`สินค้าเหลือน้อยหรือหมด ${badge} รายการ`} />
+      <View style={[s.dot, mini && s.dotMini, on && { backgroundColor: '#fff' }]} accessibilityLabel={`สินค้าเหลือน้อยหรือหมด ${badge} รายการ`} />
     ) : null;
+  if (mini) {
+    return (
+      <View style={[s.menu, { gap: 10 }]}>
+        <BranchChip iconOnly />
+        <ScrollView style={s.items} contentContainerStyle={{ gap: 8 }} showsVerticalScrollIndicator={false}>
+          {visibleItems(me).map((it) => {
+            if (it.children) {
+              const expanded = isOpen(it);
+              const inGroup = it.children.some((c) => c.id === route);
+              return (
+                <View key={it.id} style={{ gap: 6 }}>
+                  <Pressable
+                    onPress={() => toggle(it)}
+                    ref={(el) => webTitle(el, t(it.label))}
+                    style={({ hovered }: { hovered?: boolean }) => [s.miniItem, inGroup && s.groupOn, hovered && !inGroup && s.itemHover]}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded }}
+                    accessibilityLabel={`${t(it.label)} — ${expanded ? 'ย่อ' : 'แสดง'}เมนูย่อย`}
+                  >
+                    <Icon name={it.icon} size={21} color={inGroup ? colors.primary : colors.text} />
+                    {it.id === 'stockGroup' && !expanded ? stockBadgeView(false) : null}
+                  </Pressable>
+                  {expanded ? (
+                    <View style={s.miniSub}>
+                      {it.children.map((c) => {
+                        const on = c.id === route;
+                        return (
+                          <Pressable
+                            key={c.id}
+                            onPress={() => onNavigate(c.id as Route)}
+                            ref={(el) => webTitle(el, t(c.label))}
+                            style={({ hovered }: { hovered?: boolean }) => [s.miniSubItem, on && s.itemOn, hovered && !on && s.itemHover]}
+                            accessibilityRole="link"
+                            accessibilityState={{ selected: on }}
+                            accessibilityLabel={t(c.label)}
+                          >
+                            <Icon name={c.icon} size={18} color={on ? '#fff' : colors.sub} />
+                            {c.id === 'stock' ? stockBadgeView(on) : null}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+                </View>
+              );
+            }
+            const on = it.id === route;
+            return (
+              <Pressable
+                key={it.id}
+                disabled={it.soon}
+                onPress={() => onNavigate(it.id as Route)}
+                ref={(el) => webTitle(el, t(it.label))}
+                style={({ hovered }: { hovered?: boolean }) => [s.miniItem, on && s.itemOn, hovered && !on && !it.soon && s.itemHover]}
+                accessibilityRole="link"
+                accessibilityState={{ selected: on, disabled: it.soon }}
+                accessibilityLabel={t(it.label)}
+              >
+                <Icon name={it.icon} size={21} color={on ? '#fff' : it.soon ? colors.faint : colors.text} />
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+        {/* ภาษา: กดสลับ TH ⇄ EN */}
+        <Pressable
+          onPress={() => setLang(LANGS[(LANGS.findIndex((l) => l.id === lang) + 1) % LANGS.length].id)}
+          ref={(el) => webTitle(el, LANGS.find((l) => l.id === lang)?.label ?? '')}
+          style={({ hovered }: { hovered?: boolean }) => [s.miniLang, hovered && s.itemHover]}
+          accessibilityLabel={`ภาษา ${LANGS.find((l) => l.id === lang)?.label ?? ''} — กดเพื่อสลับ`}
+        >
+          <Icon name="language-outline" size={14} color={colors.sub} />
+          <Text style={s.langText}>{LANGS.find((l) => l.id === lang)?.short}</Text>
+        </Pressable>
+        <View style={s.avatarWrap} ref={(el) => webTitle(el, `${me.name} · ${t(`role.${me.role}`)}`)}>
+          <View style={s.avatar}>
+            <Text style={s.avatarText}>{me.name.slice(0, 1)}</Text>
+          </View>
+        </View>
+        <Pressable
+          onPress={logout}
+          ref={(el) => webTitle(el, t('nav.logout'))}
+          style={({ hovered }: { hovered?: boolean }) => [s.miniItem, { height: 40, backgroundColor: 'transparent' }, hovered && { backgroundColor: colors.dangerSoft }]}
+          accessibilityLabel="ออกจากระบบ"
+        >
+          <Icon name="log-out-outline" size={19} color={colors.danger} />
+        </Pressable>
+        <UpdateButton compact />
+        {showCollapse ? <Pressable
+          onPress={toggleNavMode}
+          ref={(el) => webTitle(el, t('ขยายเมนู'))}
+          style={({ hovered }: { hovered?: boolean }) => [s.miniToggle, hovered && s.itemHover]}
+          accessibilityLabel="ขยายเมนู (แสดงชื่อเมนู)"
+        >
+          <Icon name="chevron-forward" size={18} color={colors.sub} />
+        </Pressable> : null}
+      </View>
+    );
+  }
+
   return (
     <View style={s.menu}>
       <BranchChip block />
@@ -225,19 +360,36 @@ export function NavMenu({ route, onNavigate, header }: MenuProps) {
       </View>
       <UpdateButton block />
       <View style={s.footer}>
-        <View style={s.footRow}>
+        <View style={[s.footRow, { alignItems: 'center' }]}>
           <Text style={s.footChip}>v0.4</Text>
           <AppVersionChip style={s.footChip} />
+          {showCollapse ? (
+            <Pressable
+              onPress={toggleNavMode}
+              ref={(el) => webTitle(el, t('ย่อเมนู'))}
+              style={({ hovered }: { hovered?: boolean }) => [s.collapse, hovered && s.itemHover]}
+              accessibilityLabel="ย่อเมนู (ไอคอนอย่างเดียว)"
+            >
+              <Icon name="chevron-back" size={16} color={colors.sub} />
+              <Text style={s.collapseText}>{t('ย่อเมนู')}</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </View>
   );
 }
 
-export function Sidebar(props: MenuProps & { width?: number }) {
+/** ความกว้างเมนูแบบย่อ */
+export const RAIL_W = 76;
+
+/** forceMini = แบบย่อเสมอ (หน้าขาย — พื้นที่สินค้า/ตะกร้าสำคัญกว่า · ดูชื่อเมนูเต็มได้จากปุ่ม ☰) */
+export function Sidebar({ forceMini, ...props }: MenuProps & { width?: number; forceMini?: boolean }) {
+  const mode = useNavMode();
+  const mini = forceMini || mode === 'mini';
   return (
-    <View style={[s.sidebar, { width: props.width ?? 240 }]}>
-      <NavMenu {...props} />
+    <View style={[s.sidebar, mini ? s.sidebarMini : { width: props.width ?? 240 }, forceMini && { flex: 1 }]}>
+      <NavMenu {...props} mini={mini} showCollapse={!forceMini} />
     </View>
   );
 }
@@ -269,6 +421,16 @@ export function NavDrawer({ visible, onClose, ...props }: MenuProps & { visible:
 
 const s = StyleSheet.create({
   sidebar: { backgroundColor: colors.panel, borderRadius: radius.xl, padding: 12, minHeight: 0, overflow: 'hidden' },
+  sidebarMini: { width: 76, paddingHorizontal: 10 }, // = RAIL_W
+  miniItem: { height: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  miniSub: { gap: 6, alignItems: 'center', paddingVertical: 2, borderRadius: 14, backgroundColor: '#F7F9FC' },
+  miniSubItem: { width: 44, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  dotMini: { position: 'absolute', top: 8, right: 10 },
+  miniLang: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, height: 30, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line, backgroundColor: '#fff' },
+  avatarWrap: { alignItems: 'center' },
+  miniToggle: { height: 34, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', borderTopWidth: 1, borderTopColor: colors.line },
+  collapse: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: 2, height: 26, paddingHorizontal: 8, borderRadius: radius.pill },
+  collapseText: { fontFamily: font, fontSize: 11, color: colors.sub },
   menu: { flex: 1, gap: 12, minHeight: 0 },
   // flexGrow 1 = ดันส่วนผู้ใช้ลงล่างสุด · flexShrink + minHeight 0 = หดแล้วเลื่อนได้แทนการล้นทะลุจอ
   items: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minHeight: 0, marginHorizontal: -4, paddingHorizontal: 4 },

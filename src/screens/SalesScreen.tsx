@@ -1,9 +1,10 @@
 // หน้าขาย (หน้าหลัก): สินค้า · ตะกร้า · ชำระเงิน · พิมพ์ใบเสร็จ
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
 } from 'react-native';
 import { CartPanel } from '../components/CartPanel';
+import { RAIL_W, Sidebar, type Route } from '../components/NavMenu';
 import { CategoryTabs } from '../components/CategoryTabs';
 import { Icon } from '../components/Icon';
 import { OrdersModal } from '../components/OrdersModal';
@@ -41,13 +42,18 @@ function confirmAction(message: string, onYes: () => void) {
 
 interface Props {
   onMenu: () => void;
+  /** ไปหน้าอื่น (เมนูแบบย่อด้านซ้าย) */
+  onNavigate: (r: Route) => void;
   /** หน้าขายกำลังแสดงอยู่ */
   active: boolean;
   /** เพิ่มขึ้นเมื่อมีการแก้ไข/ยกเลิกบิล → โหลดสต็อกใหม่ */
   stockVersion: number;
 }
 
-export function SalesScreen({ onMenu, active, stockVersion }: Props) {
+/** จอกว้างพอ → แสดงเมนูแบบย่อ (ไอคอน) ติดด้านซ้ายของหน้าขาย */
+const RAIL_MIN_WIDTH = 1100;
+
+export function SalesScreen({ onMenu, onNavigate, active, stockVersion }: Props) {
   const pos = usePos();
   const firstStock = useRef(stockVersion);
   useEffect(() => {
@@ -61,7 +67,9 @@ export function SalesScreen({ onMenu, active, stockVersion }: Props) {
   useDefaultViewMode(settings.display.defaultView, setViewMode);
   // ลากขอบซ้ายของตะกร้าเพื่อปรับความกว้าง (จำไว้ในเครื่องนี้)
   const [cartWidth, setCartWidth] = useCartWidth();
-  const L = useResponsive(viewMode, cartWidth);
+  const { width: winW } = useWindowDimensions();
+  const rail = winW >= RAIL_MIN_WIDTH;
+  const L = useResponsive(viewMode, cartWidth, rail ? RAIL_W + 14 : 0);
   const wide = L.sideCart;
   const mobile = L.device === 'mobile';
 
@@ -332,8 +340,13 @@ export function SalesScreen({ onMenu, active, stockVersion }: Props) {
   );
 
   return (
-    <View style={s.root}>
-      <View style={[s.layout, { padding: L.pad, gap: 14 }]}>
+    <View style={[s.root, rail && { flexDirection: 'row' }]}>
+      {rail ? (
+        <View style={{ paddingVertical: L.pad, paddingLeft: L.pad, paddingRight: 14 }}>
+          <Sidebar route="sales" onNavigate={onNavigate} forceMini />
+        </View>
+      ) : null}
+      <View style={[s.layout, { padding: L.pad, gap: 14 }, rail && { flex: 1, minWidth: 0, paddingLeft: 0 }]}>
         {/* ---------- left: catalogue ---------- */}
         <View style={[s.left, mobile && { gap: 10 }]}>
           <TopBar

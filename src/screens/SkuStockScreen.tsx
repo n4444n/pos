@@ -4,7 +4,7 @@ import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, 
 import { api, imageSrc } from '../api';
 import { GarmentArt } from '../components/GarmentArt';
 import { Icon, type IconName } from '../components/Icon';
-import { NavDrawer, refreshStockBadge, Sidebar, type Route } from '../components/NavMenu';
+import { NavDrawer, refreshStockBadge, Sidebar, toggleNavMode, type Route } from '../components/NavMenu';
 import { Sheet } from '../components/Sheet';
 import { Barcode } from '../components/stock/Barcode';
 import { BarcodeLabelSheet } from '../components/stock/BarcodeLabelSheet';
@@ -459,7 +459,7 @@ export function SkuStockScreen({ onNavigate, onStockChanged }: Props) {
             {/* ---------- header ---------- */}
             <View style={s.header}>
               <View style={[s.row, { flexShrink: 1 }]}>
-                <Pressable style={s.iconBtn} onPress={() => (showSidebar ? setSidebarOpen((o) => !o) : setDrawer(true))} accessibilityLabel="เมนู">
+                <Pressable style={s.iconBtn} onPress={() => (showSidebar ? toggleNavMode() : setDrawer(true))} accessibilityLabel="เมนู">
                   <Icon name="menu-outline" size={24} color={colors.primary} />
                 </Pressable>
                 <View style={{ flexShrink: 1 }}>

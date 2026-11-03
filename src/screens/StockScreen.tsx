@@ -4,7 +4,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, Text
 import { api, imageSrc } from '../api';
 import { GarmentArt } from '../components/GarmentArt';
 import { Icon, type IconName } from '../components/Icon';
-import { NavDrawer, refreshStockBadge, Sidebar, type Route } from '../components/NavMenu';
+import { NavDrawer, refreshStockBadge, Sidebar, toggleNavMode, type Route } from '../components/NavMenu';
 import { ImportProductsSheet } from '../components/stock/ImportProductsSheet';
 import { ProductEditor } from '../components/stock/ProductEditor';
 import { Sheet } from '../components/Sheet';
@@ -177,7 +177,7 @@ export function StockScreen({ onNavigate, onStockChanged }: Props) {
             {/* ---------- header ---------- */}
             <View style={s.header}>
               <View style={s.row}>
-                <Pressable style={s.iconBtn} onPress={() => (showSidebar ? setSidebarOpen((o) => !o) : setDrawer(true))} accessibilityLabel="เมนู">
+                <Pressable style={s.iconBtn} onPress={() => (showSidebar ? toggleNavMode() : setDrawer(true))} accessibilityLabel="เมนู">
                   <Icon name="menu-outline" size={24} color={colors.primary} />
                 </Pressable>
                 <Text style={s.title}>สต็อกสินค้า</Text>

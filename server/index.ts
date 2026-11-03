@@ -40,7 +40,7 @@ import { stockXlsx } from './stockExport.ts';
 import { XLSX_TYPE } from './xlsx.ts';
 import { internalAllowed, shopStats } from './internal.ts';
 import { backupBuffer, backupFileName, dropUpload, newUploadPath, previewUpload, restoreBranches } from './backup.ts';
-import { docFloor } from './docFloor.ts';
+import { billNoSettings, nextBillNo, saveBillNo } from './billNo.ts';
 import { permCatalog, resetPerms, savePerms } from './perms.ts';
 import { availablePromos, bestAutoDiscount, createPromo, deletePromo, giftsFor, listPromos, previewFor, updatePromo } from './promos.ts';
 import { cancelShipment, createShipment, deleteShippedShipment, holdShipment, listShipments, restoreShipment, resumeShipment, scanShipment, setShipmentItem, shipmentDetail, shipShipment, updateShipment } from './shipments.ts';
@@ -82,7 +82,6 @@ const q = {
   /** ตั้งค่า "ขายได้แม้สต็อกหมด" → ตัดสต็อกได้จนติดลบ */
   decStockAny: db.prepare('UPDATE variants SET stock = stock - ? WHERE id = ?'),
   stockOf: db.prepare('SELECT id, stock FROM variants WHERE id = ?'),
-  countToday: db.prepare(`SELECT COUNT(*) AS n FROM orders_all WHERE order_no LIKE ?`),
   insOrder: db.prepare(
     `INSERT INTO orders_all (order_no, customer_name, salesperson, order_type, subtotal, discount, vat, total,
                          promo_code, payment_method, cash_received, change_due, shift_id, fee, fee_payer,
@@ -107,21 +106,9 @@ const q = {
 };
 
 
-/**
- * เลขที่บิล: สาขาหลัก INV-251011-0001 · สาขาอื่นมีรหัสสาขา INV-B02-251011-0001 (ไม่ซ้ำกันข้ามสาขา)
- * ตั้งเครื่อง POS แล้ว → มีรหัสเครื่องด้วย INV-POS01-251011-0001 (เลขรันต่อเครื่อง ตามข้อกำหนดกรมสรรพากร)
- */
-function todayPrefix(t: Terminal | null) {
-  const d = new Date();
-  const p = (x: number) => String(x).padStart(2, '0');
-  const b = currentBranchInfo();
-  const code = b.isMain ? '' : `${b.code.replace(/[^A-Za-z0-9]/g, '') || b.id}-`;
-  return `INV-${code}${t ? `${t.code}-` : ''}${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}-`;
-}
+/** เลขที่บิล — รูปแบบตั้งแยกต่อสาขาที่ ตั้งค่า → เลขที่บิล (billNo.ts) */
 function nextOrderNo(t: Terminal | null = null) {
-  const prefix = todayPrefix(t);
-  const { n } = q.countToday.get(prefix + '%') as { n: number };
-  return prefix + String(Math.max(n, docFloor(prefix)) + 1).padStart(4, '0');
+  return nextBillNo(t);
 }
 
 
@@ -614,6 +601,8 @@ const server = createServer(async (req, res) => {
           return send(req, res, 200, file, XLSX_TYPE);
         }
       }
+      if (path === '/api/billno' && req.method === 'GET') { requireFeature(me, 'settings', 'view'); return json(req, res, 200, billNoSettings()); }
+      if (path === '/api/billno' && req.method === 'PUT') { requireFeature(me, 'settings', 'edit'); return json(req, res, 200, saveBillNo((await readBody(req)) as Record<string, unknown>)); }
       if (path === '/api/settings' && req.method === 'GET') { requireFeature(me, 'settings', 'view'); return json(req, res, 200, { settings: forAdmin(), keys: listKeys() }); }
       {
         const sm2 = /^\/api\/settings\/([a-z]+)$/.exec(path);
