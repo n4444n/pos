@@ -146,7 +146,7 @@ function Main({ me }: { me: Me }) {
     <>
       {/* หน้าขายไม่ถูก unmount → ตะกร้าที่ค้างไว้ไม่หายเมื่อสลับไปดูประวัติ */}
       <View style={{ flex: 1, display: route === 'sales' ? 'flex' : 'none' }}>
-        <SalesScreen onMenu={() => setDrawer(true)} active={route === 'sales'} stockVersion={stockVersion} />
+        <SalesScreen onMenu={() => setDrawer(true)} onNavigate={go} active={route === 'sales'} stockVersion={stockVersion} />
       </View>
       {route === 'history' ? (
         <HistoryScreen onNavigate={go} onStockChanged={() => setStockVersion((v) => v + 1)} />

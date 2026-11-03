@@ -240,6 +240,9 @@ export const api = {
   restoreShipment: (id: number) => request<ShipmentDetail>(`/api/shipments/${id}/restore`, { method: 'POST' }),
   /** ลบใบที่ส่งออกแล้วถาวร พร้อมคืนสต็อกกลับที่เดิม */
   deleteShipment: (id: number) => request<{ ok: true; docNo: string; items: number }>(`/api/shipments/${id}`, { method: 'DELETE' }),
+  // ----- เลขที่บิล (ตั้งแยกต่อสาขา) -----
+  billNo: () => request<BillNoAdmin>('/api/billno'),
+  saveBillNo: (f: BillFormat | { reset: true }) => request<BillNoAdmin>('/api/billno', { method: 'PUT', body: JSON.stringify(f) }),
   // ----- ภาษีมูลค่าเพิ่ม -----
   tax: () => request<TaxAdmin>('/api/tax'),
   taxCompany: (b: { legalName?: string; taxId?: string; lockEdit?: boolean }) => request<TaxAdmin>('/api/tax/company', { method: 'PUT', body: JSON.stringify(b) }),
@@ -661,4 +664,18 @@ export interface ProductReport {
   range: { from: string; to: string }; mode: 'product' | 'sku'; soldOnly: boolean; sort: string; dir: 'asc' | 'desc';
   page: number; pages: number; limit: number; rows: ProductReportRow[];
   total: { rows: number; units: number; sales: number; cost: number; profit: number; stock: number };
+}
+
+/** รูปแบบเลขที่บิลของสาขา */
+export interface BillFormat { prefix: string; branchCode: boolean; terminalCode: boolean; date: 'ymd' | 'ym' | 'y' | 'none'; digits: number; sep: '-' | '' }
+export interface BillNoAdmin {
+  branch: { id: number; name: string; code: string; isMain: boolean };
+  /** ตั้งเองแล้ว (false = ใช้รูปแบบเดิม) */
+  custom: boolean;
+  format: BillFormat;
+  defaults: BillFormat;
+  /** รหัสเครื่อง POS ของสาขานี้ */
+  terminals: string[];
+  next: string;
+  nextTerminal: string | null;
 }

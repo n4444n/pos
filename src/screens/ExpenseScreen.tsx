@@ -7,7 +7,7 @@ import {
 } from '../api';
 import { DateField } from '../components/DateField';
 import { Icon, type IconName } from '../components/Icon';
-import { NavDrawer, Sidebar, type Route } from '../components/NavMenu';
+import { NavDrawer, Sidebar, toggleNavMode, type Route } from '../components/NavMenu';
 import { CashMoveDialog } from '../components/shift/CashMoveDialog';
 import { Sheet } from '../components/Sheet';
 import { resizeToDataUrl } from '../components/stock/ImagePicker';
@@ -134,7 +134,7 @@ export function ExpenseScreen({ onNavigate, onDrawerChanged }: Props) {
         {/* ---------- header ---------- */}
         <View style={s.header}>
           <View style={[s.row, { flexShrink: 1 }]}>
-            <Pressable style={s.iconBtn} onPress={() => (showSidebar ? setSidebarOpen((o) => !o) : setDrawerNav(true))} accessibilityLabel="เมนู">
+            <Pressable style={s.iconBtn} onPress={() => (showSidebar ? toggleNavMode() : setDrawerNav(true))} accessibilityLabel="เมนู">
               <Icon name="menu-outline" size={24} color={colors.primary} />
             </Pressable>
             <View style={{ flexShrink: 1 }}>

@@ -1,10 +1,12 @@
 // ป้ายบอก "ตอนนี้อยู่สาขาไหน" + หน้าต่างเลือกสาขา (ทุกสาขาอยู่ในเว็บเดียวกัน → กดเพื่อสลับสาขา)
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { api, imageSrc, type Branch } from '../api';
 import { DEFAULT_SETTINGS, getAppSettings, setAppSettings, useAppSettings } from '../appSettings';
 import { colors, font, radius } from '../theme';
 import { Icon } from './Icon';
+import { reloadPage } from '../reload';
+import { webTitle } from '../webTitle';
 
 type Item = Branch & { current: boolean };
 
@@ -19,11 +21,11 @@ try {
 /** สลับสาขา แล้วโหลดหน้าใหม่ (สินค้า สต็อก ราคา บิล กะ เปลี่ยนเป็นของสาขานั้นทั้งหมด) */
 export async function switchToBranch(id: number) {
   await api.switchBranch(id);
-  if (Platform.OS === 'web') window.location.reload();
+  reloadPage();
 }
 
 /** ป้ายสาขาปัจจุบัน — กดเพื่อเปิดหน้าต่างเลือกสาขา */
-export function BranchChip({ compact, block }: { compact?: boolean; block?: boolean }) {
+export function BranchChip({ compact, block, iconOnly }: { compact?: boolean; block?: boolean; /** เมนูแบบย่อ: ไอคอนอย่างเดียว */ iconOnly?: boolean }) {
   const { shop } = useAppSettings();
   const [open, setOpen] = useState(false);
   const label = shop.branchName || shop.name;
@@ -44,6 +46,23 @@ export function BranchChip({ compact, block }: { compact?: boolean; block?: bool
       },
     );
   }, []);
+  if (iconOnly) {
+    return (
+      <>
+        <Pressable
+          onPress={() => setOpen(true)}
+          ref={(el) => webTitle(el, `${label}${shop.branchCode ? ` (${shop.branchCode})` : ''}`)}
+          style={({ hovered }: { hovered?: boolean }) => [s.chipMini, hovered && { backgroundColor: '#E0E9FF' }]}
+          accessibilityLabel={`สาขาปัจจุบัน ${label}${shop.branchCode ? ` รหัส ${shop.branchCode}` : ''} — กดเพื่อเลือกสาขา`}
+        >
+          <View style={s.chipIcon}>
+            <Icon name="location" size={14} color="#fff" />
+          </View>
+        </Pressable>
+        <BranchPicker visible={open} onClose={() => setOpen(false)} />
+      </>
+    );
+  }
   return (
     <>
       <Pressable
@@ -229,6 +248,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.primarySoft, maxWidth: 260, minWidth: 0,
   },
   chipBlock: { maxWidth: '100%', height: 50, borderRadius: radius.md, paddingLeft: 8, marginBottom: 12 },
+  chipMini: { height: 50, borderRadius: 14, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   chipIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   chipCaption: { fontFamily: font, fontSize: 10, color: colors.sub },
   chipText: { fontFamily: font, fontSize: 13, fontWeight: '600', color: colors.primary },

@@ -7,7 +7,7 @@ import { isoDate } from '../../format';
 import { colors, font, radius } from '../../theme';
 import { DateField } from '../DateField';
 import { Icon, type IconName } from '../Icon';
-import { NavDrawer, Sidebar, type Route } from '../NavMenu';
+import { NavDrawer, Sidebar, toggleNavMode, type Route } from '../NavMenu';
 import { Sheet } from '../Sheet';
 import { downloadFile } from '../../download';
 
@@ -167,7 +167,7 @@ export function ReportPage({ route, title, sub, onNavigate, right, children }: {
       <View style={[k.main, mobile && { padding: 10 }]}>
         <View style={k.header}>
           <View style={[k.row, { flexShrink: 1 }]}>
-            <Pressable style={k.iconBtn} onPress={() => (showSidebar ? setSidebarOpen((o) => !o) : setDrawer(true))} accessibilityLabel="เมนู">
+            <Pressable style={k.iconBtn} onPress={() => (showSidebar ? toggleNavMode() : setDrawer(true))} accessibilityLabel="เมนู">
               <Icon name="menu-outline" size={24} color={colors.primary} />
             </Pressable>
             <View style={{ flexShrink: 1 }}>

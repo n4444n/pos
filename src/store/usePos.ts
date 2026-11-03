@@ -4,6 +4,7 @@ import { api, ApiError, type HeldBill } from '../api';
 import { allowNegativeStock, feeOf, sellableStock, setAppSettings, useAppSettings } from '../appSettings';
 import { computeTotals, variantLabel } from '../format';
 import { useSession } from '../session';
+import { reloadIntended } from '../reload';
 import type { Bootstrap, CartLine, Order, PaymentMethod, Product, Promo, Variant } from '../types';
 
 // ---------------- ตะกร้าค้าง (กันรีเฟรช/ปิดแท็บโดยไม่ตั้งใจ) ----------------
@@ -191,6 +192,7 @@ export function usePos() {
   useEffect(() => {
     if (cart.length === 0 || typeof window === 'undefined' || !window.addEventListener) return;
     const warn = (e: BeforeUnloadEvent) => {
+      if (reloadIntended()) return; // ระบบโหลดหน้าใหม่เอง (สลับสาขา) — ตะกร้าเก็บไว้แล้ว ไม่ต้องเตือน
       e.preventDefault();
       e.returnValue = '';
       return '';

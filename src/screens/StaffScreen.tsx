@@ -6,7 +6,7 @@ import {
 import { api, type Branch, type StaffMember } from '../api';
 import { Chips, FieldLabel } from '../components/history/Chips';
 import { Icon } from '../components/Icon';
-import { NavDrawer, Sidebar, type Route } from '../components/NavMenu';
+import { NavDrawer, Sidebar, toggleNavMode, type Route } from '../components/NavMenu';
 import { PermissionsSheet } from '../components/PermissionsSheet';
 import { Sheet } from '../components/Sheet';
 import { ToastView } from '../components/ToastView';
@@ -58,7 +58,7 @@ export function StaffScreen({ onNavigate }: { onNavigate: (r: Route) => void }) 
       <View style={[s.main, mobile && { padding: 10 }]}>
         <View style={s.header}>
           <View style={s.row}>
-            <Pressable style={s.iconBtn} onPress={() => (showSidebar ? setSidebarOpen((o) => !o) : setDrawer(true))} accessibilityLabel="เมนู">
+            <Pressable style={s.iconBtn} onPress={() => (showSidebar ? toggleNavMode() : setDrawer(true))} accessibilityLabel="เมนู">
               <Icon name="menu-outline" size={24} color={colors.primary} />
             </Pressable>
             <Text style={s.title}>
