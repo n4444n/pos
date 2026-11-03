@@ -18,6 +18,7 @@ DL_HASH_FILE=/etc/pos/download-hash
 apply() { # $1 = template
   local d k h tmp
   d=$(domain); k=$(cat "$KEY_FILE" 2>/dev/null || true); h=$(cat "$DL_HASH_FILE" 2>/dev/null || true)
+  mkdir -p /var/www/pos-app   # ปลายทางของ /app/* (แอปมือถือ) — ไม่มีโฟลเดอร์ Caddy จะ log error ทุกคำขอ
   tmp=$(mktemp)
   sed -e "s/{\$POS_DOMAIN}/$d/g" -e "s/{\$POS_APP_KEY}/$k/g" -e "s|{\$POS_DL_HASH}|$h|g" "$1" > "$tmp"
   # ยังไม่ตั้งรหัสดาวน์โหลด → ไม่เปิดหน้าดาวน์โหลด

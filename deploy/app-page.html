@@ -1,0 +1,66 @@
+<!doctype html>
+<!-- หน้าดาวน์โหลดแอปมือถือ — ติดตั้งด้วย: bash /opt/pos/deploy/mobile-app.sh <ไฟล์.apk>
+     {{VERSION}} / {{SIZE}} / {{DATE}} ถูกแทนที่ตอนติดตั้ง -->
+<html lang="th">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Tally — แอปรายงาน Clothing POS</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f6f8; --card: #fff; --text: #16181d; --sub: #666d7a;
+    --line: #e3e6ea; --primary: #2f6bff; --warn-soft: #fff3df; --warn: #a75d00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15171c; --card: #1d2026; --text: #eceef2; --sub: #99a1ad;
+            --line: #2c313a; --primary: #6d8ff5; --warn-soft: #3a2c14; --warn: #f0ad4e; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px 48px; background: var(--bg); color: var(--text);
+         font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.6; }
+  .wrap { max-width: 460px; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; }
+  h1 { margin: 0 0 4px; font-size: 21px; }
+  .sub { color: var(--sub); font-size: 14px; margin: 0; }
+  .meta { display: flex; gap: 18px; margin: 18px 0; padding: 14px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 13px; }
+  .meta div { flex: 1; }
+  .meta span { display: block; color: var(--sub); font-size: 12px; }
+  .meta b { font-size: 15px; }
+  a.dl { display: block; margin: 0 0 6px; padding: 15px; border-radius: 12px; background: var(--primary);
+         color: #fff; text-align: center; font-weight: 600; font-size: 16px; text-decoration: none; }
+  .note { font-size: 12px; color: var(--sub); text-align: center; }
+  ol { margin: 22px 0 0; padding-left: 20px; font-size: 14px; }
+  ol li { margin-bottom: 9px; }
+  .warn { margin-top: 18px; padding: 12px 14px; border-radius: 10px; background: var(--warn-soft); color: var(--warn); font-size: 13px; }
+  .ios { margin-top: 16px; font-size: 13px; color: var(--sub); }
+</style>
+<div class="wrap">
+  <div class="card">
+    <h1>Tally</h1>
+    <p class="sub">แอปดูรายงานยอดขายบนมือถือ สำหรับร้านที่ใช้ Clothing POS</p>
+
+    <div class="meta">
+      <div><span>เวอร์ชัน</span><b>{{VERSION}}</b></div>
+      <div><span>ขนาด</span><b>{{SIZE}}</b></div>
+      <div><span>อัปเดต</span><b>{{DATE}}</b></div>
+    </div>
+
+    <a class="dl" href="clothing-pos.apk" download>ดาวน์โหลดสำหรับ Android</a>
+    <p class="note">ไฟล์ .apk · Android 8.0 ขึ้นไป</p>
+
+    <ol>
+      <li>กดปุ่มด้านบน รอดาวน์โหลดจนเสร็จ</li>
+      <li>เปิดไฟล์ที่ดาวน์โหลด — เครื่องจะถามว่าอนุญาตให้ติดตั้งจากแหล่งนี้ไหม กด <b>อนุญาต</b> แล้วกดติดตั้ง</li>
+      <li>เปิดแอป กรอก <b>รหัส license</b> ตัวเดียวกับที่ใช้ในโปรแกรมหน้าร้าน (ขึ้นต้นด้วย POS-)</li>
+      <li>ใส่ <b>PIN พนักงาน</b> ของตัวเอง แล้วใช้งานได้เลย</li>
+    </ol>
+
+    <div class="warn">
+      มือถือแต่ละเครื่องนับเป็น 1 เครื่องของ license — ถ้าขึ้นว่าใช้ครบแล้ว ติดต่อผู้ดูแลระบบเพื่อเพิ่มจำนวนเครื่อง
+    </div>
+
+    <p class="ios">ยังไม่มีเวอร์ชัน iPhone</p>
+  </div>
+</div>
+</html>

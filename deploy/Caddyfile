@@ -15,6 +15,16 @@
 		}
 		# DOWNLOAD-END
 
+		# APP-BEGIN — หน้าดาวน์โหลดแอปมือถือ (QR ในโปรแกรม .exe ชี้มาที่นี่ · ไม่มีรหัสผ่าน)
+		handle_path /app/* {
+			root * /var/www/pos-app
+			@apk path *.apk
+			# ไม่ตั้ง MIME นี้ Android บางรุ่นจะมองเป็นไฟล์ขยะ เปิดตัวติดตั้งไม่ขึ้น
+			header @apk Content-Type application/vnd.android.package-archive
+			file_server
+		}
+		# APP-END
+
 		# ไฟล์อัปเดตแอปเดสก์ท็อป (electron-updater: latest.yml + Setup.exe)
 		handle_path /updates/* {
 			root * /var/www/pos-updates

@@ -7,11 +7,15 @@
 	route {
 		# ผ่านได้เฉพาะ: แอปที่มีกุญแจ (X-POS-App) · ระบบภายนอกที่ใช้ API key · ลิงก์ "เปิดระบบร้าน" จากแผงควบคุม (/shop/…)
 		# · เบราว์เซอร์ที่ถือ cookie ดูร้าน (มีลายเซ็นของเซิร์ฟเวอร์ ปลอมเองไม่ได้) · หน้าดาวน์โหลด (มีรหัสผ่านของตัวเอง)
+		# · แอปมือถือ (X-POS-Shop) — ไม่มีกุญแจเพราะ APK แกะได้ ด่านจริงคือเซิร์ฟเวอร์ license: ตรวจ license + เครื่องที่ลงทะเบียน + PIN
+		# · /api/activate · /api/check — ตอนกรอก license แอปยังไม่รู้จักร้าน จึงยังไม่มี X-POS-Shop ให้ส่ง
+		# · /app/* — หน้าดาวน์โหลดแอปมือถือ (สแกน QR จากมือถือ ใส่รหัสผ่านไม่ได้ · ตัว APK เปล่าไม่ให้สิทธิ์อะไร)
 		@blocked {
 			not header X-POS-App "{$POS_APP_KEY}"
 			not header X-API-Key *
+			not header X-POS-Shop *
 			not header Cookie *pos_shop=*
-			not path /download/* /shop/*
+			not path /download/* /shop/* /app/* /api/activate /api/check
 		}
 		respond @blocked "Clothing POS - ใช้งานได้เฉพาะผ่านโปรแกรมที่ติดตั้งในร้าน" 403 {
 			close
@@ -26,6 +30,16 @@
 			file_server
 		}
 		# DOWNLOAD-END
+
+		# APP-BEGIN — หน้าดาวน์โหลดแอปมือถือ (QR ในโปรแกรม .exe ชี้มาที่นี่ · ไม่มีรหัสผ่าน)
+		handle_path /app/* {
+			root * /var/www/pos-app
+			@apk path *.apk
+			# ไม่ตั้ง MIME นี้ Android บางรุ่นจะมองเป็นไฟล์ขยะ เปิดตัวติดตั้งไม่ขึ้น
+			header @apk Content-Type application/vnd.android.package-archive
+			file_server
+		}
+		# APP-END
 
 		# ไฟล์อัปเดตแอปเดสก์ท็อป (electron-updater: latest.yml + Setup.exe)
 		handle_path /updates/* {
