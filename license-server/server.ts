@@ -388,6 +388,39 @@ function useViewToken(t: string, slug: string) {
   return v.exp > Date.now() && v.slug === slug;
 }
 
+// ---------------------------------------------------------------- หน้าดาวน์โหลดแอปมือถือ /app
+// บน VPS ปกติ Caddy เสิร์ฟ /app/* ให้ก่อนถึงตรงนี้ (deploy/Caddyfile) — ตัวนี้เป็นตัวสำรอง
+// และเป็นตัวที่ใช้จริงตอนทดสอบบนเครื่องตัวเอง (ไม่มี Caddy) ให้ QR ในแอปใช้งานได้เหมือนของจริง
+const APP_DIR = process.env.APP_DIR ?? (existsSync('/var/www/pos-app') ? '/var/www/pos-app' : join(HERE, 'data', 'app'));
+const APP_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.apk': 'application/vnd.android.package-archive', // ไม่ตั้งอันนี้ Android บางรุ่นเปิดตัวติดตั้งไม่ขึ้น
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+};
+function serveApp(res: ServerResponse, p: string) {
+  const rel = p.replace(/^\/app\/?/, '') || 'index.html';
+  if (rel.includes('..') || rel.includes('\\') || rel.startsWith('/')) return json(res, 400, { ok: false, error: 'ชื่อไฟล์ไม่ถูกต้อง' });
+  const file = join(APP_DIR, rel);
+  if (!existsSync(file) || !statSync(file).isFile()) {
+    // ตอบเป็นหน้าเว็บ ไม่ใช่ JSON — คนที่มาถึงตรงนี้คือพนักงานที่เพิ่งสแกน QR ด้วยมือถือ
+    const body = `<!doctype html><html lang="th"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ยังไม่มีไฟล์ติดตั้ง</title><body style="margin:0;padding:40px 20px;font-family:system-ui,sans-serif;line-height:1.7;color:#16181d;background:#f5f6f8">
+<div style="max-width:420px;margin:0 auto;background:#fff;border-radius:16px;padding:24px">
+<h1 style="margin:0 0 8px;font-size:19px">ยังไม่มีไฟล์ติดตั้งแอปมือถือ</h1>
+<p style="margin:0;color:#666d7a;font-size:14px">ผู้ดูแลระบบยังไม่ได้วางไฟล์ติดตั้ง — แจ้งผู้ดูแลแล้วลองใหม่อีกครั้ง</p>
+<p style="margin:18px 0 0;font-size:12px;color:#9aa1ad">สำหรับผู้ดูแล: วางไฟล์ไว้ที่ ${APP_DIR}<br>บนเซิร์ฟเวอร์ใช้คำสั่ง bash deploy/mobile-app.sh &lt;ไฟล์.apk&gt;</p>
+</div></body></html>`;
+    res.writeHead(404, { ...SEC_HEADERS, 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(body);
+  }
+  const ext = rel.slice(rel.lastIndexOf('.')).toLowerCase();
+  res.writeHead(200, { ...SEC_HEADERS, 'Content-Type': APP_TYPES[ext] ?? 'application/octet-stream', 'Content-Length': statSync(file).size });
+  createReadStream(file).pipe(res);
+}
+
 // ---------------------------------------------------------------- HTTP
 const ADMIN_HTML = readFileSync(join(HERE, 'admin.html'));
 const ADMIN_CSP =
@@ -484,6 +517,9 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && p === '/api/activate') return json(res, 200, await activate(await readBody(req), ip, base));
     if (req.method === 'POST' && p === '/api/check') return json(res, 200, await check(await readBody(req), ip, base));
     if (req.method === 'GET' && p === '/api/health') return json(res, 200, { ok: true, mode: prov.mode });
+
+    // ---- หน้าดาวน์โหลดแอปมือถือ (QR ในแอป .exe ชี้มาที่นี่) — ไม่ต้องล็อกอิน พนักงานสแกนจากมือถือได้เลย
+    if (req.method === 'GET' && (p === '/app' || p.startsWith('/app/'))) return serveApp(res, p);
 
     // ---- ประตูเข้าร้าน (โดเมนของแอป — โหมดทดสอบใช้โดเมนเดียวกับแผงควบคุม)
     if (!ADMIN_DOMAIN || !adminSide) {
