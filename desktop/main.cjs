@@ -200,10 +200,24 @@ async function licenseCall(endpoint, code) {
     return { ok: false, error: `ติดต่อเซิร์ฟเวอร์ license ไม่ได้ — ตรวจอินเทอร์เน็ต (${e.message})`, code: 'NETWORK' };
   }
 }
+/** IP ของเครื่องนี้ในวง LAN (ใช้ตอนทดสอบบนเครื่องตัวเอง — มือถือเข้า localhost ของเครื่องอื่นไม่ได้) */
+function lanIp() {
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const n of list ?? []) if (n.family === 'IPv4' && !n.internal) return n.address;
+  }
+  return '';
+}
 /** หน้าดาวน์โหลดแอปมือถือ (QR ในหน้าเปิดใช้งาน / ตั้งค่า) — โดเมนเดียวกับประตูร้าน ทุกร้านอยู่หลังประตูเดียว */
 function mobileAppUrl() {
   try {
-    return new URL('/app', licenseServer() || DEFAULT_SERVER).href;
+    const u = new URL('/app', licenseServer() || DEFAULT_SERVER);
+    if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
+      // โหมดทดสอบ: สแกน localhost จากมือถือไม่ได้ → ใช้ IP ในวง LAN · ไม่มีวง LAN ก็ไม่ต้องโชว์ QR
+      const lan = lanIp();
+      if (!lan) return '';
+      u.hostname = lan;
+    }
+    return u.href;
   } catch {
     return '';
   }
