@@ -217,18 +217,28 @@ function detectPrimaryIp() {
     });
   } catch {}
 }
-const VIRTUAL_NIC = /virtual|vmware|vbox|hyper-v|loopback|docker|wsl|nox|mumu|ldplayer|bluestacks|tap|tunnel/i;
+const VIRTUAL_NIC = /virtual|vmware|vbox|hyper-v|loopback|docker|wsl|nox|mumu|ldplayer|bluestacks|tap|tunnel|tailscale|zerotier|wireguard|\bwg\d|vpn|radmin|hamachi/i;
+/** คะแนนความเป็น "วง Wi-Fi ที่มือถืออยู่ด้วย" — ยิ่งมากยิ่งน่าจะใช่ · 0 = ใช้ไม่ได้ */
+function ipScore(ip, name) {
+  if (/^169\.254\./.test(ip)) return 0; // ไม่ได้ IP จาก router
+  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip)) return 0; // Tailscale / CGNAT — มือถือเข้าไม่ได้ถ้าไม่ได้อยู่วงเดียวกัน
+  if (VIRTUAL_NIC.test(name)) return 1; // การ์ดเสมือน — ใช้เป็นตัวเลือกสุดท้าย
+  if (/^192\.168\./.test(ip)) return 4; // วงบ้าน/ออฟฟิศทั่วไป
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(ip)) return 3;
+  if (/^10\./.test(ip)) return 3;
+  return 2;
+}
 function lanIp() {
-  if (primaryIp) return primaryIp;
-  const all = Object.entries(os.networkInterfaces());
-  for (const [name, list] of all) {
-    if (VIRTUAL_NIC.test(name)) continue;
-    for (const n of list ?? []) if (n.family === 'IPv4' && !n.internal) return n.address;
+  const cands = [];
+  for (const [name, list] of Object.entries(os.networkInterfaces())) {
+    for (const n of list ?? []) {
+      if (n.family !== 'IPv4' || n.internal) continue;
+      const score = ipScore(n.address, name);
+      if (score > 0) cands.push({ ip: n.address, score: score + (n.address === primaryIp ? 1 : 0) });
+    }
   }
-  for (const [, list] of all) {
-    for (const n of list ?? []) if (n.family === 'IPv4' && !n.internal) return n.address;
-  }
-  return '';
+  cands.sort((a, b) => b.score - a.score);
+  return cands.length ? cands[0].ip : '';
 }
 /** หน้าดาวน์โหลดแอปมือถือ (QR ในหน้าเปิดใช้งาน / ตั้งค่า) — โดเมนเดียวกับประตูร้าน ทุกร้านอยู่หลังประตูเดียว */
 function mobileAppUrl() {
