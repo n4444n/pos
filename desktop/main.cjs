@@ -200,9 +200,32 @@ async function licenseCall(endpoint, code) {
     return { ok: false, error: `ติดต่อเซิร์ฟเวอร์ license ไม่ได้ — ตรวจอินเทอร์เน็ต (${e.message})`, code: 'NETWORK' };
   }
 }
-/** IP ของเครื่องนี้ในวง LAN (ใช้ตอนทดสอบบนเครื่องตัวเอง — มือถือเข้า localhost ของเครื่องอื่นไม่ได้) */
+// IP ของเครื่องนี้ในวง LAN (ใช้ตอนทดสอบบนเครื่องตัวเอง — มือถือเข้า localhost ของเครื่องอื่นไม่ได้)
+// เครื่องนักพัฒนามักมีการ์ดเน็ตเสมือนหลายตัว (VirtualBox / VMware / Hyper-V / อีมูเลเตอร์ Android)
+// ซึ่งมี IP หน้าตาเหมือนวง LAN แต่มือถือเข้าไม่ได้ → ถามระบบว่าจะออกเน็ตทางไหน แล้วใช้การ์ดใบนั้น
+let primaryIp = '';
+function detectPrimaryIp() {
+  try {
+    const s = require('node:dgram').createSocket('udp4');
+    s.on('error', () => {
+      try { s.close(); } catch {}
+    });
+    // connect ของ UDP ไม่ส่งอะไรออกไปจริง แค่ให้ระบบเลือกเส้นทาง แล้วอ่านว่าใช้ IP ไหนออก
+    s.connect(53, '8.8.8.8', () => {
+      try { primaryIp = s.address().address; } catch {}
+      try { s.close(); } catch {}
+    });
+  } catch {}
+}
+const VIRTUAL_NIC = /virtual|vmware|vbox|hyper-v|loopback|docker|wsl|nox|mumu|ldplayer|bluestacks|tap|tunnel/i;
 function lanIp() {
-  for (const list of Object.values(os.networkInterfaces())) {
+  if (primaryIp) return primaryIp;
+  const all = Object.entries(os.networkInterfaces());
+  for (const [name, list] of all) {
+    if (VIRTUAL_NIC.test(name)) continue;
+    for (const n of list ?? []) if (n.family === 'IPv4' && !n.internal) return n.address;
+  }
+  for (const [, list] of all) {
     for (const n of list ?? []) if (n.family === 'IPv4' && !n.internal) return n.address;
   }
   return '';
@@ -957,6 +980,7 @@ app.on('second-instance', () => {
   }
 });
 app.whenReady().then(() => {
+  detectPrimaryIp(); // ไว้ทำ QR แอปมือถือตอนทดสอบ — รู้ผลก่อนถึงหน้าเปิดใช้งานแน่นอน
   installRequestHeaders();
   createWindow();
   setupUpdater();
