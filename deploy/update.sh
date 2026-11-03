@@ -37,8 +37,17 @@ systemctl daemon-reload
 
 echo "==> รีสตาร์ตเซิร์ฟเวอร์"
 systemctl restart pos
-sleep 3
-curl -fsS http://127.0.0.1:3000/api/health >/dev/null && echo "อัปเดต $OLD → $NEW สำเร็จ ✓" || { echo "เซิร์ฟเวอร์ไม่ตอบ — journalctl -u pos -n 50"; exit 1; }
+# รอจนกว่าจะพร้อม (ไม่เกิน 30 วินาที) — เครื่องช้าหรือฐานข้อมูลใหญ่อาจใช้เวลาเกิน 3 วินาที
+# เช็คครั้งเดียวแล้วบอกว่าล้มเหลวทั้งที่กำลังจะขึ้น ทำให้ตกใจเปล่า ๆ
+for i in $(seq 1 30); do
+  if curl -fsS http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
+    echo "อัปเดต $OLD → $NEW สำเร็จ ✓ (พร้อมใน $i วินาที)"
+    READY=1
+    break
+  fi
+  sleep 1
+done
+[ "${READY:-}" = 1 ] || { echo "เซิร์ฟเวอร์ไม่ตอบใน 30 วินาที — journalctl -u pos -n 50"; exit 1; }
 
 # ระบบ license + ร้านทดลอง (ถ้าติดตั้งไว้) — ร้านทดลองใช้โค้ดชุดเดียวกัน ต้องรีสตาร์ตด้วย
 if [ -f /etc/systemd/system/pos-license.service ]; then
