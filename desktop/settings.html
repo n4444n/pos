@@ -221,9 +221,10 @@
     $('defsrv').textContent = c.defaultServer;
     // QR ดาวน์โหลดแอปมือถือ — สร้างในเครื่อง ไม่ต้องต่อเน็ต (ซ่อนไว้ถ้ายังไม่ได้เปิดใช้งาน license)
     api.licenseState?.().then((s) => {
-      const svg = s && s.appUrl && typeof qrSvg === 'function' ? qrSvg(s.appUrl, '96px') : '';
-      if (!svg) return;
+      if (!s || !s.appUrl) return;
+      const svg = typeof qrSvg === 'function' ? qrSvg(s.appUrl, '96px') : '';
       $('appQr').innerHTML = svg;
+      $('appQr').hidden = !svg;
       $('appUrl').textContent = String(s.appUrl).replace(/^https?:\/\//, '');
       $('appCard').hidden = false;
     }).catch(() => {});
