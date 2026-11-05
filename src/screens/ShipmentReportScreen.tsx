@@ -501,7 +501,10 @@ function EditSheet({ row, onClose, onDone }: { row: ShipReportRow | null; onClos
               {`ใส่จำนวนที่ ${d.shipment.destBranchName ?? 'สาขาปลายทาง'} รับจริง · ใส่ 0 หรือกดลบ = เอารายการออก · บันทึกแล้วสต็อกยังไม่เปลี่ยน จนกว่าจะกด ปรับสต็อก`}
             </Text>
           </View>
-          <TextInput value={find} onChangeText={setFind} placeholder="ค้นหาสินค้า / สี / ไซส์ / รหัส" placeholderTextColor={colors.faint} style={k.search} />
+          {/* ช่องค้นหาอยู่ในแถว (flexBasis ของ k.search เป็นความกว้าง ไม่ใช่ความสูง) */}
+          <View style={k.row}>
+            <TextInput value={find} onChangeText={setFind} placeholder="ค้นหาสินค้า / สี / ไซส์ / รหัส" placeholderTextColor={colors.faint} style={[k.search, { flex: 1, minWidth: 200 }]} />
+          </View>
           <View style={s.table}>
             <View style={[s.tr, s.th]}>
               <Text style={[s.thText, { width: 36, textAlign: 'center' }]}>#</Text>
