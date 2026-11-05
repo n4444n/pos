@@ -675,7 +675,7 @@ const server = createServer(async (req, res) => {
             return json(req, res, 200, shipmentDetail(id));
           }
           requireFeature(me, 'shipments', 'edit');
-          // ลบใบที่ส่งออกแล้วถาวร พร้อมคืนสต็อกกลับที่เดิม
+          // ลบใบที่ส่งออกแล้วถาวร (ลบเอกสารอย่างเดียว ไม่แตะสต็อก)
           if (!sh[2] && req.method === 'DELETE') return json(req, res, 200, deleteShippedShipment(id, me));
           if (!sh[2] && req.method === 'PATCH') return json(req, res, 200, updateShipment(id, (await readBody(req)) as never));
           if (sh[2] === 'scan' && req.method === 'POST') return json(req, res, 200, scanShipment(id, (await readBody(req)) as never));

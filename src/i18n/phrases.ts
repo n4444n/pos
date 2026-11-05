@@ -1935,7 +1935,10 @@ export const PHRASES: Record<string, string> = {
  "สแกนสินค้าใส่ใบส่งของ → ส่งออก → ปลายทางตรวจรับ → ปรับสต็อก (ที่รายงานการส่ง)": "Scan items into the note → ship → destination checks → adjust stock (in the shipment report)",
  "สต็อกยังไม่เปลี่ยนตอนส่งออก — รอปลายทางตรวจรับ": "Stock doesn't change on shipping — awaiting destination check",
  "ส่งออกแล้วใบนี้ย้ายไปรายงานการส่ง · แก้ไขจำนวนตามที่ปลายทางรับจริง แล้วกด ปรับสต็อก ที่หน้านั้น": "After shipping, this note moves to the shipment report · edit quantities to what the destination received, then press Adjust stock there",
- "ตอนกด ปรับสต็อก (หลังส่งออก และปลายทางตรวจรับแล้ว) ระบบจะตัดสต็อกสาขาที่เลือก แล้วเพิ่มให้สาขาปลายทาง (โอนย้ายสต็อก)": "When you press Adjust stock (after shipping and the destination's check), the selected branch is deducted and the destination is added (stock transfer)"
+ "ตอนกด ปรับสต็อก (หลังส่งออก และปลายทางตรวจรับแล้ว) ระบบจะตัดสต็อกสาขาที่เลือก แล้วเพิ่มให้สาขาปลายทาง (โอนย้ายสต็อก)": "When you press Adjust stock (after shipping and the destination's check), the selected branch is deducted and the destination is added (stock transfer)",
+ "ลบเอกสารออกจากระบบถาวร เอาคืนไม่ได้ · สต็อกทุกสาขาคงเดิม (ไม่ดึงของกลับตามใบนี้)": "Permanently deletes the document; can't be undone · stock in every branch stays the same (nothing is pulled back)",
+ "ลบเอกสารออกจากระบบถาวร เอาคืนไม่ได้ · ใบนี้ยังไม่ได้ปรับสต็อก จึงไม่มีสต็อกสาขาใดเปลี่ยน": "Permanently deletes the document; can't be undone · this note wasn't adjusted, so no branch stock changes",
+ "แสดงเฉพาะใบที่ส่งออกแล้ว (ไม่รวมฉบับร่างและใบที่ยกเลิก) ตามวันที่ส่ง · กดแถวหรือปุ่ม ดู เพื่อเปิดใบส่งของ · ส่งออกแล้วสต็อกยังไม่เปลี่ยน จนกว่าจะกด ปรับสต็อก (ถ้าปลายทางนับได้ไม่ตรงกับกระดาษ กด แก้ไข ก่อน) · ปุ่มลบ = ลบเอกสารอย่างเดียว สต็อกไม่เปลี่ยน": "Shows shipped notes only (excludes drafts and cancelled) by ship date · tap a row or View to open · stock doesn't change after shipping until you press Adjust stock (if the destination's count differs from the paper, press Edit first) · Delete removes the document only; stock doesn't change"
 };
 
 /** ข้อความที่มีค่าแทรก — {0} {1} … */
@@ -2357,4 +2360,5 @@ export const PATTERNS: [string, string][] = [["ใช้โปรโมชั่
 ["ส่งถึง {0}", "Ship to {0}"],
 ["ตอนปรับสต็อก: ตัดสต็อก {0} → เพิ่มสต็อก {1}", "On stock adjustment: deduct from {0} → add to {1}"],
 ["ตอนปรับสต็อก: เพิ่มสต็อก {0} (ไม่ตัดสต็อกสาขาใด)", "On stock adjustment: add to {0} (no branch deducted)"],
-["⚠ ตอนนี้สต็อก {0} ไม่พอ {1} รายการ — ต้องมีของพอตอนกด ปรับสต็อก (หรือเปิด \"ขายได้แม้สต็อกหมด\")", "⚠ {0} is currently short on {1} items — stock must be sufficient when you press Adjust stock (or enable \"Sell even when out of stock\")"]];
+["⚠ ตอนนี้สต็อก {0} ไม่พอ {1} รายการ — ต้องมีของพอตอนกด ปรับสต็อก (หรือเปิด \"ขายได้แม้สต็อกหมด\")", "⚠ {0} is currently short on {1} items — stock must be sufficient when you press Adjust stock (or enable \"Sell even when out of stock\")"],
+["ลบใบส่งของ {0} แล้ว · สต็อกไม่เปลี่ยน", "Deleted delivery note {0} · stock unchanged"]];

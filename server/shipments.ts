@@ -331,55 +331,20 @@ export function cancelShipment(id: number, body: { reason?: string }, me: Me) {
 }
 
 /**
- * ลบใบส่งของที่ส่งออกแล้วออกถาวร พร้อมคืนสต็อกกลับที่เดิม
- * - ดึงของออกจากสาขาปลายทาง (เท่าที่ส่งไป) และคืนเข้าสาขาต้นทาง (ถ้าตอนส่งมีการตัดสต็อก)
- * - ถ้าปลายทางขายของไปแล้วจนไม่พอคืน จะไม่ยอมลบ (กันสต็อกติดลบ) เว้นแต่ร้านอนุญาตสต็อกติดลบ
- * - บันทึกความเคลื่อนไหวสต็อกไว้ทั้งสองฝั่ง เพื่อให้ตรวจย้อนหลังได้ว่าของหายไปไหน
+ * ลบใบส่งของที่ส่งออกแล้วออกจากฐานข้อมูลถาวร — ลบเอกสารอย่างเดียว ไม่แตะสต็อกสาขาใด
+ * (ปรับสต็อกแล้ว = ของเข้า/ออกไปแล้วจริง สต็อกคงเดิม · ยังไม่ปรับสต็อก = สต็อกไม่เคยเปลี่ยนอยู่แล้ว)
+ * ประวัติความเคลื่อนไหวสต็อกที่เคยบันทึกตอนปรับสต็อกยังอยู่ (ระบุเลขที่ใบไว้) ตรวจย้อนหลังได้
  */
 export function deleteShippedShipment(id: number, me: Me) {
   const r = row(id);
   if (r.status !== 'shipped') throw new HttpError(409, `${r.docNo} ยังไม่ได้ส่งออก — ใช้ปุ่มยกเลิกในหน้าส่งของแทน`);
-  const items = q.items.all(id) as { variantId: number; qty: number; name: string; size: string; color: string; extra: string }[];
-  const allowNeg = allowNegativeStock();
-  const docNo = r.docNo;
-  // ยังไม่ปรับสต็อก = สต็อกยังไม่เคยเปลี่ยน → ลบใบได้เลย ไม่ต้องคืนสต็อก
-  if (!r.adjustedAt) {
-    tx(() => {
-      q.purgeItems.run(id);
-      if (q.delShipped.run(id).changes !== 1) throw new HttpError(409, 'ลบไม่สำเร็จ ลองโหลดหน้าใหม่');
-    });
-    console.log(`[shipments] ลบใบส่งของ ${docNo} (ยังไม่ปรับสต็อก) โดย ${me.name}`);
-    return { ok: true as const, docNo, items: items.length, restocked: false };
-  }
+  const items = (q.items.all(id) as unknown[]).length;
   tx(() => {
-    // คืนของออกจากปลายทางก่อน — ถ้าของถูกขายไปแล้วจะไม่พอ ต้องหยุดตั้งแต่ตรงนี้
-    withBranch(r.destBranchId, () => {
-      for (const it of items) {
-        const cur = (q.stockOf.get(it.variantId) as { stock: number } | undefined)?.stock ?? 0;
-        if (cur < it.qty && !allowNeg) {
-          throw new HttpError(
-            409,
-            `${it.name} (${variantLabel(it)}) ที่${branchName(r.destBranchId)} เหลือ ${cur} ชิ้น แต่ใบนี้ส่งไป ${it.qty} ชิ้น — ของถูกขาย/ย้ายไปแล้ว ลบใบนี้ไม่ได้`,
-          );
-        }
-        q.addStock.run(-it.qty, it.variantId);
-        q.insMove.run(it.variantId, -it.qty, cur - it.qty, `ลบใบส่งของ ${docNo} (คืนของกลับ)`, me.name);
-      }
-    });
-    if (r.sourceBranchId) {
-      withBranch(r.sourceBranchId, () => {
-        for (const it of items) {
-          const cur = (q.stockOf.get(it.variantId) as { stock: number } | undefined)?.stock ?? 0;
-          q.addStock.run(it.qty, it.variantId);
-          q.insMove.run(it.variantId, it.qty, cur + it.qty, `ลบใบส่งของ ${docNo} (รับของคืน)`, me.name);
-        }
-      });
-    }
     q.purgeItems.run(id);
     if (q.delShipped.run(id).changes !== 1) throw new HttpError(409, 'ลบไม่สำเร็จ ลองโหลดหน้าใหม่');
   });
-  console.log(`[shipments] ลบใบส่งของ ${docNo} ถาวร และคืนสต็อกแล้ว โดย ${me.name}`);
-  return { ok: true as const, docNo, items: items.length, restocked: true };
+  console.log(`[shipments] ลบใบส่งของ ${r.docNo} ถาวร (ไม่แตะสต็อก) โดย ${me.name}`);
+  return { ok: true as const, docNo: r.docNo, items };
 }
 
 /** กู้คืนใบที่ยกเลิก → กลับเป็นฉบับร่าง (เฉพาะใบที่ยังไม่เคยส่งออก) */

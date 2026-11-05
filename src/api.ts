@@ -238,8 +238,8 @@ export const api = {
   cancelShipment: (id: number, reason: string) =>
     request<ShipmentList>(`/api/shipments/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
   restoreShipment: (id: number) => request<ShipmentDetail>(`/api/shipments/${id}/restore`, { method: 'POST' }),
-  /** ลบใบที่ส่งออกแล้วถาวร พร้อมคืนสต็อกกลับที่เดิม */
-  deleteShipment: (id: number) => request<{ ok: true; docNo: string; items: number; restocked?: boolean }>(`/api/shipments/${id}`, { method: 'DELETE' }),
+  /** ลบใบที่ส่งออกแล้วออกจากระบบถาวร — ลบเอกสารอย่างเดียว ไม่แตะสต็อก */
+  deleteShipment: (id: number) => request<{ ok: true; docNo: string; items: number }>(`/api/shipments/${id}`, { method: 'DELETE' }),
   /** รายงานการส่ง → แก้จำนวนตามที่ปลายทางรับจริง (0 / ไม่ส่งมา = ลบรายการ) */
   editShippedItems: (id: number, items: { variantId: number; qty: number }[]) =>
     request<ShipmentDetail>(`/api/shipments/${id}/received`, { method: 'PUT', body: JSON.stringify({ items }) }),
