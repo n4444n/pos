@@ -186,7 +186,7 @@ export function ShipmentReportScreen({ onNavigate }: { onNavigate: (r: Route) =>
           />
         </View>
         <Text style={k.note}>
-          แสดงเฉพาะใบที่ส่งออกแล้ว (ไม่รวมฉบับร่างและใบที่ยกเลิก) ตามวันที่ส่ง · กดแถวหรือปุ่ม ดู เพื่อเปิดใบส่งของ · ส่งออกแล้วสต็อกยังไม่เปลี่ยน จนกว่าจะกด ปรับสต็อก (ถ้าปลายทางนับได้ไม่ตรงกับกระดาษ กด แก้ไข ก่อน) · ลบใบที่ปรับสต็อกแล้ว ระบบคืนสต็อกกลับให้อัตโนมัติ
+          แสดงเฉพาะใบที่ส่งออกแล้ว (ไม่รวมฉบับร่างและใบที่ยกเลิก) ตามวันที่ส่ง · กดแถวหรือปุ่ม ดู เพื่อเปิดใบส่งของ · ส่งออกแล้วสต็อกยังไม่เปลี่ยน จนกว่าจะกด ปรับสต็อก (ถ้าปลายทางนับได้ไม่ตรงกับกระดาษ กด แก้ไข ก่อน) · ปุ่มลบ = ลบเอกสารอย่างเดียว สต็อกไม่เปลี่ยน
         </Text>
       </ScrollView>
 
@@ -256,8 +256,7 @@ function ActBtn({ icon, label, onPress, tone = colors.primary }: {
 }
 
 /**
- * ยืนยันลบใบส่งของที่ส่งออกแล้ว
- * ลบถาวร + คืนสต็อก: ดึงของออกจากปลายทาง คืนเข้าต้นทาง — ต้องพิมพ์เลขที่ใบยืนยันก่อน
+ * ยืนยันลบใบส่งของที่ส่งออกแล้ว — ลบเอกสารอย่างเดียว ไม่แตะสต็อก · ต้องพิมพ์เลขที่ใบยืนยันก่อน
  */
 function DeleteSheet({ row, onClose, onDone }: { row: ShipReportRow | null; onClose: () => void; onDone: (msg: string) => void }) {
   const [confirm, setConfirm] = useState('');
@@ -275,7 +274,7 @@ function DeleteSheet({ row, onClose, onDone }: { row: ShipReportRow | null; onCl
     setErr('');
     try {
       const r = await api.deleteShipment(row.id);
-      onDone(r.restocked === false ? `ลบใบส่งของ ${r.docNo} แล้ว (ยังไม่ได้ปรับสต็อก สต็อกไม่เปลี่ยน)` : `ลบใบส่งของ ${r.docNo} และคืนสต็อกแล้ว (${r.items} รายการ)`);
+      onDone(`ลบใบส่งของ ${r.docNo} แล้ว · สต็อกไม่เปลี่ยน`);
     } catch (e) {
       setErr((e as Error).message);
       setBusy(false);
@@ -287,14 +286,11 @@ function DeleteSheet({ row, onClose, onDone }: { row: ShipReportRow | null; onCl
         <View style={{ gap: 12 }}>
           <View style={s.warnBox}>
             <Icon name="warning-outline" size={20} color={colors.danger} />
-            {row.adjustedAt ? (
-              <Text style={s.warnText}>
-                ลบแล้วเอาคืนไม่ได้ · ระบบจะ<Text style={{ fontWeight: '700' }}>ดึงของ {n0(row.units)} ชิ้นออกจาก{row.destBranchName ?? 'สาขาปลายทาง'}</Text>
-                {row.sourceBranchName ? ` และคืนเข้า${row.sourceBranchName}` : ' (ตอนส่งไม่ได้ตัดสต็อกต้นทาง จึงไม่มีของคืนกลับ)'}
-              </Text>
-            ) : (
-              <Text style={s.warnText}>ลบแล้วเอาคืนไม่ได้ · ใบนี้ยังไม่ได้ปรับสต็อก จึงไม่มีสต็อกสาขาใดเปลี่ยน</Text>
-            )}
+            <Text style={s.warnText}>
+              {row.adjustedAt
+                ? 'ลบเอกสารออกจากระบบถาวร เอาคืนไม่ได้ · สต็อกทุกสาขาคงเดิม (ไม่ดึงของกลับตามใบนี้)'
+                : 'ลบเอกสารออกจากระบบถาวร เอาคืนไม่ได้ · ใบนี้ยังไม่ได้ปรับสต็อก จึงไม่มีสต็อกสาขาใดเปลี่ยน'}
+            </Text>
           </View>
           <View style={s.info}>
             <Info icon="document-text-outline" label="เลขที่" value={row.docNo} strong />
@@ -302,7 +298,6 @@ function DeleteSheet({ row, onClose, onDone }: { row: ShipReportRow | null; onCl
             <Info icon="cube-outline" label="จำนวน" value={`${n0(row.units)} ชิ้น · ${n0(row.lines)} รายการ`} />
             <Info icon="person-outline" label="ผู้ส่ง" value={row.shippedBy ?? row.createdBy ?? '-'} />
           </View>
-          {row.adjustedAt ? <Text style={k.note}>ถ้าของถูกขายหรือย้ายออกจากปลายทางไปแล้วจนคืนไม่ครบ ระบบจะไม่ยอมลบ</Text> : null}
           <Text style={s.confirmLabel}>พิมพ์ <Text style={{ fontWeight: '700' }}>{row.docNo}</Text> เพื่อยืนยัน</Text>
           <TextInput
             value={confirm}
@@ -319,7 +314,7 @@ function DeleteSheet({ row, onClose, onDone }: { row: ShipReportRow | null; onCl
               <Text style={k.pillText}>ยกเลิก</Text>
             </Pressable>
             <Pressable style={[s.delBtn, (!ok || busy) && { opacity: 0.45 }]} disabled={!ok || busy} onPress={go} accessibilityLabel="ยืนยันลบใบส่งของ">
-              {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.delText}>{row.adjustedAt ? 'ลบถาวร และคืนสต็อก' : 'ลบถาวร'}</Text>}
+              {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.delText}>ลบถาวร</Text>}
             </Pressable>
           </View>
         </View>
