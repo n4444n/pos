@@ -12,7 +12,7 @@ export function shipmentXlsx(id: number): { file: Buffer; docNo: string } {
   const s = d.shipment;
   const shop = getSettings().shop.name || 'โรงงานตัดเย็บเสื้อผ้าสำเร็จรูป';
   const units = d.items.reduce((a, i) => a + i.qty, 0);
-  const statusText = s.status === 'shipped' ? 'ส่งออกจากโรงงานแล้ว' : s.status === 'cancelled' ? 'ยกเลิกแล้ว' : s.heldAt ? 'พักไว้ (ยังไม่ส่ง)' : 'กำลังจัดเตรียม (ยังไม่ส่ง)';
+  const statusText = s.status === 'shipped' ? (s.adjustedAt ? 'ส่งออกแล้ว · ปรับสต็อกแล้ว' : 'ส่งออกแล้ว · รอปลายทางตรวจรับ/ปรับสต็อก') : s.status === 'cancelled' ? 'ยกเลิกแล้ว' : s.heldAt ? 'พักไว้ (ยังไม่ส่ง)' : 'กำลังจัดเตรียม (ยังไม่ส่ง)';
   const statusColor = s.status === 'shipped' ? '14935F' : s.status === 'cancelled' ? 'DC2626' : 'B26A00';
   const date = (s.shippedAt ?? s.createdAt) || '';
   const colorOf = (i: { color: string; extra: string }) => [i.color, i.extra].filter((x) => x && x !== '-').join(' · ') || '-';

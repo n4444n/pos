@@ -43,7 +43,7 @@ import { backupBuffer, backupFileName, dropUpload, newUploadPath, previewUpload,
 import { billNoSettings, nextBillNo, saveBillNo } from './billNo.ts';
 import { permCatalog, resetPerms, savePerms } from './perms.ts';
 import { availablePromos, bestAutoDiscount, createPromo, deletePromo, giftsFor, listPromos, previewFor, updatePromo } from './promos.ts';
-import { cancelShipment, createShipment, deleteShippedShipment, holdShipment, listShipments, restoreShipment, resumeShipment, scanShipment, setShipmentItem, shipmentDetail, shipShipment, updateShipment } from './shipments.ts';
+import { adjustShipment, cancelShipment, createShipment, deleteShippedShipment, editShippedItems, holdShipment, listShipments, restoreShipment, resumeShipment, scanShipment, setShipmentItem, shipmentDetail, shipShipment, updateShipment } from './shipments.ts';
 import {
   createCategory, getProduct, listCategories, saveBranchStock, listProducts, listSkus, patchVariant, bulkUpdateSkus, stockCommand, bulkProducts, readUpload, saveProduct, saveUpload, saveUploadVariants, uploadsMissingVariants, setProductActive, stockSummary,
   variantLabel,
@@ -666,7 +666,7 @@ const server = createServer(async (req, res) => {
         }
       }
       {
-        const sh = /^\/api\/shipments\/(\d+)(?:\/(scan|ship|cancel|restore|hold|resume|items\/(\d+)))?$/.exec(path);
+        const sh = /^\/api\/shipments\/(\d+)(?:\/(scan|ship|cancel|restore|hold|resume|received|adjust|items\/(\d+)))?$/.exec(path);
         if (sh) {
           const id = Number(sh[1]);
           // เปิดดูใบส่งของ ใช้สิทธิ์ "ดูได้" ก็พอ · แก้/ลบ ต้อง "แก้ไขได้"
@@ -682,6 +682,9 @@ const server = createServer(async (req, res) => {
           if (sh[2] === 'ship' && req.method === 'POST') return json(req, res, 200, shipShipment(id, me));
           if (sh[2] === 'cancel' && req.method === 'POST') return json(req, res, 200, cancelShipment(id, (await readBody(req)) as never, me));
           if (sh[2] === 'restore' && req.method === 'POST') return json(req, res, 200, restoreShipment(id));
+          // รายงานการส่ง → ปรับสต็อก: แก้จำนวนที่รับจริง · โอนเข้าสต็อก
+          if (sh[2] === 'received' && req.method === 'PUT') return json(req, res, 200, editShippedItems(id, (await readBody(req)) as never, me));
+          if (sh[2] === 'adjust' && req.method === 'POST') return json(req, res, 200, adjustShipment(id, me));
           if (sh[2] === 'hold' && req.method === 'POST') return json(req, res, 200, holdShipment(id, me));
           if (sh[2] === 'resume' && req.method === 'POST') return json(req, res, 200, resumeShipment(id));
           if (sh[3] && req.method === 'PUT') return json(req, res, 200, setShipmentItem(id, Number(sh[3]), (await readBody(req)) as never));

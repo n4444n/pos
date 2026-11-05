@@ -239,7 +239,12 @@ export const api = {
     request<ShipmentList>(`/api/shipments/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
   restoreShipment: (id: number) => request<ShipmentDetail>(`/api/shipments/${id}/restore`, { method: 'POST' }),
   /** ลบใบที่ส่งออกแล้วถาวร พร้อมคืนสต็อกกลับที่เดิม */
-  deleteShipment: (id: number) => request<{ ok: true; docNo: string; items: number }>(`/api/shipments/${id}`, { method: 'DELETE' }),
+  deleteShipment: (id: number) => request<{ ok: true; docNo: string; items: number; restocked?: boolean }>(`/api/shipments/${id}`, { method: 'DELETE' }),
+  /** รายงานการส่ง → แก้จำนวนตามที่ปลายทางรับจริง (0 / ไม่ส่งมา = ลบรายการ) */
+  editShippedItems: (id: number, items: { variantId: number; qty: number }[]) =>
+    request<ShipmentDetail>(`/api/shipments/${id}/received`, { method: 'PUT', body: JSON.stringify({ items }) }),
+  /** รายงานการส่ง → ปรับสต็อก: โอนจำนวนในใบเข้าสต็อกจริง (ตัดต้นทาง + เพิ่มปลายทาง) */
+  adjustShipment: (id: number) => request<ShipmentDetail & { units: number }>(`/api/shipments/${id}/adjust`, { method: 'POST' }),
   // ----- เลขที่บิล (ตั้งแยกต่อสาขา) -----
   billNo: () => request<BillNoAdmin>('/api/billno'),
   saveBillNo: (f: BillFormat | { reset: true }) => request<BillNoAdmin>('/api/billno', { method: 'PUT', body: JSON.stringify(f) }),
@@ -527,6 +532,8 @@ export interface Shipment {
   heldAt: string | null; heldBy: string | null;
   /** ยกเลิกเมื่อไร / โดยใคร / เหตุผล · purgeAt = เวลาที่จะลบถาวร (ยกเลิก + 3 วัน) */
   cancelledAt: string | null; cancelledBy: string | null; cancelReason: string | null; purgeAt: string | null;
+  /** ปรับสต็อก (โอนเข้าสต็อกจริง) เมื่อไร / โดยใคร · null = ส่งออกแล้วแต่รอปลายทางตรวจรับ */
+  adjustedAt?: string | null; adjustedBy?: string | null;
 }
 export interface ImportRow {
   line: number; code: string; barcode: string; qty: string; name: string; color: string; size: string; category: string; lowStock: string; price: string;
@@ -605,10 +612,12 @@ export interface ShipReportRow {
   id: number; docNo: string; shippedAt: string; createdAt: string; destBranchId: number; destBranchName: string | null;
   sourceBranchId: number | null; sourceBranchName: string | null; bags: number; note: string | null; shippedBy: string | null; createdBy: string | null;
   units: number; lines: number;
+  /** null = รอปรับสต็อก */
+  adjustedAt: string | null; adjustedBy: string | null;
 }
 export interface ShipReport {
   range: { from: string; to: string }; rows: ShipReportRow[]; page: number; pages: number;
-  total: { docs: number; bags: number; units: number; lines: number };
+  total: { docs: number; bags: number; units: number; lines: number; pending?: number };
   byDest: { destBranchId: number; destBranchName: string | null; docs: number; units: number; bags: number }[];
 }
 export interface ShipmentList { list: Shipment[]; cancelled: Shipment[]; keepDays: number; branches: ShipBranch[] }

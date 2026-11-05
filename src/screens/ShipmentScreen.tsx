@@ -1,5 +1,5 @@
 // ส่งของจากโรงงาน: สร้างใบส่งของ (DO) → สแกนบาร์โค้ด → ส่งออก
-// ส่งออกแล้ว: ตัดสต็อกจากสาขาที่เลือก (หรือไม่ตัด) และเพิ่มสต็อกให้สาขาปลายทาง · รายการถูกล็อก
+// ส่งออกแล้ว: รายการถูกล็อก ย้ายไปรายงานการส่ง · สต็อกยังไม่เปลี่ยน — ปลายทางตรวจรับแล้วกด "ปรับสต็อก" ที่รายงานการส่ง
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
@@ -120,7 +120,7 @@ export function ShipmentScreen({ onNavigate, onStockChanged }: { onNavigate: (r:
       apply(d);
       setConfirm(false);
       onStockChanged?.();
-      notify('success', `ส่งออก ${d.shipment.docNo} แล้ว · เพิ่มสต็อก${d.shipment.destBranchName} ${units.toLocaleString()} ตัว`);
+      notify('success', `ส่งออก ${d.shipment.docNo} แล้ว · อยู่ในรายงานการส่ง รอ${d.shipment.destBranchName}ตรวจรับแล้วกด ปรับสต็อก`);
     } catch (e) {
       notify('error', (e as Error).message);
     } finally {
@@ -187,7 +187,7 @@ export function ShipmentScreen({ onNavigate, onStockChanged }: { onNavigate: (r:
             </Pressable>
             <View>
               <Text style={s.title}>ส่งของจากโรงงาน</Text>
-              <Text style={s.sub}>สแกนสินค้าใส่ใบส่งของ → ส่งออก → สต็อกสาขาปลายทางเพิ่มอัตโนมัติ</Text>
+              <Text style={s.sub}>สแกนสินค้าใส่ใบส่งของ → ส่งออก → ปลายทางตรวจรับ → ปรับสต็อก (ที่รายงานการส่ง)</Text>
             </View>
           </View>
           <Pressable style={[s.pillBtn, s.primaryBtn]} onPress={() => setCreating(true)} accessibilityLabel="สร้างใบส่งของใหม่">
@@ -304,10 +304,14 @@ export function ShipmentScreen({ onNavigate, onStockChanged }: { onNavigate: (r:
                             : held
                             ? `รายการที่สแกนแล้ว ${units.toLocaleString()} ตัว ยังอยู่ครบ · กด "ทำต่อ" เพื่อสแกนต่อ`
                             : sh.status === 'shipped'
-                            ? `เพิ่มสต็อก${sh.destBranchName}แล้ว${sh.sourceBranchName ? ` · ตัดสต็อก${sh.sourceBranchName}แล้ว` : ' · ไม่ได้ตัดสต็อกสาขาใด'} · รายการถูกล็อก`
+                            ? sh.adjustedAt
+                              ? sh.sourceBranchName
+                                ? `ปรับสต็อกแล้ว: เพิ่มสต็อก${sh.destBranchName} · ตัดสต็อก${sh.sourceBranchName} · รายการถูกล็อก`
+                                : `ปรับสต็อกแล้ว: เพิ่มสต็อก${sh.destBranchName} · รายการถูกล็อก`
+                              : `รอ${sh.destBranchName}ตรวจรับ · สต็อกยังไม่เปลี่ยน — แก้ไขจำนวน / ปรับสต็อก ได้ที่รายงานการส่ง`
                             : sh.sourceBranchName
-                              ? `ตอนส่งออก: ตัดสต็อก${sh.sourceBranchName} → เพิ่มสต็อก${sh.destBranchName}`
-                              : `ตอนส่งออก: เพิ่มสต็อก${sh.destBranchName} (ไม่ตัดสต็อกสาขาใด)`}
+                              ? `ตอนปรับสต็อก (หลังส่งออก): ตัดสต็อก${sh.sourceBranchName} → เพิ่มสต็อก${sh.destBranchName}`
+                              : `ตอนปรับสต็อก (หลังส่งออก): เพิ่มสต็อก${sh.destBranchName} (ไม่ตัดสต็อกสาขาใด)`}
                         </Text>
                         {sh.status === 'cancelled' ? (
                           <Pressable style={[s.pillBtn, s.primaryBtn, { alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => restore(sh.id)} accessibilityLabel="กู้คืนเป็นฉบับร่าง">
@@ -466,10 +470,14 @@ export function ShipmentScreen({ onNavigate, onStockChanged }: { onNavigate: (r:
                           : held
                           ? `รายการที่สแกนแล้ว ${units.toLocaleString()} ตัว ยังอยู่ครบ · กด "ทำต่อ" เพื่อสแกนต่อ`
                           : sh.status === 'shipped'
-                          ? `เพิ่มสต็อก${sh.destBranchName}แล้ว${sh.sourceBranchName ? ` · ตัดสต็อก${sh.sourceBranchName}แล้ว` : ' · ไม่ได้ตัดสต็อกสาขาใด'} · รายการถูกล็อก`
+                          ? sh.adjustedAt
+                              ? sh.sourceBranchName
+                                ? `ปรับสต็อกแล้ว: เพิ่มสต็อก${sh.destBranchName} · ตัดสต็อก${sh.sourceBranchName} · รายการถูกล็อก`
+                                : `ปรับสต็อกแล้ว: เพิ่มสต็อก${sh.destBranchName} · รายการถูกล็อก`
+                              : `รอ${sh.destBranchName}ตรวจรับ · สต็อกยังไม่เปลี่ยน — แก้ไขจำนวน / ปรับสต็อก ได้ที่รายงานการส่ง`
                           : sh.sourceBranchName
-                            ? `ตอนส่งออก: ตัดสต็อก${sh.sourceBranchName} → เพิ่มสต็อก${sh.destBranchName}`
-                            : `ตอนส่งออก: เพิ่มสต็อก${sh.destBranchName} (ไม่ตัดสต็อกสาขาใด)`}
+                            ? `ตอนปรับสต็อก (หลังส่งออก): ตัดสต็อก${sh.sourceBranchName} → เพิ่มสต็อก${sh.destBranchName}`
+                            : `ตอนปรับสต็อก (หลังส่งออก): เพิ่มสต็อก${sh.destBranchName} (ไม่ตัดสต็อกสาขาใด)`}
                       </Text>
                       {sh.status === 'cancelled' ? (
                         <Pressable style={[s.pillBtn, s.primaryBtn, { alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => restore(sh.id)} accessibilityLabel="กู้คืนเป็นฉบับร่าง">
@@ -720,18 +728,19 @@ export function ShipmentScreen({ onNavigate, onStockChanged }: { onNavigate: (r:
         {sh ? (
           <View style={{ gap: 10 }}>
             <Line icon="cube-outline" text={`${units.toLocaleString()} ตัว (${cur?.items.length} รายการ) · ${sh.bags} ถุง`} />
-            <Line icon="add-circle-outline" color={colors.success} text={`เพิ่มสต็อก ${sh.destBranchName}`} />
+            <Line icon="storefront-outline" text={`ส่งถึง ${sh.destBranchName}`} />
+            <Line icon="time-outline" color={colors.primary} text="สต็อกยังไม่เปลี่ยนตอนส่งออก — รอปลายทางตรวจรับ" />
             <Line
               icon={sh.sourceBranchName ? 'remove-circle-outline' : 'ban-outline'}
               color={sh.sourceBranchName ? colors.danger : colors.sub}
-              text={sh.sourceBranchName ? `ตัดสต็อก ${sh.sourceBranchName}` : 'ไม่ตัดสต็อกสาขาใด (ของใหม่จากโรงงาน)'}
+              text={sh.sourceBranchName ? `ตอนปรับสต็อก: ตัดสต็อก ${sh.sourceBranchName} → เพิ่มสต็อก ${sh.destBranchName}` : `ตอนปรับสต็อก: เพิ่มสต็อก ${sh.destBranchName} (ไม่ตัดสต็อกสาขาใด)`}
             />
             {short.length ? (
               <Text style={[s.small, { color: colors.danger }]}>
-                ⚠ สต็อก{sh.sourceBranchName}ไม่พอ {short.length} รายการ — ถ้าไม่ได้เปิด "ขายได้แม้สต็อกหมด" ระบบจะไม่ให้ส่ง
+                {`⚠ ตอนนี้สต็อก ${sh.sourceBranchName} ไม่พอ ${short.length} รายการ — ต้องมีของพอตอนกด ปรับสต็อก (หรือเปิด "ขายได้แม้สต็อกหมด")`}
               </Text>
             ) : null}
-            <Text style={s.small}>ส่งออกแล้วรายการจะถูกล็อก แก้ไขไม่ได้</Text>
+            <Text style={s.small}>ส่งออกแล้วใบนี้ย้ายไปรายงานการส่ง · แก้ไขจำนวนตามที่ปลายทางรับจริง แล้วกด ปรับสต็อก ที่หน้านั้น</Text>
           </View>
         ) : null}
       </Sheet>
@@ -1036,7 +1045,7 @@ function CreateSheet({ visible, branches, onClose, onCreate }: {
         <BranchField label="ส่งถึงสาขา (เพิ่มสต็อก)" icon="storefront-outline" value={dest} branches={branches} exclude={source} onChange={setDest} />
         <BranchField label="ตัดสต็อกจากสาขา" icon="remove-circle-outline" value={source} branches={branches} exclude={dest} allowNone onChange={setSource} />
         <Text style={s.small}>
-          {source ? 'ตอนส่งออก ระบบจะตัดสต็อกสาขาที่เลือก แล้วเพิ่มให้สาขาปลายทาง (โอนย้ายสต็อก)' : '"ไม่ตัดสต็อก" = ของผลิตใหม่จากโรงงาน — ระบบเพิ่มสต็อกให้สาขาปลายทางอย่างเดียว'}
+          {source ? 'ตอนกด ปรับสต็อก (หลังส่งออก และปลายทางตรวจรับแล้ว) ระบบจะตัดสต็อกสาขาที่เลือก แล้วเพิ่มให้สาขาปลายทาง (โอนย้ายสต็อก)' : '"ไม่ตัดสต็อก" = ของผลิตใหม่จากโรงงาน — ระบบเพิ่มสต็อกให้สาขาปลายทางอย่างเดียว'}
         </Text>
         <View style={[s.row, { gap: 16, flexWrap: 'wrap' }]}>
           <View style={{ gap: 4 }}>

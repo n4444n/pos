@@ -1,4 +1,4 @@
-// ส่งของจากโรงงาน → รายงานการส่ง: ใบส่งของ (DO) ที่ส่งออกแล้วในช่วงวันที่ — เลขที่ / วันที่ส่ง / ต้นทาง / ปลายทาง / ถุง / รายการ / ชิ้น
+// ส่งของจากโรงงาน → รายงานการส่ง: ใบส่งของ (DO) ที่ส่งออกแล้วในช่วงวันที่ (ทั้งที่รอปรับสต็อกและปรับแล้ว) — เลขที่ / วันที่ส่ง / ต้นทาง / ปลายทาง / ถุง / รายการ / ชิ้น
 // กรองสาขาปลายทาง · ค้นหาเลขที่ / หมายเหตุ / ผู้ส่ง · กดเลขที่เพื่อดูรายการสินค้าทั้งหมดในใบ (ใช้ /api/shipments/:id เดิม)
 // ส่งออก Excel: แผ่นที่ 1 = รายการใบส่งของ · แผ่นที่ 2 = สินค้าทุกรายการที่ส่งในช่วงนั้น
 import { db } from './db.ts';
@@ -13,6 +13,7 @@ export interface ShipReportQuery {
 interface DocRow {
   id: number; docNo: string; shippedAt: string; createdAt: string; destBranchId: number; sourceBranchId: number | null;
   bags: number; note: string | null; shippedBy: string | null; createdBy: string | null; units: number; lines: number;
+  adjustedAt: string | null; adjustedBy: string | null;
 }
 interface ItemRow {
   docNo: string; shippedAt: string; destBranchId: number; sourceBranchId: number | null;
@@ -67,6 +68,7 @@ function docRows(f: ShipReportQuery, limit: number, offset: number) {
     .prepare(
       `SELECT s.id, s.doc_no AS docNo, s.shipped_at AS shippedAt, s.created_at AS createdAt, s.dest_branch_id AS destBranchId,
               s.source_branch_id AS sourceBranchId, s.bags, s.note, s.shipped_by AS shippedBy, s.created_by AS createdBy,
+              s.adjusted_at AS adjustedAt, s.adjusted_by AS adjustedBy,
               ${UNITS} AS units, ${LINES} AS lines
          FROM shipments s WHERE ${w.sql}
         ORDER BY ${col} ${dir}, s.id ${dir} LIMIT ? OFFSET ?`,
@@ -78,8 +80,9 @@ function docRows(f: ShipReportQuery, limit: number, offset: number) {
 function totals(f: ShipReportQuery) {
   const w = where(f);
   const t = db
-    .prepare(`SELECT COUNT(*) AS docs, COALESCE(SUM(s.bags), 0) AS bags, COALESCE(SUM(${UNITS}), 0) AS units, COALESCE(SUM(${LINES}), 0) AS lines FROM shipments s WHERE ${w.sql}`)
-    .get(...w.args) as { docs: number; bags: number; units: number; lines: number };
+    .prepare(`SELECT COUNT(*) AS docs, COALESCE(SUM(s.bags), 0) AS bags, COALESCE(SUM(${UNITS}), 0) AS units, COALESCE(SUM(${LINES}), 0) AS lines,
+              COALESCE(SUM(s.adjusted_at IS NULL), 0) AS pending FROM shipments s WHERE ${w.sql}`)
+    .get(...w.args) as { docs: number; bags: number; units: number; lines: number; pending: number };
   const byDest = (
     db
       .prepare(
@@ -128,6 +131,7 @@ export function shipmentReportXlsx(f: ShipReportQuery): { file: Buffer; range: {
     { header: 'จำนวนรายการ', value: (r) => r.lines, type: 'int' },
     { header: 'จำนวนชิ้น', value: (r) => r.units, type: 'int' },
     { header: 'ผู้ส่ง', value: (r) => r.shippedBy ?? r.createdBy ?? '' },
+    { header: 'ปรับสต็อก', value: (r) => (r.adjustedAt ? `ปรับแล้ว ${r.adjustedAt.slice(0, 16)}${r.adjustedBy ? ` (${r.adjustedBy})` : ''}` : 'รอปรับสต็อก') },
     { header: 'หมายเหตุ', value: (r) => r.note ?? '' },
   ];
   const itemCols: Col<ItemRow>[] = [

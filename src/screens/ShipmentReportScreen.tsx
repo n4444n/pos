@@ -1,5 +1,6 @@
 // ส่งของจากโรงงาน → รายงานการส่ง: ใบส่งของ (DO) ทุกใบที่ส่งออกแล้วในช่วงวันที่ แสดงเป็นรายการเอกสาร
 // กรองสาขาปลายทาง · ค้นหาเลขที่ / หมายเหตุ / ผู้ส่ง · กดใบส่งของเพื่อดูสินค้าทุกรายการที่ส่งในใบนั้น (พิมพ์ / Excel ได้)
+// คอลัมน์ "ปรับสต็อก": ส่งออกแล้วสต็อกยังไม่เปลี่ยน — รอปลายทางรับของ/ตรวจจำนวน → แก้ไข (ถ้าไม่ตรง) → ปรับสต็อก (โอนเข้าสต็อกจริง)
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { api, type ShipBranch, type ShipmentDetail, type ShipReport, type ShipReportFilter, type ShipReportRow } from '../api';
@@ -28,6 +29,8 @@ export function ShipmentReportScreen({ onNavigate }: { onNavigate: (r: Route) =>
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
   const [delRow, setDelRow] = useState<ShipReportRow | null>(null);
+  const [editRow, setEditRow] = useState<ShipReportRow | null>(null);
+  const [adjRow, setAdjRow] = useState<ShipReportRow | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const { me } = useSession();
   const canEdit = can(me, 'shipments', 'edit');
@@ -94,6 +97,26 @@ export function ShipmentReportScreen({ onNavigate }: { onNavigate: (r: Route) =>
         </View>
       ),
     },
+    {
+      id: 'adj', label: 'ปรับสต็อก', width: 214, align: 'center',
+      render: (r) =>
+        r.adjustedAt ? (
+          <View style={s.doneBox}>
+            <View style={s.doneChip}>
+              <Icon name="checkmark-circle" size={14} color={colors.success} />
+              <Text style={s.doneText}>ปรับสต็อกแล้ว</Text>
+            </View>
+            <Text style={s.doneSub} numberOfLines={1}>{dateTime(r.adjustedAt)}{r.adjustedBy ? ` · ${r.adjustedBy}` : ''}</Text>
+          </View>
+        ) : canEdit ? (
+          <View style={s.acts}>
+            <TextBtn icon="create-outline" label="แก้ไข" hint={`แก้ไขจำนวนที่รับจริง ${r.docNo}`} onPress={() => setEditRow(r)} />
+            <TextBtn icon="swap-vertical-outline" label="ปรับสต็อก" hint={`ปรับสต็อก ${r.docNo}`} primary onPress={() => setAdjRow(r)} />
+          </View>
+        ) : (
+          <Text style={[k.tdText, { color: '#B26A00', textAlign: 'center' }]}>รอปรับสต็อก</Text>
+        ),
+    },
   ];
 
   return (
@@ -136,6 +159,7 @@ export function ShipmentReportScreen({ onNavigate }: { onNavigate: (r: Route) =>
           <View style={s.cards}>
             <Card label="ใบส่งของ" value={`${n0(t.docs)} ใบ`} sub={`${n0(t.bags)} ถุง/กล่อง`} />
             <Card label="จำนวนที่ส่ง" value={`${n0(t.units)} ชิ้น`} sub={`${n0(t.lines)} รายการ`} tone={colors.primary} />
+            <Card label="รอปรับสต็อก" value={`${n0(t.pending ?? 0)} ใบ`} sub={t.pending ? 'ปลายทางตรวจรับแล้วกด ปรับสต็อก' : 'ปรับสต็อกครบทุกใบแล้ว'} tone={t.pending ? '#B26A00' : colors.success} />
             <View style={[s.card, { flexGrow: 2 }]}>
               <Text style={s.cardLabel}>แยกตามสาขาปลายทาง</Text>
               {data.byDest.length === 0 ? <Text style={s.cardSub}>-</Text> : null}
@@ -162,11 +186,33 @@ export function ShipmentReportScreen({ onNavigate }: { onNavigate: (r: Route) =>
           />
         </View>
         <Text style={k.note}>
-          แสดงเฉพาะใบที่ส่งออกแล้ว (ไม่รวมฉบับร่างและใบที่ยกเลิก) ตามวันที่ส่ง · กดแถวหรือปุ่ม ดู เพื่อเปิดใบส่งของ · ปุ่มลบจะคืนสต็อกกลับให้อัตโนมัติ
+          แสดงเฉพาะใบที่ส่งออกแล้ว (ไม่รวมฉบับร่างและใบที่ยกเลิก) ตามวันที่ส่ง · กดแถวหรือปุ่ม ดู เพื่อเปิดใบส่งของ · ส่งออกแล้วสต็อกยังไม่เปลี่ยน จนกว่าจะกด ปรับสต็อก (ถ้าปลายทางนับได้ไม่ตรงกับกระดาษ กด แก้ไข ก่อน) · ลบใบที่ปรับสต็อกแล้ว ระบบคืนสต็อกกลับให้อัตโนมัติ
         </Text>
       </ScrollView>
 
       <DocSheet id={openId} onClose={() => setOpenId(null)} />
+      <EditSheet
+        row={editRow}
+        onClose={() => setEditRow(null)}
+        onDone={(msg) => {
+          setEditRow(null);
+          notify('success', msg);
+          load();
+        }}
+      />
+      <AdjustSheet
+        row={adjRow}
+        onClose={() => setAdjRow(null)}
+        onEdit={(r) => {
+          setAdjRow(null);
+          setEditRow(r);
+        }}
+        onDone={(msg) => {
+          setAdjRow(null);
+          notify('success', msg);
+          load();
+        }}
+      />
       <DeleteSheet
         row={delRow}
         onClose={() => setDelRow(null)}
@@ -229,7 +275,7 @@ function DeleteSheet({ row, onClose, onDone }: { row: ShipReportRow | null; onCl
     setErr('');
     try {
       const r = await api.deleteShipment(row.id);
-      onDone(`ลบใบส่งของ ${r.docNo} และคืนสต็อกแล้ว (${r.items} รายการ)`);
+      onDone(r.restocked === false ? `ลบใบส่งของ ${r.docNo} แล้ว (ยังไม่ได้ปรับสต็อก สต็อกไม่เปลี่ยน)` : `ลบใบส่งของ ${r.docNo} และคืนสต็อกแล้ว (${r.items} รายการ)`);
     } catch (e) {
       setErr((e as Error).message);
       setBusy(false);
@@ -241,10 +287,14 @@ function DeleteSheet({ row, onClose, onDone }: { row: ShipReportRow | null; onCl
         <View style={{ gap: 12 }}>
           <View style={s.warnBox}>
             <Icon name="warning-outline" size={20} color={colors.danger} />
-            <Text style={s.warnText}>
-              ลบแล้วเอาคืนไม่ได้ · ระบบจะ<Text style={{ fontWeight: '700' }}>ดึงของ {n0(row.units)} ชิ้นออกจาก{row.destBranchName ?? 'สาขาปลายทาง'}</Text>
-              {row.sourceBranchName ? ` และคืนเข้า${row.sourceBranchName}` : ' (ตอนส่งไม่ได้ตัดสต็อกต้นทาง จึงไม่มีของคืนกลับ)'}
-            </Text>
+            {row.adjustedAt ? (
+              <Text style={s.warnText}>
+                ลบแล้วเอาคืนไม่ได้ · ระบบจะ<Text style={{ fontWeight: '700' }}>ดึงของ {n0(row.units)} ชิ้นออกจาก{row.destBranchName ?? 'สาขาปลายทาง'}</Text>
+                {row.sourceBranchName ? ` และคืนเข้า${row.sourceBranchName}` : ' (ตอนส่งไม่ได้ตัดสต็อกต้นทาง จึงไม่มีของคืนกลับ)'}
+              </Text>
+            ) : (
+              <Text style={s.warnText}>ลบแล้วเอาคืนไม่ได้ · ใบนี้ยังไม่ได้ปรับสต็อก จึงไม่มีสต็อกสาขาใดเปลี่ยน</Text>
+            )}
           </View>
           <View style={s.info}>
             <Info icon="document-text-outline" label="เลขที่" value={row.docNo} strong />
@@ -252,7 +302,7 @@ function DeleteSheet({ row, onClose, onDone }: { row: ShipReportRow | null; onCl
             <Info icon="cube-outline" label="จำนวน" value={`${n0(row.units)} ชิ้น · ${n0(row.lines)} รายการ`} />
             <Info icon="person-outline" label="ผู้ส่ง" value={row.shippedBy ?? row.createdBy ?? '-'} />
           </View>
-          <Text style={k.note}>ถ้าของถูกขายหรือย้ายออกจากปลายทางไปแล้วจนคืนไม่ครบ ระบบจะไม่ยอมลบ</Text>
+          {row.adjustedAt ? <Text style={k.note}>ถ้าของถูกขายหรือย้ายออกจากปลายทางไปแล้วจนคืนไม่ครบ ระบบจะไม่ยอมลบ</Text> : null}
           <Text style={s.confirmLabel}>พิมพ์ <Text style={{ fontWeight: '700' }}>{row.docNo}</Text> เพื่อยืนยัน</Text>
           <TextInput
             value={confirm}
@@ -269,7 +319,7 @@ function DeleteSheet({ row, onClose, onDone }: { row: ShipReportRow | null; onCl
               <Text style={k.pillText}>ยกเลิก</Text>
             </Pressable>
             <Pressable style={[s.delBtn, (!ok || busy) && { opacity: 0.45 }]} disabled={!ok || busy} onPress={go} accessibilityLabel="ยืนยันลบใบส่งของ">
-              {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.delText}>ลบถาวร และคืนสต็อก</Text>}
+              {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.delText}>{row.adjustedAt ? 'ลบถาวร และคืนสต็อก' : 'ลบถาวร'}</Text>}
             </Pressable>
           </View>
         </View>
@@ -305,6 +355,12 @@ function DocSheet({ id, onClose }: { id: number | null; onClose: () => void }) {
             <Info icon="storefront-outline" label="ปลายทาง" value={sh.destBranchName ?? '-'} strong />
             <Info icon="cube-outline" label="จำนวน" value={`${n0(units)} ชิ้น · ${n0(d.items.length)} รายการ · ${n0(sh.bags)} ถุง/กล่อง`} strong />
             <Info icon="person-outline" label="ผู้ส่ง" value={sh.shippedBy ?? sh.createdBy ?? '-'} />
+            <Info
+              icon={sh.adjustedAt ? 'checkmark-circle-outline' : 'time-outline'}
+              label="สต็อก"
+              value={sh.adjustedAt ? `ปรับสต็อกแล้ว ${dateTime(sh.adjustedAt)}${sh.adjustedBy ? ` · ${sh.adjustedBy}` : ''}` : 'รอปลายทางตรวจรับ — ยังไม่ปรับสต็อก'}
+              strong={!sh.adjustedAt}
+            />
             {sh.note ? <Info icon="chatbox-ellipses-outline" label="หมายเหตุ" value={sh.note} /> : null}
           </View>
           <View style={[k.row, { flexWrap: 'wrap', gap: 8 }]}>
@@ -341,6 +397,237 @@ function DocSheet({ id, onClose }: { id: number | null; onClose: () => void }) {
               <Text style={[s.td, { width: 70, textAlign: 'center', fontWeight: '700', color: colors.primary }]}>{n0(units)}</Text>
             </View>
           </View>
+        </View>
+      ) : null}
+    </Sheet>
+  );
+}
+
+/** ปุ่มมีข้อความในคอลัมน์ "ปรับสต็อก" */
+function TextBtn({ icon, label, hint, onPress, primary }: { icon: Parameters<typeof Icon>[0]['name']; label: string; hint: string; onPress: () => void; primary?: boolean }) {
+  return (
+    <Pressable
+      style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [s.txtBtn, primary && s.txtBtnPrimary, hovered && (primary ? { opacity: 0.88 } : { borderColor: colors.primary })]}
+      onPress={(e) => {
+        (e as unknown as { stopPropagation?: () => void }).stopPropagation?.();
+        onPress();
+      }}
+      accessibilityLabel={hint}
+      accessibilityRole="button"
+    >
+      <Icon name={icon} size={15} color={primary ? '#fff' : colors.primary} />
+      <Text style={[s.txtBtnText, primary && { color: '#fff' }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * แก้ไขจำนวนตามที่สาขาปลายทางรับจริง (ก่อนปรับสต็อก)
+ * เพิ่ม / ลดจำนวน · ใส่ 0 หรือกดลบ = เอารายการออก · บันทึกแล้วกลับไปหน้ารายงานการส่ง (ยังไม่แตะสต็อก)
+ */
+function EditSheet({ row, onClose, onDone }: { row: ShipReportRow | null; onClose: () => void; onDone: (msg: string) => void }) {
+  const [d, setD] = useState<ShipmentDetail | null>(null);
+  const [qty, setQty] = useState<Record<number, string>>({});
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [find, setFind] = useState('');
+  useEffect(() => {
+    setD(null);
+    setErr('');
+    setBusy(false);
+    setFind('');
+    setQty({});
+    if (row)
+      api.shipment(row.id).then(
+        (x) => {
+          setD(x);
+          setQty(Object.fromEntries(x.items.map((i) => [i.variantId, String(i.qty)])));
+        },
+        (e: Error) => setErr(e.message),
+      );
+  }, [row]);
+  const val = (v: number) => {
+    const n = Math.floor(Number(qty[v] ?? 0));
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  const setN = (v: number, n: number) => setQty((x) => ({ ...x, [v]: String(Math.max(0, Math.min(99999, n))) }));
+  const items = d?.items ?? [];
+  const f = find.trim().toLowerCase();
+  const shown = items.filter((i) => !f || `${i.name} ${i.label} ${i.sku} ${i.barcode ?? ''}`.toLowerCase().includes(f));
+  const before = items.reduce((a, i) => a + i.qty, 0);
+  const after = items.reduce((a, i) => a + val(i.variantId), 0);
+  const changed = items.filter((i) => val(i.variantId) !== i.qty).length;
+  const bad = items.some((i) => qty[i.variantId] !== undefined && qty[i.variantId] !== '' && !/^\d+$/.test(qty[i.variantId]));
+  const save = async () => {
+    if (!row || !d) return;
+    setBusy(true);
+    setErr('');
+    try {
+      await api.editShippedItems(row.id, items.map((i) => ({ variantId: i.variantId, qty: val(i.variantId) })));
+      onDone(changed ? `บันทึกการแก้ไข ${row.docNo} แล้ว (${n0(changed)} รายการ) · ยังไม่ปรับสต็อก` : `ไม่มีการเปลี่ยนแปลงใน ${row.docNo}`);
+    } catch (e) {
+      setErr((e as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Sheet
+      visible={!!row}
+      onClose={() => !busy && onClose()}
+      title={row ? `แก้ไขจำนวน ${row.docNo}` : 'แก้ไขจำนวน'}
+      width={760}
+      footer={
+        <View style={[k.row, { gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }]}>
+          <Text style={[k.note, { flex: 1, minWidth: 180 }]}>
+            {changed ? `รวม ${n0(before)} → ${n0(after)} ชิ้น · แก้ ${n0(changed)} รายการ` : `รวม ${n0(after)} ชิ้น`}
+          </Text>
+          <Pressable style={k.pill} onPress={onClose} disabled={busy} accessibilityLabel="ยกเลิก">
+            <Text style={k.pillText}>ยกเลิก</Text>
+          </Pressable>
+          <Pressable style={[s.saveBtn, (busy || !d || bad) && { opacity: 0.45 }]} disabled={busy || !d || bad} onPress={save} accessibilityLabel="บันทึกการแก้ไข">
+            {busy ? <ActivityIndicator color="#fff" /> : <Icon name="save-outline" size={16} color="#fff" />}
+            <Text style={s.delText}>บันทึก</Text>
+          </Pressable>
+        </View>
+      }
+    >
+      {err ? <Text style={k.error}>{err}</Text> : null}
+      {!d && !err ? <ActivityIndicator color={colors.primary} style={{ marginVertical: 24 }} /> : null}
+      {d ? (
+        <View style={{ gap: 10, paddingBottom: 8 }}>
+          <View style={s.hintBox}>
+            <Icon name="information-circle-outline" size={18} color={colors.primary} />
+            <Text style={s.hintText}>
+              {`ใส่จำนวนที่ ${d.shipment.destBranchName ?? 'สาขาปลายทาง'} รับจริง · ใส่ 0 หรือกดลบ = เอารายการออก · บันทึกแล้วสต็อกยังไม่เปลี่ยน จนกว่าจะกด ปรับสต็อก`}
+            </Text>
+          </View>
+          <TextInput value={find} onChangeText={setFind} placeholder="ค้นหาสินค้า / สี / ไซส์ / รหัส" placeholderTextColor={colors.faint} style={k.search} />
+          <View style={s.table}>
+            <View style={[s.tr, s.th]}>
+              <Text style={[s.thText, { width: 36, textAlign: 'center' }]}>#</Text>
+              <Text style={[s.thText, { flex: 1 }]}>สินค้า</Text>
+              <Text style={[s.thText, { width: 130 }]}>สี / ไซส์</Text>
+              <Text style={[s.thText, { width: 56, textAlign: 'center' }]}>เดิม</Text>
+              <Text style={[s.thText, { width: 150, textAlign: 'center' }]}>รับจริง</Text>
+              <Text style={[s.thText, { width: 36 }]} />
+            </View>
+            <ScrollView style={{ maxHeight: Platform.OS === 'web' ? ('44vh' as unknown as number) : 340 }}>
+              {shown.map((i, n) => {
+                const v = val(i.variantId);
+                const removed = v === 0;
+                const diff = v !== i.qty;
+                return (
+                  <View key={i.variantId} style={[s.tr, n % 2 === 1 && { backgroundColor: colors.surface }, removed && { opacity: 0.55 }]}>
+                    <Text style={[s.td, { width: 36, textAlign: 'center', color: colors.sub }]}>{n + 1}</Text>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[s.td, { fontWeight: '600' }, removed && { textDecorationLine: 'line-through' }]} numberOfLines={1}>{i.name}</Text>
+                      <Text style={s.sku} numberOfLines={1}>{removed ? 'จะเอาออกจากใบ' : i.sku}</Text>
+                    </View>
+                    <Text style={[s.td, { width: 130 }]} numberOfLines={1}>{i.label}</Text>
+                    <Text style={[s.td, { width: 56, textAlign: 'center', color: colors.sub }]}>{n0(i.qty)}</Text>
+                    <View style={[s.stepper, { width: 150 }]}>
+                      <Pressable style={s.stepBtn} onPress={() => setN(i.variantId, v - 1)} disabled={v === 0} accessibilityLabel={`ลดจำนวน ${i.name}`}>
+                        <Icon name="remove" size={16} color={v === 0 ? colors.faint : colors.text} />
+                      </Pressable>
+                      <TextInput
+                        value={qty[i.variantId] ?? ''}
+                        onChangeText={(t) => setQty((x) => ({ ...x, [i.variantId]: t.replace(/[^0-9]/g, '').slice(0, 5) }))}
+                        keyboardType="number-pad"
+                        selectTextOnFocus
+                        style={[s.qtyInput, diff && { borderColor: colors.primary, color: colors.primary }]}
+                        accessibilityLabel={`จำนวนที่รับจริง ${i.name} ${i.label}`}
+                      />
+                      <Pressable style={s.stepBtn} onPress={() => setN(i.variantId, v + 1)} accessibilityLabel={`เพิ่มจำนวน ${i.name}`}>
+                        <Icon name="add" size={16} color={colors.text} />
+                      </Pressable>
+                    </View>
+                    <Pressable
+                      style={s.rmBtn}
+                      onPress={() => setN(i.variantId, removed ? i.qty : 0)}
+                      accessibilityLabel={removed ? `เอา ${i.name} กลับมา` : `ลบรายการ ${i.name}`}
+                    >
+                      <Icon name={removed ? 'arrow-undo-outline' : 'trash-outline'} size={16} color={removed ? colors.primary : colors.danger} />
+                    </Pressable>
+                  </View>
+                );
+              })}
+              {shown.length === 0 ? <Text style={[k.note, { padding: 14, textAlign: 'center' }]}>{f ? 'ไม่พบสินค้าที่ค้นหา' : 'ไม่มีรายการ'}</Text> : null}
+            </ScrollView>
+          </View>
+          {after === 0 && items.length ? (
+            <Text style={[k.note, { color: colors.danger }]}>เอาออกทุกรายการแล้ว — ใบนี้จะปรับสต็อกไม่ได้ ถ้าไม่ได้ส่งของจริงให้ลบใบนี้แทน</Text>
+          ) : null}
+        </View>
+      ) : null}
+    </Sheet>
+  );
+}
+
+/** ยืนยันปรับสต็อก: โอนจำนวนในใบเข้าสต็อกจริง (ตัดต้นทางถ้าเลือก + เพิ่มปลายทาง) แล้วล็อกใบ */
+function AdjustSheet({ row, onClose, onEdit, onDone }: { row: ShipReportRow | null; onClose: () => void; onEdit: (r: ShipReportRow) => void; onDone: (msg: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    setBusy(false);
+    setErr('');
+  }, [row]);
+  const go = async () => {
+    if (!row) return;
+    setBusy(true);
+    setErr('');
+    try {
+      const r = await api.adjustShipment(row.id);
+      onDone(
+        row.sourceBranchName
+          ? `ปรับสต็อก ${row.docNo} แล้ว · เพิ่มสต็อก ${row.destBranchName ?? 'ปลายทาง'} ${n0(r.units)} ชิ้น · ตัดสต็อก ${row.sourceBranchName}`
+          : `ปรับสต็อก ${row.docNo} แล้ว · เพิ่มสต็อก ${row.destBranchName ?? 'ปลายทาง'} ${n0(r.units)} ชิ้น`,
+      );
+    } catch (e) {
+      setErr((e as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Sheet
+      visible={!!row}
+      onClose={() => !busy && onClose()}
+      title={row ? `ปรับสต็อก ${row.docNo}` : 'ปรับสต็อก'}
+      width={500}
+      footer={
+        row ? (
+          <View style={[k.row, { gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }]}>
+            <Pressable style={k.pill} onPress={() => onEdit(row)} disabled={busy} accessibilityLabel="แก้ไขจำนวนก่อน">
+              <Icon name="create-outline" size={16} color={colors.primary} />
+              <Text style={k.pillText}>แก้ไขจำนวนก่อน</Text>
+            </Pressable>
+            <Pressable style={[s.saveBtn, busy && { opacity: 0.45 }]} disabled={busy} onPress={go} accessibilityLabel="ยืนยันปรับสต็อก">
+              {busy ? <ActivityIndicator color="#fff" /> : <Icon name="swap-vertical-outline" size={16} color="#fff" />}
+              <Text style={s.delText}>ยืนยันปรับสต็อก</Text>
+            </Pressable>
+          </View>
+        ) : null
+      }
+    >
+      {row ? (
+        <View style={{ gap: 12, paddingBottom: 4 }}>
+          <View style={s.info}>
+            <Info icon="document-text-outline" label="เลขที่" value={row.docNo} strong />
+            <Info icon="cube-outline" label="จำนวน" value={`${n0(row.units)} ชิ้น · ${n0(row.lines)} รายการ`} strong />
+          </View>
+          <View style={{ gap: 8 }}>
+            <View style={s.lineRow}>
+              <Icon name="add-circle-outline" size={18} color={colors.success} />
+              <Text style={s.lineText}>{`เพิ่มสต็อก ${row.destBranchName ?? 'สาขาปลายทาง'} ${n0(row.units)} ชิ้น`}</Text>
+            </View>
+            <View style={s.lineRow}>
+              <Icon name={row.sourceBranchName ? 'remove-circle-outline' : 'ban-outline'} size={18} color={row.sourceBranchName ? colors.danger : colors.sub} />
+              <Text style={s.lineText}>
+                {row.sourceBranchName ? `ตัดสต็อก ${row.sourceBranchName} ${n0(row.units)} ชิ้น` : 'ไม่ตัดสต็อกสาขาใด (ของใหม่จากโรงงาน)'}
+              </Text>
+            </View>
+          </View>
+          <Text style={k.note}>ตรวจว่าจำนวนตรงกับที่ปลายทางรับจริงแล้ว · ปรับสต็อกแล้วใบนี้จะถูกล็อก แก้ไขจำนวนไม่ได้อีก</Text>
+          {err ? <Text style={k.error}>{err}</Text> : null}
         </View>
       ) : null}
     </Sheet>
@@ -402,4 +689,20 @@ const s = StyleSheet.create({
   thText: { fontFamily: font, fontSize: 12, fontWeight: '600', color: colors.sub },
   td: { fontFamily: font, fontSize: 13, color: colors.text },
   sku: { fontFamily: font, fontSize: 11, color: colors.faint },
+  txtBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 32, paddingHorizontal: 10, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, backgroundColor: '#fff' },
+  txtBtnPrimary: { backgroundColor: colors.primary, borderColor: colors.primary },
+  txtBtnText: { fontFamily: font, fontSize: 12.5, fontWeight: '600', color: colors.primary },
+  doneBox: { alignItems: 'center', gap: 2 },
+  doneChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.successSoft },
+  doneText: { fontFamily: font, fontSize: 12, fontWeight: '600', color: colors.success },
+  doneSub: { fontFamily: font, fontSize: 10.5, color: colors.faint },
+  saveBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 42, paddingHorizontal: 18, borderRadius: radius.md, backgroundColor: colors.primary },
+  hintBox: { flexDirection: 'row', gap: 8, padding: 10, borderRadius: radius.md, backgroundColor: colors.primarySoft },
+  hintText: { fontFamily: font, fontSize: 12.5, color: colors.text, flex: 1, lineHeight: 18 },
+  stepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  stepBtn: { width: 30, height: 32, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
+  qtyInput: { width: 62, height: 32, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, textAlign: 'center', fontFamily: font, fontSize: 14, fontWeight: '700', color: colors.text, backgroundColor: '#fff' },
+  rmBtn: { width: 36, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md },
+  lineRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  lineText: { fontFamily: font, fontSize: 14, color: colors.text, flex: 1 },
 });

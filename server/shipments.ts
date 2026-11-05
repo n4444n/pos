@@ -1,5 +1,6 @@
-// ส่งของจากโรงงาน (ใบส่งของ / DO): สแกนบาร์โค้ดใส่ใบส่ง → ส่งออก
-// ตอนส่งออก: ตัดสต็อกจากสาขาที่เลือก (หรือไม่ตัด) และเพิ่มสต็อกให้สาขาปลายทาง
+// ส่งของจากโรงงาน (ใบส่งของ / DO): สแกนบาร์โค้ดใส่ใบส่ง → ส่งออก → ปลายทางรับของ/ตรวจ → ปรับสต็อก
+// ตอนส่งออก: ล็อกใบ ย้ายไปรายงานการส่ง (ยังไม่แตะสต็อก)
+// ตอนปรับสต็อก (หน้ารายงานการส่ง): ตัดสต็อกสาขาต้นทาง (ถ้าเลือก) + เพิ่มสต็อกสาขาปลายทาง ตามจำนวนในใบ (ที่แก้ล่าสุด)
 import { db, tx, withBranch } from './db.ts';
 import { HttpError } from './common.ts';
 import { getBranch, listBranches } from './branches.ts';
@@ -41,6 +42,13 @@ db.exec(`
   if (!cols.includes('cancel_reason')) db.exec('ALTER TABLE shipments ADD COLUMN cancel_reason TEXT');
   // ใบที่ยกเลิกไว้ก่อนมีระบบนี้ → เริ่มนับ 3 วันจากตอนนี้
   db.exec("UPDATE shipments SET cancelled_at = datetime('now', 'localtime') WHERE status = 'cancelled' AND cancelled_at IS NULL");
+  // ปรับสต็อกแล้ว (โอนเข้าสต็อกจริง) เมื่อไร / โดยใคร · NULL = ส่งออกแล้วแต่รอปลายทางตรวจรับ
+  if (!cols.includes('adjusted_at')) {
+    db.exec('ALTER TABLE shipments ADD COLUMN adjusted_at TEXT');
+    db.exec('ALTER TABLE shipments ADD COLUMN adjusted_by TEXT');
+    // ใบที่ส่งออกก่อนมีขั้นตอนนี้ — สต็อกเข้าปลายทางไปแล้วตอนส่ง จึงถือว่าปรับสต็อกแล้ว (ไม่โอนซ้ำ)
+    db.exec("UPDATE shipments SET adjusted_at = shipped_at, adjusted_by = shipped_by WHERE status = 'shipped'");
+  }
   // เลขที่ใบส่งของต่อเนื่อง (ไม่ใช้เลขซ้ำแม้ใบที่ยกเลิกถูกลบไปแล้ว)
   db.exec('CREATE TABLE IF NOT EXISTS shipment_seq (year INTEGER PRIMARY KEY, n INTEGER NOT NULL)');
   db.exec(`INSERT OR IGNORE INTO shipment_seq (year, n)
@@ -54,12 +62,14 @@ interface Row {
   status: 'draft' | 'shipped' | 'cancelled'; createdBy: string | null; createdAt: string; shippedBy: string | null; shippedAt: string | null;
   heldAt: string | null; heldBy: string | null; units: number; lines: number;
   cancelledAt: string | null; cancelledBy: string | null; cancelReason: string | null; purgeAt: string | null;
+  adjustedAt: string | null; adjustedBy: string | null;
 }
 
 const COLS = `s.id, s.doc_no AS docNo, s.dest_branch_id AS destBranchId, s.source_branch_id AS sourceBranchId, s.bags, s.note, s.status,
   s.created_by AS createdBy, s.created_at AS createdAt, s.shipped_by AS shippedBy, s.shipped_at AS shippedAt,
   s.held_at AS heldAt, s.held_by AS heldBy,
   s.cancelled_at AS cancelledAt, s.cancelled_by AS cancelledBy, s.cancel_reason AS cancelReason,
+  s.adjusted_at AS adjustedAt, s.adjusted_by AS adjustedBy,
   CASE WHEN s.status = 'cancelled' THEN datetime(s.cancelled_at, '+3 days') END AS purgeAt,
   COALESCE((SELECT SUM(qty) FROM shipment_items i WHERE i.shipment_id = s.id), 0) AS units,
   (SELECT COUNT(*) FROM shipment_items i WHERE i.shipment_id = s.id) AS lines`;
@@ -106,6 +116,7 @@ const q = {
   purgeItems: db.prepare('DELETE FROM shipment_items WHERE shipment_id = ?'),
   purgeOne: db.prepare("DELETE FROM shipments WHERE id = ? AND status = 'cancelled'"),
   delShipped: db.prepare("DELETE FROM shipments WHERE id = ? AND status = 'shipped'"),
+  adjust: db.prepare("UPDATE shipments SET adjusted_at = datetime('now', 'localtime'), adjusted_by = ? WHERE id = ? AND status = 'shipped' AND adjusted_at IS NULL"),
   hold: db.prepare("UPDATE shipments SET held_at = datetime('now', 'localtime'), held_by = ? WHERE id = ? AND status = 'draft'"),
   resume: db.prepare("UPDATE shipments SET held_at = NULL, held_by = NULL WHERE id = ? AND status = 'draft'"),
 };
@@ -220,13 +231,66 @@ export function setShipmentItem(id: number, variantId: number, body: { qty?: unk
 }
 
 /**
- * ส่งออก: ล็อกใบส่งของ · ตัดสต็อกสาขาต้นทาง (ถ้าเลือก) · เพิ่มสต็อกสาขาปลายทาง
- * ทำทั้งหมดใน transaction เดียว — ถ้าสต็อกต้นทางไม่พอ (และไม่ได้เปิด "ขายได้แม้สต็อกหมด") จะไม่บันทึกอะไรเลย
+ * ส่งออก: ล็อกใบส่งของ แล้วย้ายไปรายงานการส่ง — ยังไม่ตัด/เพิ่มสต็อก
+ * รอสาขาปลายทางรับของและตรวจจำนวน (แก้ได้ที่รายงานการส่ง) แล้วค่อยกด "ปรับสต็อก"
  */
 export function shipShipment(id: number, me: Me) {
   const r = draft(id);
+  if (!(q.items.all(id) as unknown[]).length) throw new HttpError(422, 'ยังไม่มีสินค้าในใบส่งของ');
+  if (!getBranch(r.destBranchId)) throw new HttpError(422, 'ไม่พบสาขาปลายทาง');
+  if (r.sourceBranchId && !getBranch(r.sourceBranchId)) throw new HttpError(422, 'ไม่พบสาขาที่ตัดสต็อก');
+  if (q.ship.run(me.name, id).changes !== 1) throw new HttpError(409, 'ใบส่งของนี้ส่งออกไปแล้ว');
+  return shipmentDetail(id);
+}
+
+/** ใบที่ส่งออกแล้วแต่ยังไม่ปรับสต็อก (แก้จำนวนตามที่รับจริงได้) */
+function pending(id: number) {
+  const r = row(id);
+  if (r.status !== 'shipped') throw new HttpError(409, `${r.docNo} ยังไม่ได้ส่งออก`);
+  if (r.adjustedAt) throw new HttpError(409, `${r.docNo} ปรับสต็อกแล้ว — แก้ไขจำนวนไม่ได้`);
+  return r;
+}
+
+/**
+ * แก้จำนวนตามที่ปลายทางรับจริง (หน้ารายงานการส่ง → ปรับสต็อก → แก้ไข)
+ * items = รายการทั้งใบหลังแก้: เพิ่ม/ลดจำนวนได้ · 0 หรือไม่ส่งมา = ลบรายการ · เพิ่มสินค้าใหม่ไม่ได้
+ */
+export function editShippedItems(id: number, body: { items?: unknown }, me: Me) {
+  const r = pending(id);
+  const list = Array.isArray(body.items) ? (body.items as { variantId?: unknown; qty?: unknown }[]) : null;
+  if (!list) throw new HttpError(422, 'ข้อมูลรายการไม่ถูกต้อง');
+  const cur = q.items.all(id) as { variantId: number; qty: number }[];
+  const want = new Map<number, number>();
+  for (const it of list) {
+    const v = Number(it.variantId);
+    const n = Math.floor(Number(it.qty));
+    if (!cur.some((c) => c.variantId === v)) throw new HttpError(422, 'เพิ่มสินค้าที่ไม่มีในใบส่งของไม่ได้');
+    if (!Number.isFinite(n) || n < 0 || n > 99999) throw new HttpError(422, 'จำนวนไม่ถูกต้อง');
+    want.set(v, n);
+  }
+  let changed = 0;
+  tx(() => {
+    for (const c of cur) {
+      const n = want.get(c.variantId) ?? 0;
+      if (n === c.qty) continue;
+      changed++;
+      if (n === 0) q.delItem.run(id, c.variantId);
+      else q.upsert.run(id, c.variantId, n);
+    }
+  });
+  if (changed) console.log(`[shipments] แก้จำนวน ${r.docNo} (${changed} รายการ) โดย ${me.name}`);
+  return shipmentDetail(id);
+}
+
+/**
+ * ปรับสต็อก: โอนจำนวนในใบ (ที่แก้ล่าสุด) เข้าสต็อกจริง
+ * ตัดสต็อกสาขาต้นทาง (ถ้าเลือกไว้) + เพิ่มสต็อกสาขาปลายทาง ใน transaction เดียว
+ * ถ้าสต็อกต้นทางไม่พอ (และไม่ได้เปิด "ขายได้แม้สต็อกหมด") จะไม่บันทึกอะไรเลย
+ */
+export function adjustShipment(id: number, me: Me) {
+  const r = pending(id);
   const items = q.items.all(id) as { variantId: number; qty: number; name: string; size: string; color: string; extra: string }[];
-  if (!items.length) throw new HttpError(422, 'ยังไม่มีสินค้าในใบส่งของ');
+  if (!items.length) throw new HttpError(422, `${r.docNo} ไม่มีสินค้าเหลือในใบ — ถ้าไม่ได้ส่งของจริงให้ลบใบนี้แทน`);
   if (!getBranch(r.destBranchId)) throw new HttpError(422, 'ไม่พบสาขาปลายทาง');
   if (r.sourceBranchId && !getBranch(r.sourceBranchId)) throw new HttpError(422, 'ไม่พบสาขาที่ตัดสต็อก');
   const allowNeg = allowNegativeStock();
@@ -236,7 +300,7 @@ export function shipShipment(id: number, me: Me) {
         for (const it of items) {
           const cur = (q.stockOf.get(it.variantId) as { stock: number } | undefined)?.stock ?? 0;
           if (cur < it.qty && !allowNeg) {
-            throw new HttpError(409, `${it.name} (${variantLabel(it)}) ที่${branchName(r.sourceBranchId)} มีแค่ ${cur} ชิ้น (ส่ง ${it.qty})`);
+            throw new HttpError(409, `${it.name} (${variantLabel(it)}) ที่${branchName(r.sourceBranchId)} มีแค่ ${cur} ชิ้น (ใบนี้ ${it.qty})`);
           }
           q.addStock.run(-it.qty, it.variantId);
           q.insMove.run(it.variantId, -it.qty, cur - it.qty, `ส่งของ ${r.docNo} → ${branchName(r.destBranchId)}`, me.name);
@@ -250,9 +314,9 @@ export function shipShipment(id: number, me: Me) {
         q.insMove.run(it.variantId, it.qty, cur + it.qty, `รับของ ${r.docNo}${r.sourceBranchId ? ` จาก${branchName(r.sourceBranchId)}` : ' จากโรงงาน'}`, me.name);
       }
     });
-    if (q.ship.run(me.name, id).changes !== 1) throw new HttpError(409, 'ใบส่งของนี้ส่งออกไปแล้ว');
+    if (q.adjust.run(me.name, id).changes !== 1) throw new HttpError(409, 'ใบส่งของนี้ปรับสต็อกไปแล้ว');
   });
-  return shipmentDetail(id);
+  return { ...shipmentDetail(id), units: items.reduce((a, i) => a + i.qty, 0) };
 }
 
 /** ยกเลิกใบส่งของที่ยังไม่ส่ง (ไม่กระทบสต็อก) — เก็บไว้ 3 วันให้กู้คืนได้ แล้วลบถาวร */
@@ -278,6 +342,15 @@ export function deleteShippedShipment(id: number, me: Me) {
   const items = q.items.all(id) as { variantId: number; qty: number; name: string; size: string; color: string; extra: string }[];
   const allowNeg = allowNegativeStock();
   const docNo = r.docNo;
+  // ยังไม่ปรับสต็อก = สต็อกยังไม่เคยเปลี่ยน → ลบใบได้เลย ไม่ต้องคืนสต็อก
+  if (!r.adjustedAt) {
+    tx(() => {
+      q.purgeItems.run(id);
+      if (q.delShipped.run(id).changes !== 1) throw new HttpError(409, 'ลบไม่สำเร็จ ลองโหลดหน้าใหม่');
+    });
+    console.log(`[shipments] ลบใบส่งของ ${docNo} (ยังไม่ปรับสต็อก) โดย ${me.name}`);
+    return { ok: true as const, docNo, items: items.length, restocked: false };
+  }
   tx(() => {
     // คืนของออกจากปลายทางก่อน — ถ้าของถูกขายไปแล้วจะไม่พอ ต้องหยุดตั้งแต่ตรงนี้
     withBranch(r.destBranchId, () => {
@@ -306,7 +379,7 @@ export function deleteShippedShipment(id: number, me: Me) {
     if (q.delShipped.run(id).changes !== 1) throw new HttpError(409, 'ลบไม่สำเร็จ ลองโหลดหน้าใหม่');
   });
   console.log(`[shipments] ลบใบส่งของ ${docNo} ถาวร และคืนสต็อกแล้ว โดย ${me.name}`);
-  return { ok: true as const, docNo, items: items.length };
+  return { ok: true as const, docNo, items: items.length, restocked: true };
 }
 
 /** กู้คืนใบที่ยกเลิก → กลับเป็นฉบับร่าง (เฉพาะใบที่ยังไม่เคยส่งออก) */
