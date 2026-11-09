@@ -24,7 +24,7 @@ const q = {
   ),
   items: db.prepare(
     `SELECT oi.id AS itemId, oi.variant_id AS variantId, v.product_id AS productId, oi.product_name AS name, oi.sku, oi.size,
-            oi.color, oi.extra, v.color_hex AS colorHex, p.art, oi.qty, oi.unit_price AS unitPrice, oi.line_total AS lineTotal,
+            oi.color, oi.extra, v.color_hex AS colorHex, p.art, p.image_url AS imageUrl, oi.qty, oi.unit_price AS unitPrice, oi.line_total AS lineTotal,
             oi.vat_exempt AS vatExempt
        FROM order_items oi
        LEFT JOIN variants v ON v.id = oi.variant_id
@@ -71,7 +71,7 @@ type OrderRow = {
 };
 type ItemRow = {
   variantId: number; productId: number | null; name: string; sku: string; size: string; color: string; extra: string;
-  colorHex: string | null; art: string | null; qty: number; unitPrice: number; lineTotal: number; vatExempt: number;
+  colorHex: string | null; art: string | null; imageUrl: string | null; qty: number; unitPrice: number; lineTotal: number; vatExempt: number;
 };
 
 function getOrder(id: number) {

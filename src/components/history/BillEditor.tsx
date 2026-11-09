@@ -2,9 +2,9 @@
 import { sellableStock } from '../../appSettings';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
+  ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
 } from 'react-native';
-import { api } from '../../api';
+import { api, imageSrc } from '../../api';
 import { baht, bahtShort, MONEY_RE, moneyInput, PAYMENT_LABEL, variantLabel } from '../../format';
 import type { Toast } from '../../store/usePos';
 import { useSession } from '../../session';
@@ -240,7 +240,11 @@ export function BillEditor({ visible, order, catalog, onClose, onSaved, notify }
         return (
           <View key={l.variantId} style={[s.line, removed && s.lineRemoved, isNew && s.lineNew]}>
             <View style={s.thumb}>
-              <GarmentArt art={p?.art ?? orig?.art ?? 'tshirt'} color={v?.colorHex ?? orig?.colorHex ?? '#ccc'} size={36} />
+              {p?.imageUrl ?? orig?.imageUrl ? (
+                <Image source={{ uri: imageSrc((p?.imageUrl ?? orig?.imageUrl)!, 'low') }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+              ) : (
+                <GarmentArt art={p?.art ?? orig?.art ?? 'tshirt'} color={v?.colorHex ?? orig?.colorHex ?? '#ccc'} size={36} />
+              )}
             </View>
             <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -457,7 +461,7 @@ const s = StyleSheet.create({
   line: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line },
   lineRemoved: { backgroundColor: '#FFF8F8', borderColor: '#F6D5D6' },
   lineNew: { borderColor: '#BBD0FF', backgroundColor: '#F8FAFF' },
-  thumb: { width: 48, height: 48, borderRadius: radius.sm, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  thumb: { width: 48, height: 48, borderRadius: radius.sm, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   lineName: { fontFamily: font, fontSize: 13, fontWeight: '600', color: colors.text, flexShrink: 1 },
   strike: { textDecorationLine: 'line-through', color: colors.faint },
   variantChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, height: 26, borderRadius: radius.pill, backgroundColor: colors.surface },

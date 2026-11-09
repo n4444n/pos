@@ -173,6 +173,8 @@ export interface DetailItem extends OrderItem {
   productId: number | null;
   colorHex: string | null;
   art: string | null;
+  /** รูปสินค้า (ปัจจุบัน) — ไม่มี = ใช้ภาพวาดตามชนิดเสื้อผ้า */
+  imageUrl?: string | null;
 }
 
 export interface OrderEdit {

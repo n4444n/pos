@@ -1,7 +1,7 @@
 // รายละเอียดบิล: รายการ · ยอด · VAT · พิมพ์ · ยกเลิก · แก้ไข · ใบกำกับเต็มรูป · ใบลดหนี้ · ประวัติ
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { api } from '../../api';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { api, imageSrc } from '../../api';
 import { useAppSettings } from '../../appSettings';
 import { baht, PAYMENT_LABEL, thaiDateTime, variantLabel, vatLabel } from '../../format';
 import { printReceipt, printTaxDoc } from '../../print';
@@ -51,7 +51,9 @@ export function OrderDetailModal({ orderId, catalog, onClose, onChanged, notify 
   const isVoid = order?.status === 'void';
   const narrow = width < 600;
   // สาขาที่จด VAT + ตั้ง "ห้ามแก้ไขบิล" → เปลี่ยน/คืนสินค้าต้องยกเลิกบิลแล้วออกใหม่
-  const locked = !!useAppSettings().tax?.lockEdit;
+  const appSettings = useAppSettings();
+  const locked = !!appSettings.tax?.lockEdit;
+  const showImages = appSettings.display?.showImages !== false; // รูปสินค้าเหมือนหน้าขาย
   // เอกสารภาษีหลังการขาย (เฉพาะบิลที่คิด VAT): ใบกำกับภาษีเต็มรูป · ใบลดหนี้
   const taxed = !!order && !isVoid && (order.vatRate ?? 0) > 0 && order.vat > 0;
   const activeTiv = order?.taxInvoices?.find((t) => t.status === 'active') ?? null;
@@ -171,7 +173,11 @@ export function OrderDetailModal({ orderId, catalog, onClose, onChanged, notify 
             {order.items.map((it, i) => (
               <View key={i} style={s.item}>
                 <View style={s.thumb}>
-                  <GarmentArt art={it.art ?? 'tshirt'} color={it.colorHex ?? '#ccc'} size={38} />
+                  {showImages && it.imageUrl ? (
+                    <Image source={{ uri: imageSrc(it.imageUrl, 'low') }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+                  ) : (
+                    <GarmentArt art={it.art ?? 'tshirt'} color={it.colorHex ?? '#ccc'} size={38} />
+                  )}
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={[s.itemName, isVoid && s.strike]} numberOfLines={1}>{it.name}</Text>
@@ -359,7 +365,7 @@ const s = StyleSheet.create({
   metaValue: { fontFamily: font, fontSize: 13, color: colors.text, fontWeight: '500', marginTop: 2 },
   section: { fontFamily: font, fontSize: 13, fontWeight: '600', color: colors.text, marginTop: 16, marginBottom: 6 },
   item: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F1F3F6' },
-  thumb: { width: 46, height: 46, borderRadius: radius.sm, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  thumb: { width: 46, height: 46, borderRadius: radius.sm, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   itemName: { fontFamily: font, fontSize: 13, fontWeight: '500', color: colors.text },
   itemSub: { fontFamily: font, fontSize: 11, color: colors.sub, marginTop: 2 },
   itemTotal: { fontFamily: font, fontSize: 13, fontWeight: '600', color: colors.text },
