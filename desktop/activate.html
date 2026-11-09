@@ -125,7 +125,7 @@
         <div class="row"><span>เครื่องที่ใช้</span><b id="dMach"></b></div>
       </div>
       <div class="pin" id="pinBox" hidden>
-        <small>PIN ผู้จัดการเริ่มต้น — จดไว้ แล้วเปลี่ยนได้ที่เมนู "พนักงาน"</small>
+        <small id="pinLabel">PIN ผู้จัดการเริ่มต้น — จดไว้ แล้วเปลี่ยนได้ที่เมนู "พนักงาน"</small>
         <b id="dPin"></b>
       </div>
       <p class="pin-note" id="pinNote" hidden>เข้าสู่ระบบด้วย PIN พนักงานที่ร้านตั้งไว้</p>
@@ -211,7 +211,10 @@
     $('dLeft').hidden = !r.expiresAt;
     $('dLeft').classList.toggle('warn', r.daysLeft <= 7);
     $('dMach').textContent = `${r.machines} จาก ${r.maxMachines} เครื่อง`;
-    // PIN ผู้จัดการได้เฉพาะตอนสร้างร้านครั้งแรก
+    // PIN ผู้จัดการเริ่มต้นของร้าน — แสดงทุกครั้งที่กรอก license ผ่าน (ถ้าร้านเปลี่ยน PIN แล้ว ให้ใช้ PIN ใหม่ของร้าน)
+    $('pinLabel').textContent = r.created
+      ? 'PIN ผู้จัดการเริ่มต้น — จดไว้ แล้วเปลี่ยนได้ที่เมนู "พนักงาน"'
+      : 'PIN ผู้จัดการเริ่มต้นของร้าน — ถ้าร้านเปลี่ยน PIN แล้ว ให้ใช้ PIN ที่ร้านตั้งไว้';
     $('dPin').textContent = r.managerPin || '';
     $('pinBox').hidden = !r.managerPin;
     $('pinNote').hidden = !!r.managerPin;

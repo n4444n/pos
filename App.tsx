@@ -27,6 +27,7 @@ import { TaxReportScreen } from './src/screens/TaxReportScreen';
 import { auth, SessionContext, type Me } from './src/session';
 import { SalesScreen } from './src/screens/SalesScreen';
 import { PromoScreen } from './src/screens/PromoScreen';
+import { LogScreen } from './src/screens/LogScreen';
 import { colors } from './src/theme';
 
 /** โหลดฟอนต์ไทย (IBM Plex Sans Thai) บนเว็บ — ถ้าออฟไลน์จะใช้ฟอนต์ระบบแทน */
@@ -46,7 +47,7 @@ function useRoute(): [Route, (r: Route) => void] {
   const read = (): Route => {
     if (Platform.OS !== 'web') return 'sales';
     const h = window.location.hash.slice(1);
-    const routes: Route[] = ['history', 'shifts', 'expenses', 'promos', 'staff', 'dashboard', 'salesReport', 'billReport', 'productReport', 'taxReport', 'stock', 'skus', 'shipments', 'shipmentReport', 'branches', 'settings'];
+    const routes: Route[] = ['history', 'shifts', 'expenses', 'promos', 'staff', 'dashboard', 'salesReport', 'billReport', 'productReport', 'taxReport', 'stock', 'skus', 'shipments', 'shipmentReport', 'branches', 'settings', 'logs'];
     return (routes as string[]).includes(h) ? (h as Route) : 'sales';
   };
   const [route, setRoute] = useState<Route>(read);
@@ -118,7 +119,7 @@ function Main({ me }: { me: Me }) {
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const page: Partial<Record<Route, string>> = {
-      history: 'ประวัติการขาย', shifts: 'กะการขาย', expenses: 'ค่าใช้จ่าย', staff: 'พนักงาน', dashboard: 'รายงานรวม', salesReport: 'รายงานยอดขาย', billReport: 'รายงานยอดขายรายบิล', productReport: 'รายงานสินค้า', taxReport: 'รายงานภาษีขาย', stock: 'สต็อกสินค้า', skus: 'สต็อกสินค้า (คุณสมบัติ)', shipments: 'ส่งของจากโรงงาน', shipmentReport: 'รายงานการส่ง', branches: 'สาขา', settings: 'ตั้งค่า',
+      history: 'ประวัติการขาย', shifts: 'กะการขาย', expenses: 'ค่าใช้จ่าย', staff: 'พนักงาน', dashboard: 'รายงานรวม', salesReport: 'รายงานยอดขาย', billReport: 'รายงานยอดขายรายบิล', productReport: 'รายงานสินค้า', taxReport: 'รายงานภาษีขาย', stock: 'สต็อกสินค้า', skus: 'สต็อกสินค้า (คุณสมบัติ)', shipments: 'ส่งของจากโรงงาน', shipmentReport: 'รายงานการส่ง', branches: 'สาขา', settings: 'ตั้งค่า', logs: 'LOG',
     };
     // ชื่อสาขาบนแท็บเบราว์เซอร์ — เปิดหลายสาขาพร้อมกันก็แยกออก
     const branch = shop.branchName || shop.name;
@@ -166,6 +167,7 @@ function Main({ me }: { me: Me }) {
       {route === 'shipmentReport' && canOpen(me, 'shipmentReport') ? <ShipmentReportScreen onNavigate={go} /> : null}
       {route === 'skus' ? <SkuStockScreen onNavigate={go} onStockChanged={() => setStockVersion((v) => v + 1)} /> : null}
       {route === 'promos' ? <PromoScreen onNavigate={go} /> : null}
+      {route === 'logs' && canOpen(me, 'logs') ? <LogScreen onNavigate={go} /> : null}
       <NavDrawer visible={drawer} onClose={() => setDrawer(false)} route={route} onNavigate={go} />
     </>
   );

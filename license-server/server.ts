@@ -167,8 +167,10 @@ async function activate(b: Record<string, unknown>, ip: string, base: string) {
     });
     if (!known) logEvent(l1.id, 'machine.add', `${m.name} (${ip})`);
     const l = getLicenseById(l1.id)!;
-    // PIN ผู้จัดการเริ่มต้นให้เฉพาะตอนสร้างร้านครั้งแรก — เครื่องถัดไปใช้ PIN ที่ร้านตั้งเอง (คนได้รหัส license ไปทีหลังจะไม่ได้ PIN)
-    return { ok: true, ...appInfo(l, base), created, ...(created ? { managerPin: inst.manager_pin } : {}), code: l.code };
+    // PIN ผู้จัดการเริ่มต้นของร้าน — แสดงทุกครั้งที่กรอก license ผ่าน (เจ้าของร้านต้องการ · 9 พ.ย. 2026)
+    // หมายเหตุ: ใครได้รหัส license ก็เห็น PIN นี้ → ร้านควรเปลี่ยน PIN ผู้จัดการหลังเข้าระบบครั้งแรก (PIN ที่เปลี่ยนแล้วจะไม่ตรงกับค่านี้)
+    // ร้านหลักไม่มี PIN เริ่มต้นในระบบ license (ใช้ PIN เดิมของร้าน) เว้นแต่ตั้ง MAIN_PIN ไว้
+    return { ok: true, ...appInfo(l, base), created, ...(inst.manager_pin ? { managerPin: inst.manager_pin } : {}), code: l.code };
   });
 }
 
@@ -332,10 +334,12 @@ function ensureMainShop() {
       logEvent(getLicenseBySlug(MAIN_SLUG)!.id, 'license.issue', `ร้านหลัก · พอร์ต ${MAIN_PORT}`);
     }
     // แถว instance ชี้ไปบริการที่มีอยู่แล้ว (ไม่สร้างใหม่) — PIN ว่าง = ใช้ PIN เดิมของร้าน
+    // MAIN_PIN (ไม่บังคับ) = PIN ผู้จัดการเริ่มต้นของร้านหลัก ไว้แสดงในแอปหลังกรอก license (run-test.bat ตั้ง 999999 ตอนพัฒนา)
+    const mainPin = /^\d{4,8}$/.test(process.env.MAIN_PIN ?? '') ? process.env.MAIN_PIN! : '';
     db.prepare(
-      `INSERT INTO instances (slug, port, manager_pin, state) VALUES (?, ?, '', 'running')
-       ON CONFLICT (slug) DO UPDATE SET port = excluded.port, state = 'running', error = ''`,
-    ).run(MAIN_SLUG, MAIN_PORT);
+      `INSERT INTO instances (slug, port, manager_pin, state) VALUES (?, ?, ?, 'running')
+       ON CONFLICT (slug) DO UPDATE SET port = excluded.port, manager_pin = excluded.manager_pin, state = 'running', error = ''`,
+    ).run(MAIN_SLUG, MAIN_PORT, mainPin);
   });
   const l = getLicenseBySlug(MAIN_SLUG)!;
   console.log(`  ร้านหลัก      → ${l.shop} (${MAIN_SLUG}) พอร์ต ${MAIN_PORT} · license ${l.code}`);

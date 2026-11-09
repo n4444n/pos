@@ -262,6 +262,9 @@ export const api = {
   branchTerminals: () => request<TaxTerminal[]>('/api/tax/terminals'),
   taxReport: (f: TaxReportFilter) => request<TaxReport>(`/api/tax/report${qs(f)}`),
   taxReportXlsxUrl: (f: TaxReportFilter) => `${BASE}/api/tax/report.xlsx${qs({ ...f, token: auth.get() ?? '' })}`,
+  // ----- LOG (ผู้ดูแลระบบเท่านั้น) -----
+  logs: (f: LogFilter) => request<LogList>(`/api/logs${qs(f)}`),
+  logsXlsxUrl: (f: LogFilter) => `${BASE}/api/logs.xlsx${qs({ ...f, token: auth.get() ?? '' })}`,
   shipmentReport: (f: ShipReportFilter) => request<ShipReport>(`/api/shipments/report${qs(f)}`),
   shipmentReportXlsxUrl: (f: ShipReportFilter) => `${BASE}/api/shipments/report.xlsx${qs({ ...f, token: auth.get() ?? '' })}`,
   /** ลิงก์ดาวน์โหลดไฟล์สำรอง · branch = id สาขา (ไม่ระบุ = ทั้งร้าน) */
@@ -687,4 +690,15 @@ export interface BillNoAdmin {
   terminals: string[];
   next: string;
   nextTerminal: string | null;
+}
+
+/** LOG: บันทึกการใช้งาน */
+export interface LogFilter { from: string; to: string; q?: string; staff?: string; result?: 'ok' | 'fail' | ''; branch?: string; page?: number; limit?: number }
+export interface LogRow {
+  id: number; at: string; staffId: number | null; staffName: string | null; role: string | null; branchId: number | null; branchName: string | null;
+  method: string; path: string; action: string; ref: string | null; detail: string | null; status: number; ip: string | null;
+}
+export interface LogList {
+  range: { from: string; to: string }; rows: LogRow[]; total: number; failed: number; page: number; pages: number;
+  staff: { id: number; name: string }[]; branches: { id: number; name: string }[];
 }

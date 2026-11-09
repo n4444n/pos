@@ -11,7 +11,7 @@ import { AppVersionChip, UpdateButton } from './UpdateButton';
 import { webTitle } from '../webTitle';
 
 export type Route =
-  | 'sales' | 'dashboard' | 'salesReport' | 'billReport' | 'productReport' | 'taxReport' | 'history' | 'shifts' | 'expenses' | 'promos' | 'staff' | 'stock' | 'skus' | 'shipments' | 'shipmentReport' | 'branches' | 'settings';
+  | 'sales' | 'dashboard' | 'salesReport' | 'billReport' | 'productReport' | 'taxReport' | 'history' | 'shifts' | 'expenses' | 'promos' | 'staff' | 'stock' | 'skus' | 'shipments' | 'shipmentReport' | 'branches' | 'settings' | 'logs';
 
 /** หน้าไหนต้องมีสิทธิ์อะไร (ตั้งได้ที่ พนักงาน → การจัดการสิทธิ์) */
 export const ROUTE_FEATURE: Record<Route, Feature> = {
@@ -19,9 +19,11 @@ export const ROUTE_FEATURE: Record<Route, Feature> = {
   stock: 'stock', skus: 'stock', shipments: 'shipments', shipmentReport: 'shipments',
   dashboard: 'reports', salesReport: 'reports', billReport: 'reports', productReport: 'reports', taxReport: 'taxReport',
   staff: 'staff', branches: 'branches', settings: 'settings',
+  logs: 'settings', // ไม่ใช้สิทธิ์ของบทบาท — ดู canOpen (ผู้ดูแลระบบเท่านั้น)
 };
 /** เปิดหน้านี้ได้ไหม */
-export const canOpen = (me: Me, r: Route) => can(me, ROUTE_FEATURE[r]);
+/** เปิดหน้านี้ได้ไหม · LOG = ผู้ดูแลระบบเท่านั้น (ไม่ขึ้นกับการตั้งสิทธิ์ของบทบาท) */
+export const canOpen = (me: Me, r: Route) => (r === 'logs' ? me.role === 'admin' : can(me, ROUTE_FEATURE[r]));
 /** หน้าแรกที่เปิดได้ (ใช้เมื่อถูกพาออกจากหน้าที่ไม่มีสิทธิ์) */
 export const firstRoute = (me: Me): Route =>
   (['sales', 'history', 'shifts', 'expenses', 'promos', 'stock', 'shipments', 'dashboard', 'staff', 'settings'] as Route[]).find((r) => canOpen(me, r)) ?? 'sales';
@@ -125,6 +127,7 @@ const ITEMS: Item[] = [
   },
   { id: 'branches', label: 'nav.branches', icon: 'business-outline' },
   { id: 'settings', label: 'nav.settings', icon: 'settings-outline' },
+  { id: 'logs', label: 'nav.logs', icon: 'shield-checkmark-outline' },
 ];
 
 interface MenuProps {

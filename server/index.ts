@@ -39,6 +39,7 @@ import { billReport, billReportXlsx, productReport, productReportXlsx, salesRepo
 import { stockXlsx } from './stockExport.ts';
 import { XLSX_TYPE } from './xlsx.ts';
 import { internalAllowed, shopStats } from './internal.ts';
+import { listLogs, logsXlsx, recordAudit, requireLogAccess } from './auditLog.ts';
 import { backupBuffer, backupFileName, dropUpload, newUploadPath, previewUpload, restoreBranches } from './backup.ts';
 import { billNoSettings, nextBillNo, saveBillNo } from './billNo.ts';
 import { permCatalog, resetPerms, savePerms } from './perms.ts';
@@ -350,13 +351,21 @@ function send(req: IncomingMessage, res: ServerResponse, status: number, body: B
   res.writeHead(status, headers);
   res.end(req.method === 'HEAD' ? undefined : buf);
 }
-const json = (req: IncomingMessage, res: ServerResponse, status: number, data: unknown) =>
+const json = (req: IncomingMessage, res: ServerResponse, status: number, data: unknown) => {
+  resultOfReq.set(req, data); // ไว้ให้ LOG หาเลขที่เอกสาร / ข้อความผิดพลาด
   send(req, res, status, JSON.stringify(data), 'application/json; charset=utf-8');
+};
+
+/** ข้อมูลของคำขอที่ใช้บันทึก LOG (auditLog.ts) */
+const bodyOfReq = new WeakMap<IncomingMessage, unknown>();
+const resultOfReq = new WeakMap<IncomingMessage, unknown>();
+const meOfReq = new WeakMap<IncomingMessage, Me>();
 
 /** สาขาของ request นี้ — ตั้งใหม่ทุกครั้งหลัง await (request อื่นอาจเปลี่ยนสาขาระหว่างรออ่าน body) */
 const branchOfReq = new WeakMap<IncomingMessage, number>();
 function readBody(req: IncomingMessage, limit = 1_000_000): Promise<unknown> {
   return readBodyRaw(req, limit).then((v) => {
+    bodyOfReq.set(req, v);
     const b = branchOfReq.get(req);
     if (b !== undefined) setBranch(b);
     return v;
@@ -437,7 +446,9 @@ const server = createServer(async (req, res) => {
       // ----- เข้าสู่ระบบด้วย PIN (ไม่ต้องมี token) -----
       if (req.method === 'POST' && path === '/api/auth/login') {
         const body = (await readBody(req)) as { pin?: string };
-        return json(req, res, 200, login(body.pin, clientIp(req)));
+        const r = login(body.pin, clientIp(req));
+        meOfReq.set(req, r.staff);
+        return json(req, res, 200, r);
       }
       if (req.method === 'GET' && path === '/api/auth/config') return json(req, res, 200, { pinLength: PIN_LENGTH, shop: { name: getSettings().shop.name } });
 
@@ -447,6 +458,17 @@ const server = createServer(async (req, res) => {
       // ข้อมูลทั้งหมดของ request นี้เป็นของสาขาที่เลือกไว้
       setBranch(me.branchId);
       branchOfReq.set(req, me.branchId);
+      meOfReq.set(req, me);
+
+      // ----- LOG: บันทึกการใช้งาน (ผู้ดูแลระบบเท่านั้น) -----
+      if ((path === '/api/logs' || path === '/api/logs.xlsx') && req.method === 'GET') {
+        requireLogAccess(me);
+        const f = Object.fromEntries(url.searchParams.entries());
+        if (path === '/api/logs') return json(req, res, 200, listLogs(f));
+        const { file, range } = logsXlsx(f);
+        res.setHeader('Content-Disposition', `attachment; filename="log-${range.from}-to-${range.to}.xlsx"`);
+        return send(req, res, 200, file, XLSX_TYPE);
+      }
 
       // ----- สำรอง / กู้คืนข้อมูล (ผู้จัดการ) -----
       if (path.startsWith('/api/backup/')) {
@@ -908,8 +930,16 @@ const server = createServer(async (req, res) => {
       code: err instanceof HttpError ? err.code : undefined,
     });
   } finally {
-    if (path.startsWith('/api/'))
+    if (path.startsWith('/api/')) {
       console.log(`${req.method} ${path} ${res.statusCode} ${(performance.now() - started).toFixed(1)}ms`);
+      // LOG: ทุกการกระทำที่เปลี่ยนข้อมูล + เข้า/ออกระบบ + ดาวน์โหลดไฟล์ (ไม่บันทึก token ใน query)
+      const qs = new URLSearchParams(url.searchParams);
+      qs.delete('token');
+      recordAudit({
+        method: req.method ?? 'GET', path, query: qs.toString(), status: res.statusCode, ip: clientIp(req),
+        me: meOfReq.get(req) ?? null, branchId: branchOfReq.get(req) ?? null, body: bodyOfReq.get(req), result: resultOfReq.get(req),
+      });
+    }
   }
 });
 

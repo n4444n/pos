@@ -50,6 +50,7 @@ export const en: Deep<typeof th> = {
     shipments: 'Delivery note (scan)',
     shipmentReport: 'Shipment report',
     branches: 'Branches',
+    logs: 'LOG',
     settings: 'Settings',
     logout: 'Sign out',
   },

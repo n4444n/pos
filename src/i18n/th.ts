@@ -47,6 +47,7 @@ export const th = {
     shipments: 'ใบส่งของ (สแกนส่ง)',
     shipmentReport: 'รายงานการส่ง',
     branches: 'สาขา',
+    logs: 'LOG',
     settings: 'ตั้งค่า',
     logout: 'ออก',
   },
