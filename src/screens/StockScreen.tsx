@@ -332,7 +332,7 @@ export function StockScreen({ onNavigate, onStockChanged }: Props) {
                 const open = () => (manager ? setEditing(r.id) : notify('info', 'บทบาทของคุณดูได้อย่างเดียว — แก้ไขสินค้าไม่ได้'));
                 const thumb = (
                   <View style={s.thumb}>
-                    {r.imageUrl ? <Image source={{ uri: imageSrc(r.imageUrl, 'low') }} style={s.thumbImg} /> : <GarmentArt art={r.art} color={r.tint} size={34} />}
+                    {r.imageUrl ? <Image source={{ uri: imageSrc(r.imageUrl, 'low') }} style={s.thumbImg} resizeMode="contain" /> : <GarmentArt art={r.art} color={r.tint} size={34} />}
                   </View>
                 );
                 const stockCell = (

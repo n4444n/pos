@@ -308,7 +308,7 @@ export function SkuStockScreen({ onNavigate, onStockChanged }: Props) {
   const thumb = (p: SkuProduct, size = 36) =>
     showImg ? (
       <View style={[s.thumb, { width: size, height: size }]}>
-        {p.imageUrl ? <Image source={{ uri: imageSrc(p.imageUrl, 'low') }} style={{ width: '100%', height: '100%' }} /> : <GarmentArt art={p.art} color={p.tint} size={size - 10} />}
+        {p.imageUrl ? <Image source={{ uri: imageSrc(p.imageUrl, 'low') }} style={{ width: '100%', height: '100%' }} resizeMode="contain" /> : <GarmentArt art={p.art} color={p.tint} size={size - 10} />}
       </View>
     ) : null;
 

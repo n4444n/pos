@@ -92,7 +92,7 @@ export function ImagePicker({ imageUrl, art, tint, onChange }: Props) {
             : null}
           {imageUrl ? (
             <View style={s.preview}>
-              <Image source={{ uri: imageSrc(imageUrl) }} style={s.previewImg} resizeMode="cover" />
+              <Image source={{ uri: imageSrc(imageUrl) }} style={s.previewImg} resizeMode="contain" />
               <View style={s.previewActions}>
                 <Pressable style={s.smallBtn} onPress={pick}>
                   <Icon name="swap-horizontal" size={14} color={colors.text} />
