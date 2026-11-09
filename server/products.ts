@@ -605,7 +605,17 @@ export function patchVariant(id: number, body: { barcode?: string | null; active
 export function setProductActive(id: number, active: boolean) {
   const r = db.prepare("UPDATE products SET active = ?, updated_at = datetime('now', 'localtime') WHERE id = ?").run(active ? 1 : 0, id);
   if (r.changes !== 1) throw new HttpError(404, 'ไม่พบสินค้า');
+  if (active) showAllSkusIfNone(id);
   return { id, active };
+}
+
+/**
+ * เปิดแสดงขายสินค้าที่ทุก SKU ถูกปิดอยู่ (เช่น หลังกู้คืนข้อมูล) → เปิดทุก SKU ด้วย
+ * ไม่งั้นสวิตช์สินค้าเปิดแต่ไม่ขึ้นหน้าขาย (0/N SKU) · ถ้ามี SKU เปิดอยู่บ้างแล้ว ไม่แตะ (ผู้ใช้เลือกไว้เอง)
+ */
+function showAllSkusIfNone(productId: number) {
+  const n = db.prepare('SELECT COUNT(*) AS total, COALESCE(SUM(active), 0) AS on_ FROM variants_all WHERE product_id = ?').get(productId) as { total: number; on_: number };
+  if (n.total > 0 && n.on_ === 0) db.prepare('UPDATE variants_all SET active = 1 WHERE product_id = ?').run(productId);
 }
 
 // ---------------- รูปสินค้า ----------------
@@ -787,6 +797,7 @@ export function bulkProducts(body: { ids?: number[]; action?: string; categoryId
         case 'activate':
         case 'deactivate':
           db.prepare(`UPDATE products SET active = ?, updated_at = ${now} WHERE id = ?`).run(action === 'activate' ? 1 : 0, id);
+          if (action === 'activate') showAllSkusIfNone(id);
           break;
         case 'category':
           db.prepare(`UPDATE products SET category_id = ?, updated_at = ${now} WHERE id = ?`).run(categoryId, id);

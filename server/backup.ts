@@ -251,7 +251,7 @@ export function restoreBranches(id: string, branchIds: number[], by: string): Re
         for (const t of ['tax_invoices', 'credit_notes']) {
           if (mainT.has(t)) rememberDocNos((db.prepare(`SELECT doc_no AS no FROM ${t} WHERE branch_id = ?`).all(b) as { no: string }[]).map((r) => r.no));
         }
-        // สินค้า/ตัวเลือกที่บิลในไฟล์อ้างถึง แต่ถูกลบไปแล้ว → นำกลับมาแบบปิดขาย (บิลเก่ายังเปิดดูได้)
+        // สินค้า/ตัวเลือกที่ข้อมูลสาขาในไฟล์อ้างถึง แต่ถูกลบไปแล้ว → นำกลับมาตามสถานะในไฟล์
         reviveCatalog(b);
         let rows = 0;
         for (const t of [...tables].reverse()) db.prepare(`DELETE FROM main.${t.table} WHERE ${t.where('main')}`).run({ b });
@@ -284,25 +284,62 @@ export function restoreBranches(id: string, branchIds: number[], by: string): Re
   return result;
 }
 
-/** หมวดหมู่/สินค้า/ตัวเลือก ที่ข้อมูลสาขา b ในไฟล์อ้างถึง แต่ไม่มีในระบบแล้ว → เพิ่มกลับแบบปิดขาย */
+/**
+ * หมวดหมู่/สินค้า/ตัวเลือก ที่ข้อมูลสาขา b ในไฟล์อ้างถึง (บิล · สต็อกสาขา · ความเคลื่อนไหวสต็อก) แต่ตอนนี้ไม่มีแล้ว
+ * → นำกลับมา "ตามสถานะในไฟล์" (เปิด/ปิดขายเหมือนตอนสำรอง)
+ *   - ถูกลบถาวร (ไม่มีในระบบ) → เพิ่มกลับ
+ *   - ถูกลบแบบเก็บไว้ (มีบิลอ้างถึง: deleted_at + รหัส ~ลบ) → คืนรหัส/บาร์โค้ด/สถานะจากไฟล์
+ *   รหัส/บาร์โค้ดถูกสินค้าใหม่ใช้ไปแล้ว → ต่อท้าย -R<id> และปิดขาย (ไม่ให้ซ้ำกับสินค้าใหม่)
+ */
 function reviveCatalog(b: number) {
   const need = `SELECT variant_id FROM bk.order_items WHERE order_id IN (SELECT id FROM bk.orders_all WHERE branch_id = :b)
     UNION SELECT variant_id FROM bk.branch_stock WHERE branch_id = :b
     UNION SELECT variant_id FROM bk.stock_moves_all WHERE branch_id = :b`;
+  const has = (table: string, col: string) => colsOf(db, table).includes(col) && colsOf(db, table, 'bk').includes(col);
+
+  // ---- 1) ไม่มีในระบบแล้ว → เพิ่มกลับตามไฟล์
   const missing = (db.prepare(`SELECT v.id FROM bk.variants_all v WHERE v.id IN (${need}) AND v.id NOT IN (SELECT id FROM main.variants_all)`).all({ b }) as { id: number }[]).map((r) => r.id);
-  if (!missing.length) return;
-  const ids = missing.join(',');
-  const copy = (table: string, where: string, renameSku: boolean) => {
-    const bkCols = new Set(colsOf(db, table, 'bk'));
-    const cols = colsOf(db, table).filter((c) => bkCols.has(c));
-    const sel = cols.map((c) => {
-      if (c === 'active') return '0';
-      if (c === 'sku' && renameSku) return `CASE WHEN EXISTS (SELECT 1 FROM main.${table} m WHERE m.sku = x.sku) THEN x.sku || '-R' || x.id ELSE x.sku END`;
-      return `x.${c}`;
-    });
-    db.exec(`INSERT OR IGNORE INTO main.${table} (${cols.join(', ')}) SELECT ${sel.join(', ')} FROM bk.${table} x WHERE ${where}`);
-  };
-  copy('categories', `x.id IN (SELECT category_id FROM bk.products WHERE id IN (SELECT product_id FROM bk.variants_all WHERE id IN (${ids})))`, false);
-  copy('products', `x.id IN (SELECT product_id FROM bk.variants_all WHERE id IN (${ids})) AND x.id NOT IN (SELECT id FROM main.products)`, true);
-  copy('variants_all', `x.id IN (${ids})`, true);
+  if (missing.length) {
+    const ids = missing.join(',');
+    const copy = (table: string, where: string, unique: boolean) => {
+      const bkCols = new Set(colsOf(db, table, 'bk'));
+      const cols = colsOf(db, table).filter((c) => bkCols.has(c));
+      const clash = (c: string) => `EXISTS (SELECT 1 FROM main.${table} m WHERE m.${c} = x.${c} AND m.id <> x.id)`;
+      const anyClash = [cols.includes('sku') ? clash('sku') : '', cols.includes('barcode') ? `(x.barcode IS NOT NULL AND ${clash('barcode')})` : ''].filter(Boolean).join(' OR ') || '0';
+      const sel = cols.map((c) => {
+        if (!unique) return `x.${c}`;
+        if (c === 'active') return `CASE WHEN ${anyClash} THEN 0 ELSE x.active END`;
+        if (c === 'sku') return `CASE WHEN ${clash('sku')} THEN x.sku || '-R' || x.id ELSE x.sku END`;
+        if (c === 'barcode') return `CASE WHEN x.barcode IS NOT NULL AND ${clash('barcode')} THEN NULL ELSE x.barcode END`;
+        return `x.${c}`;
+      });
+      db.exec(`INSERT OR IGNORE INTO main.${table} (${cols.join(', ')}) SELECT ${sel.join(', ')} FROM bk.${table} x WHERE ${where}`);
+    };
+    copy('categories', `x.id IN (SELECT category_id FROM bk.products WHERE id IN (SELECT product_id FROM bk.variants_all WHERE id IN (${ids})))`, false);
+    copy('products', `x.id IN (SELECT product_id FROM bk.variants_all WHERE id IN (${ids})) AND x.id NOT IN (SELECT id FROM main.products)`, true);
+    copy('variants_all', `x.id IN (${ids})`, true);
+  }
+
+  // ---- 2) ถูกลบแบบเก็บไว้ (deleted_at) แต่ในไฟล์ยังใช้งานอยู่ → คืนสถานะจากไฟล์
+  if (!has('products', 'deleted_at')) return;
+  const archived = (db.prepare(
+    `SELECT m.id FROM main.products m JOIN bk.products x ON x.id = m.id
+     WHERE m.deleted_at IS NOT NULL AND x.deleted_at IS NULL
+       AND m.id IN (SELECT product_id FROM bk.variants_all WHERE id IN (${need}))`,
+  ).all({ b }) as { id: number }[]).map((r) => r.id);
+  const pSet = ['active', 'sku', 'barcode', 'deleted_at'].filter((c) => has('products', c));
+  const vSet = ['active', 'sku', 'barcode', 'extra'].filter((c) => has('variants_all', c));
+  const upP = db.prepare(`UPDATE main.products SET ${pSet.map((c) => `${c} = (SELECT ${c} FROM bk.products WHERE id = :id)`).join(', ')} WHERE id = :id`);
+  const upV = db.prepare(`UPDATE main.variants_all SET ${vSet.map((c) => `${c} = (SELECT ${c} FROM bk.variants_all WHERE id = :id)`).join(', ')} WHERE id = :id`);
+  for (const id of archived) {
+    try {
+      upP.run({ id });
+    } catch {
+      continue; // รหัส/บาร์โค้ดถูกสินค้าใหม่ใช้แล้ว → คงไว้แบบลบ (บิลเก่ายังเปิดดูได้)
+    }
+    const vids = db.prepare('SELECT id FROM main.variants_all WHERE product_id = ? AND id IN (SELECT id FROM bk.variants_all)').all(id) as { id: number }[];
+    for (const v of vids) {
+      try { upV.run({ id: v.id }); } catch { /* รหัสชน → ตัวเลือกนี้คงปิดขาย */ }
+    }
+  }
 }

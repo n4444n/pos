@@ -2058,7 +2058,11 @@ export const PHRASES: Record<string, string> = {
  "ปิดโปรแกรม": "App close",
  "เปิดสำรองอัตโนมัติลงเครื่อง": "Turn on auto backup for a computer",
  "ยกเลิกสำรองอัตโนมัติของเครื่อง": "Revoke auto backup for a computer",
- "นาที": "min"
+ "นาที": "min",
+ "ทุก SKU ปิดแสดงขายอยู่ — สินค้านี้ยังไม่ขึ้นหน้าขาย": "All SKUs are hidden — this product is not on the sales screen yet",
+ "เปิดทุก SKU": "Show all SKUs",
+ "• ไม่แตะ: สาขาอื่น · พนักงาน · ตั้งค่า · ใบโอนสินค้าระหว่างสาขา · สินค้าที่ยังมีอยู่ (ราคา/ชื่อ/สถานะตามปัจจุบัน)": "• Not touched: other branches · staff · settings · inter-branch transfers · products that still exist (current price/name/status)",
+ "• สินค้าที่ถูกลบหลังวันที่สำรอง → นำกลับมาตามสถานะในไฟล์ (เปิด/ปิดขายเหมือนตอนสำรอง)": "• Products deleted after the backup date → brought back as in the file (shown/hidden as at backup time)"
 };
 
 /** ข้อความที่มีค่าแทรก — {0} {1} … */

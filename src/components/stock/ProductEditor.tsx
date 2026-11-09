@@ -205,7 +205,13 @@ export function ProductEditor({ productId, categories, onCategoriesChanged, onCl
       </View>
       <Chips options={categories.map((c) => ({ value: c.id, label: c.name }))} value={draft.categoryId} onChange={(v) => patch({ categoryId: v })} />
 
-      <Pressable style={s.toggleRow} onPress={() => patch({ active: !draft.active })} accessibilityRole="switch" accessibilityState={{ checked: draft.active }}>
+      <Pressable
+        style={s.toggleRow}
+        // เปิดแสดงขายแต่ทุก SKU ปิดอยู่ (เช่น หลังกู้คืนข้อมูล) → เปิดทุก SKU ด้วย ไม่งั้นไม่ขึ้นหน้าขาย
+        onPress={() => patch(!draft.active && draft.rows.length && draft.rows.every((r) => !r.active) ? { active: true, rows: draft.rows.map((r) => ({ ...r, active: true })) } : { active: !draft.active })}
+        accessibilityRole="switch"
+        accessibilityState={{ checked: draft.active }}
+      >
         <View style={{ flex: 1 }}>
           <Text style={s.label}>แสดงขายที่หน้าขาย</Text>
           <Text style={s.small}>{draft.active ? 'เปิดอยู่ — ลูกค้าซื้อได้' : 'ปิดอยู่ — ซ่อนจากหน้าขาย (ข้อมูลและสต็อกยังอยู่)'}</Text>
@@ -214,6 +220,12 @@ export function ProductEditor({ productId, categories, onCategoriesChanged, onCl
           <View style={[s.knob, draft.active && { transform: [{ translateX: 18 }] }]} />
         </View>
       </Pressable>
+      {draft.active && draft.rows.length > 0 && draft.rows.every((r) => !r.active) ? (
+        <Pressable onPress={() => patch({ rows: draft.rows.map((r) => ({ ...r, active: true })) })} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+          <Text style={[s.small, { color: '#B26A00', flex: 1 }]}>ทุก SKU ปิดแสดงขายอยู่ — สินค้านี้ยังไม่ขึ้นหน้าขาย</Text>
+          <Text style={s.link}>เปิดทุก SKU</Text>
+        </Pressable>
+      ) : null}
 
       {/* ภาษีมูลค่าเพิ่ม: สินค้าเสีย VAT / ยกเว้น VAT (มีผลกับบิลใหม่) */}
       <FieldLabel>ภาษีมูลค่าเพิ่ม (VAT)</FieldLabel>
