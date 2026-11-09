@@ -85,7 +85,7 @@ export function VariantModal({ product, variants, inCartQty, onClose, onAdd, ini
       <View style={s.head}>
         <View style={s.media}>
           {product.imageUrl ? (
-            <Image source={{ uri: imageSrc(product.imageUrl, 'medium') }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+            <Image source={{ uri: imageSrc(product.imageUrl, 'medium') }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
           ) : (
             <GarmentArt art={product.art} color={hex} size={92} />
           )}
@@ -155,7 +155,7 @@ export function VariantModal({ product, variants, inCartQty, onClose, onAdd, ini
 
 const s = StyleSheet.create({
   head: { flexDirection: 'row', gap: 16, alignItems: 'center', paddingTop: 8, marginBottom: 6 },
-  media: { width: 112, height: 112, borderRadius: radius.md, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  media: { width: 112, height: 112, borderRadius: radius.md, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   sku: { fontFamily: font, fontSize: 11, color: colors.faint, letterSpacing: 0.5 },
   name: { fontFamily: font, fontSize: 18, fontWeight: '600', color: colors.text, marginTop: 2 },
   price: { fontFamily: font, fontSize: 20, fontWeight: '700', color: colors.primary, marginTop: 6 },
