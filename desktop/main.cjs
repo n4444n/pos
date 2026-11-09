@@ -777,9 +777,10 @@ const autoBackup = createAutoBackup({
   getConfig: () => config,
   saveConfig,
   broadcast: (ch, data) => { if (win && !win.isDestroyed()) win.webContents.send(ch, data); },
+  machineName,
 });
-ipcMain.handle('pos:backup-get', (e) => (fromServer(e) ? { ...autoBackup.state(), machineName: machineName() } : null));
-ipcMain.handle('pos:backup-save', (e, c) => (fromServer(e) ? { ...autoBackup.save(c || {}), machineName: machineName() } : null));
+ipcMain.handle('pos:backup-get', (e) => (fromServer(e) ? autoBackup.state() : null));
+ipcMain.handle('pos:backup-save', (e, c) => (fromServer(e) ? autoBackup.save(c || {}) : null));
 ipcMain.handle('pos:backup-run', (e) => (fromServer(e) ? autoBackup.run('manual') : deny));
 ipcMain.handle('pos:backup-files', (e) => (fromServer(e) ? autoBackup.listFiles() : []));
 ipcMain.handle('pos:backup-read', (e, name) => {

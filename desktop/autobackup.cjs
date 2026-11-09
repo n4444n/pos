@@ -49,7 +49,7 @@ const stampOf = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDat
 /** ไฟล์ที่ระบบนี้สร้าง: <ร้าน>_<ทั้งร้าน|สาขา>_YYYY-MM-DD_HHMM[-n].db */
 const OUR_FILE = /_\d{4}-\d{2}-\d{2}_\d{4}(-\d+)?\.db$/;
 
-function createAutoBackup({ app, net, safeStorage, getConfig, saveConfig, broadcast }) {
+function createAutoBackup({ app, net, safeStorage, getConfig, saveConfig, broadcast, machineName = () => '' }) {
   const STATE_FILE = path.join(app.getPath('userData'), 'auto-backup-state.json');
   let state = { lastRunMs: 0, lastAt: null, ok: null, error: '', reason: '', files: [], skipped: false, stamps: {} };
   try { state = { ...state, ...JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')) }; } catch { /* ยังไม่เคยสำรอง */ }
@@ -115,6 +115,7 @@ function createAutoBackup({ app, net, safeStorage, getConfig, saveConfig, broadc
       folder: folderOf(c), defaultFolder: defaultFolder(), running: !!running, nextAt: next,
       last: { at: state.lastAt, ok: state.ok, error: state.error, reason: state.reason, files: state.files, skipped: state.skipped },
       version: app.getVersion(),
+      machineName: machineName(), // ชื่อเครื่อง (ส่งไปพร้อมทุกสถานะ ไม่หายเมื่อสำรองเสร็จ)
     };
   }
   const notify = () => broadcast('pos:backup-status', publicState());
