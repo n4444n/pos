@@ -1,7 +1,7 @@
 // ตั้งค่า → สำรอง & กู้คืนข้อมูล → "สำรองอัตโนมัติลงเครื่องนี้" (แอปเดสก์ท็อป .exe เท่านั้น — ไฟล์อยู่ในคอมของร้าน)
 //   ตั้งค่าแยกแต่ละเครื่อง: เปิด/ปิด · ทุกกี่นาที · ทั้งร้านหรือแยกไฟล์รายสาขา · โฟลเดอร์ในเครื่องนี้ · ตอนปิดกะ/ปิดโปรแกรม
 //   เปิดครั้งแรก → ขอกุญแจของเครื่องจากเซิร์ฟเวอร์ (แอปใช้สำรองได้แม้ยังไม่มีใครเข้าสู่ระบบ) · ยกเลิกสิทธิ์ได้ในรายการเครื่อง
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api, type BackupDevice, type Branch } from '../api';
 import { desktop, type AutoBackupConfig, type AutoBackupState, type BackupFileInfo } from '../desktop';
@@ -149,87 +149,108 @@ export function AutoBackupCard({ notify, onRestoreFile }: { notify: Notify; onRe
         {busy === 'on' ? <ActivityIndicator color={colors.primary} /> : null}
         {st8.keyForOtherShop ? <Text style={st.warn}>สิทธิ์สำรองเดิมเป็นของร้านอื่น (เปลี่ยน license) — ปิดแล้วเปิดสวิตช์ใหม่</Text> : null}
 
-        {/* สถานะ */}
-        <View style={[st.status, last.ok === false ? st.bad : last.ok ? st.ok : null]}>
-          <Icon
-            name={st8.running ? 'sync-outline' : last.ok === false ? 'alert-circle' : last.ok ? 'checkmark-circle' : 'time-outline'}
-            size={20}
-            color={last.ok === false ? colors.danger : last.ok ? colors.success : colors.sub}
-          />
-          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-            <Text style={s.optTitle}>
-              {st8.running ? 'กำลังสำรอง…' : last.at ? `สำรองล่าสุด ${at(last.at)}${last.reason ? ` · ${REASON[last.reason] ?? last.reason}` : ''}` : 'ยังไม่เคยสำรอง'}
-            </Text>
-            {last.ok === false ? <Text style={[s.hint, { color: colors.danger }]}>{last.error}</Text> : null}
-            {last.ok && last.skipped ? <Text style={s.hint}>ข้อมูลไม่เปลี่ยนจากรอบก่อน — ไม่สร้างไฟล์ซ้ำ</Text> : null}
-            {last.ok && last.files.length ? <Text style={s.hint} numberOfLines={2}>{last.files.map((f) => `${f.name} (${size(f.size)})`).join(' · ')}</Text> : null}
-            {on && st8.nextAt ? <Text style={s.hint}>รอบถัดไป {at(st8.nextAt)}</Text> : null}
-          </View>
-        </View>
-        <View style={[s.row, { flexWrap: 'wrap', gap: 8 }]}>
-          <SmallBtn label="สำรองตอนนี้" icon="save-outline" busy={busy === 'run' || st8.running} disabled={!st8.hasKey || st8.keyForOtherShop} onPress={runNow} />
-          <SmallBtn label="เปิดโฟลเดอร์" icon="folder-open-outline" onPress={openFolder} />
-        </View>
-        {err ? <Text style={st.err}>{err}</Text> : null}
+        <TwoCol
+          left={
+            <>
+              {/* สถานะ */}
+              <View style={[st.status, last.ok === false ? st.bad : last.ok ? st.ok : null]}>
+                <Icon
+                  name={st8.running ? 'sync-outline' : last.ok === false ? 'alert-circle' : last.ok ? 'checkmark-circle' : 'time-outline'}
+                  size={20}
+                  color={last.ok === false ? colors.danger : last.ok ? colors.success : colors.sub}
+                />
+                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                    <Text style={s.optTitle}>
+                      {st8.running ? 'กำลังสำรอง…' : last.at ? `สำรองล่าสุด ${at(last.at)}${last.reason ? ` · ${REASON[last.reason] ?? last.reason}` : ''}` : 'ยังไม่เคยสำรอง'}
+                    </Text>
+                    {last.ok === false ? <Text style={[s.hint, { color: colors.danger }]}>{last.error}</Text> : null}
+                    {last.ok && last.skipped ? <Text style={s.hint}>ข้อมูลไม่เปลี่ยนจากรอบก่อน — ไม่สร้างไฟล์ซ้ำ</Text> : null}
+                    {last.ok && last.files.length ? <Text style={s.hint} numberOfLines={2}>{last.files.map((f) => `${f.name} (${size(f.size)})`).join(' · ')}</Text> : null}
+                    {on && st8.nextAt ? <Text style={s.hint}>รอบถัดไป {at(st8.nextAt)}</Text> : null}
+                  </View>
+                </View>
+                <View style={[s.row, { flexWrap: 'wrap', gap: 8 }]}>
+                  <SmallBtn label="สำรองตอนนี้" icon="save-outline" busy={busy === 'run' || st8.running} disabled={!st8.hasKey || st8.keyForOtherShop} onPress={runNow} />
+                  <SmallBtn label="เปิดโฟลเดอร์" icon="folder-open-outline" onPress={openFolder} />
+                </View>
+                {err ? <Text style={st.err}>{err}</Text> : null}
 
-        <Field label="สำรองทุก" hint="ระหว่างเปิดโปรแกรมอยู่ (5–1,440 นาที)">
-          <View style={[s.row, { flexWrap: 'wrap', gap: 10 }]}>
-            <Seg value={c.intervalMin} options={[[15, '15 นาที'], [30, '30 นาที'], [60, '1 ชม.'], [120, '2 ชม.'], [240, '4 ชม.']]} onChange={(v) => save({ intervalMin: Number(v) })} />
-            <NumStep value={c.intervalMin} min={5} max={1440} step={5} onChange={(v) => save({ intervalMin: v })} />
-            <Text style={s.hint}>นาที</Text>
-          </View>
-        </Field>
+                <Field label="สำรองทุก" hint="ระหว่างเปิดโปรแกรมอยู่ (5–1,440 นาที)">
+                  <View style={[s.row, { flexWrap: 'wrap', gap: 10 }]}>
+                    <Seg value={c.intervalMin} options={[[15, '15 นาที'], [30, '30 นาที'], [60, '1 ชม.'], [120, '2 ชม.'], [240, '4 ชม.']]} onChange={(v) => save({ intervalMin: Number(v) })} />
+                    <NumStep value={c.intervalMin} min={5} max={1440} step={5} onChange={(v) => save({ intervalMin: v })} />
+                    <Text style={s.hint}>นาที</Text>
+                  </View>
+                </Field>
 
-        <Field label="สำรองอะไร" hint="ไฟล์ .db แต่ละไฟล์มีสินค้า พนักงาน ตั้งค่า + ข้อมูลของสาขานั้น — กู้คืนได้ในหน้านี้">
-          <Seg value={c.scope} options={[['all', 'ทั้งร้าน (ไฟล์เดียว)'], ['branches', 'แยกไฟล์รายสาขา']]} onChange={(v) => save({ scope: v as 'all' | 'branches' })} />
-          {c.scope === 'branches' ? (
-            <View style={{ gap: 6, marginTop: 8 }}>
-              {branches.map((b) => {
-                const sel = c.branchIds.includes(b.id);
-                return (
-                  <Pressable key={b.id} onPress={() => toggleBranch(b.id)} style={[st.br, sel && st.brOn]} accessibilityRole="checkbox" accessibilityState={{ checked: sel }}>
-                    <View style={[st.check, sel && st.checkOn]}>{sel ? <Icon name="checkmark" size={14} color="#fff" /> : null}</View>
-                    <Text style={s.optTitle}>{b.code ? `${b.code} · ` : ''}{b.name}{b.isMain ? '  (สาขาหลัก)' : ''}</Text>
-                  </Pressable>
-                );
-              })}
-              {!c.branchIds.length ? <Text style={st.warn}>ยังไม่ได้เลือกสาขา — เลือกอย่างน้อย 1 สาขา</Text> : null}
-            </View>
-          ) : null}
-        </Field>
+                <Field label="สำรองอะไร" hint="ไฟล์ .db แต่ละไฟล์มีสินค้า พนักงาน ตั้งค่า + ข้อมูลของสาขานั้น — กู้คืนได้ในหน้านี้">
+                  <Seg value={c.scope} options={[['all', 'ทั้งร้าน (ไฟล์เดียว)'], ['branches', 'แยกไฟล์รายสาขา']]} onChange={(v) => save({ scope: v as 'all' | 'branches' })} />
+                  {c.scope === 'branches' ? (
+                    <View style={{ gap: 6, marginTop: 8 }}>
+                      {branches.map((b) => {
+                        const sel = c.branchIds.includes(b.id);
+                        return (
+                          <Pressable key={b.id} onPress={() => toggleBranch(b.id)} style={[st.br, sel && st.brOn]} accessibilityRole="checkbox" accessibilityState={{ checked: sel }}>
+                            <View style={[st.check, sel && st.checkOn]}>{sel ? <Icon name="checkmark" size={14} color="#fff" /> : null}</View>
+                            <Text style={s.optTitle}>{b.code ? `${b.code} · ` : ''}{b.name}{b.isMain ? '  (สาขาหลัก)' : ''}</Text>
+                          </Pressable>
+                        );
+                      })}
+                      {!c.branchIds.length ? <Text style={st.warn}>ยังไม่ได้เลือกสาขา — เลือกอย่างน้อย 1 สาขา</Text> : null}
+                    </View>
+                  ) : null}
+                </Field>
 
-        <Field label="เก็บไฟล์ที่" hint="ต้องเป็นโฟลเดอร์ในคอมเครื่องนี้ เช่น D:\สำรองร้าน หรือแฟลชไดรฟ์ (ไม่รับโฟลเดอร์ในเครือข่าย)">
-          <View style={[s.row, { gap: 8, flexWrap: 'wrap' }]}>
-            <Text style={st.path} numberOfLines={2}>{st8.folder}</Text>
-            <SmallBtn label="เลือกโฟลเดอร์" icon="folder-outline" onPress={chooseFolder} />
-          </View>
-        </Field>
+                <Field label="เก็บไฟล์ที่" hint="ต้องเป็นโฟลเดอร์ในคอมเครื่องนี้ เช่น D:\สำรองร้าน หรือแฟลชไดรฟ์ (ไม่รับโฟลเดอร์ในเครือข่าย)">
+                  <View style={[s.row, { gap: 8, flexWrap: 'wrap' }]}>
+                    <Text style={st.path} numberOfLines={2}>{st8.folder}</Text>
+                    <SmallBtn label="เลือกโฟลเดอร์" icon="folder-outline" onPress={chooseFolder} />
+                  </View>
+                </Field>
+            </>
+          }
+          right={
+            <>
+                <Toggle label="สำรองเมื่อปิดกะ" hint="ปิดกะในเครื่องนี้แล้วสำรองทันที" value={c.onShiftClose} onChange={(v) => save({ onShiftClose: v })} />
+                <Toggle label="สำรองเมื่อปิดโปรแกรม" hint="สำรองก่อนปิด (รอไม่เกิน 30 วินาที)" value={c.onAppClose} onChange={(v) => save({ onAppClose: v })} />
+                <Toggle label="ข้ามรอบที่ข้อมูลไม่เปลี่ยน" hint="ไม่สร้างไฟล์ซ้ำถ้าไม่มีการขาย/แก้ไขตั้งแต่รอบก่อน (กด สำรองตอนนี้ สร้างไฟล์เสมอ)" value={c.skipUnchanged} onChange={(v) => save({ skipUnchanged: v })} />
+                <Field label="ลบไฟล์เก่า" hint="ลบเฉพาะไฟล์ที่ระบบนี้สร้าง ไม่แตะไฟล์อื่นในโฟลเดอร์">
+                  <Seg value={c.keepDays} options={[[0, 'เก็บทั้งหมด'], [30, 'เก็บ 30 วัน'], [90, 'เก็บ 90 วัน'], [365, 'เก็บ 1 ปี']]} onChange={(v) => save({ keepDays: Number(v) })} />
+                </Field>
 
-        <Toggle label="สำรองเมื่อปิดกะ" hint="ปิดกะในเครื่องนี้แล้วสำรองทันที" value={c.onShiftClose} onChange={(v) => save({ onShiftClose: v })} />
-        <Toggle label="สำรองเมื่อปิดโปรแกรม" hint="สำรองก่อนปิด (รอไม่เกิน 30 วินาที)" value={c.onAppClose} onChange={(v) => save({ onAppClose: v })} />
-        <Toggle label="ข้ามรอบที่ข้อมูลไม่เปลี่ยน" hint="ไม่สร้างไฟล์ซ้ำถ้าไม่มีการขาย/แก้ไขตั้งแต่รอบก่อน (กด สำรองตอนนี้ สร้างไฟล์เสมอ)" value={c.skipUnchanged} onChange={(v) => save({ skipUnchanged: v })} />
-        <Field label="ลบไฟล์เก่า" hint="ลบเฉพาะไฟล์ที่ระบบนี้สร้าง ไม่แตะไฟล์อื่นในโฟลเดอร์">
-          <Seg value={c.keepDays} options={[[0, 'เก็บทั้งหมด'], [30, 'เก็บ 30 วัน'], [90, 'เก็บ 90 วัน'], [365, 'เก็บ 1 ปี']]} onChange={(v) => save({ keepDays: Number(v) })} />
-        </Field>
-
-        <Text style={s.label}>ไฟล์ในโฟลเดอร์ {files.length ? `(${files.length})` : ''}</Text>
-        {files.length ? (
-          files.slice(0, 12).map((f) => (
-            <View key={f.name} style={st.file}>
-              <Icon name="document-outline" size={16} color={colors.primary} />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={s.optTitle} numberOfLines={1}>{f.name}</Text>
-                <Text style={s.hint}>{at(f.mtime)} · {size(f.size)}</Text>
-              </View>
-              <SmallBtn label="กู้คืน…" icon="refresh-outline" busy={busy === `r:${f.name}`} onPress={() => restoreFrom(f)} />
-            </View>
-          ))
-        ) : (
-          <Text style={s.hint}>ยังไม่มีไฟล์</Text>
-        )}
+                <Text style={s.label}>ไฟล์ในโฟลเดอร์ {files.length ? `(${files.length})` : ''}</Text>
+                {files.length ? (
+                  files.slice(0, 12).map((f) => (
+                    <View key={f.name} style={st.file}>
+                      <Icon name="document-outline" size={16} color={colors.primary} />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={s.optTitle} numberOfLines={1}>{f.name}</Text>
+                        <Text style={s.hint}>{at(f.mtime)} · {size(f.size)}</Text>
+                      </View>
+                      <SmallBtn label="กู้คืน…" icon="refresh-outline" busy={busy === `r:${f.name}`} onPress={() => restoreFrom(f)} />
+                    </View>
+                  ))
+                ) : (
+                  <Text style={s.hint}>ยังไม่มีไฟล์</Text>
+                )}
+            </>
+          }
+        />
       </Card>
       <DeviceList devices={devices} thisId={st8.hasKey ? c.deviceId : 0} onChanged={() => { loadDevices(); bridge.get().then(setSt8).catch(() => {}); }} notify={notify} onRevokeThis={() => bridge.clearKey()} />
     </>
+  );
+}
+
+/** 2 คอลัมน์เมื่อพื้นที่กว้างพอ (วัดความกว้างจริง) · จอแคบเรียงเป็นคอลัมน์เดียว */
+export function TwoCol({ left, right, min = 720, gap = 20 }: { left: ReactNode; right: ReactNode; min?: number; gap?: number }) {
+  const [w, setW] = useState(0);
+  const wide = w >= min;
+  return (
+    <View onLayout={(e) => setW(e.nativeEvent.layout.width)} style={{ flexDirection: wide ? 'row' : 'column', alignItems: 'flex-start', gap }}>
+      <View style={[st.col, wide ? { flex: 1 } : { alignSelf: 'stretch' }]}>{left}</View>
+      <View style={[st.col, wide ? { flex: 1 } : { alignSelf: 'stretch' }]}>{right}</View>
+    </View>
   );
 }
 
@@ -271,6 +292,7 @@ function DeviceList({ devices, thisId, onChanged, notify, onRevokeThis }: {
 }
 
 const st = StyleSheet.create({
+  col: { gap: 12, minWidth: 0 },
   status: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 12, borderRadius: radius.md, backgroundColor: colors.surface },
   ok: { backgroundColor: colors.successSoft },
   bad: { backgroundColor: colors.dangerSoft },

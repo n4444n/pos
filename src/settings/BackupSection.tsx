@@ -11,7 +11,7 @@ import { thaiDateTime } from '../format';
 import { colors, font, radius } from '../theme';
 import { Card, s, type Notify } from './ui';
 import { downloadFile } from '../download';
-import { AutoBackupCard } from './AutoBackupCard';
+import { AutoBackupCard, TwoCol } from './AutoBackupCard';
 
 const n = (x: number) => x.toLocaleString('th-TH');
 const when = (at: string | null) => (at ? thaiDateTime(at) : '—');
@@ -36,10 +36,15 @@ export function BackupSection({ notify, onChanged }: { notify: Notify; onChanged
   return (
     <>
       <AutoBackupCard notify={notify} onRestoreFile={restoreFile} />
-      <BackupCard />
-      <View ref={restoreRef as never}>
-        <RestoreCard notify={notify} onChanged={onChanged} incoming={incoming} />
-      </View>
+      <TwoCol
+        left={<BackupCard />}
+        right={
+          <View ref={restoreRef as never} style={{ alignSelf: 'stretch' }}>
+            <RestoreCard notify={notify} onChanged={onChanged} incoming={incoming} />
+          </View>
+        }
+        gap={12}
+      />
     </>
   );
 }
