@@ -4,8 +4,9 @@
 // - อัปเดตตัวเองผ่าน electron-updater (ไฟล์อยู่ที่ <เซิร์ฟเวอร์>/updates/)
 // ตั้งค่าของเครื่องนี้เก็บที่ %APPDATA%\Clothing POS\config.json
 // พัฒนาต้นแบบโดย n4444n (MIT + Attribution — ดูไฟล์ LICENSE)
-const { app, BrowserWindow, Menu, dialog, shell, ipcMain, net, session, nativeImage } = require('electron');
+const { app, BrowserWindow, Menu, dialog, shell, ipcMain, net, session, nativeImage, safeStorage } = require('electron');
 const { autoUpdater } = require('electron-updater');
+const { createAutoBackup, sanitizeAutoBackup, AUTO_BACKUP_DEFAULTS } = require('./autobackup.cjs');
 const fs = require('node:fs');
 const os = require('node:os');
 const escpos = require('./escpos.cjs');
@@ -57,6 +58,8 @@ const DEFAULTS = {
   // ---- ชุดทดลอง
   license: null, //        { code, shop, expiresAt, route } หลังเปิดใช้งานสำเร็จ (route = ชื่อร้านหลังประตูเดียวของโหมดทดสอบ)
   machineId: '', //        รหัสเครื่อง (สำรอง เมื่ออ่าน MachineGuid ของ Windows ไม่ได้)
+  // ---- สำรองข้อมูลอัตโนมัติลงเครื่องนี้ (autobackup.cjs)
+  autoBackup: AUTO_BACKUP_DEFAULTS,
   // ---- การแสดงผล
   // 'auto' = ใช้การ์ดจอช่วยวาดภาพ (เร็วที่สุดถ้าไดรเวอร์ดี)
   // 'off'  = ให้ CPU วาดเอง — เลือกอันนี้ถ้าเลื่อนหน้าจอแล้วกระตุก (ไดรเวอร์การ์ดจอบางรุ่นทำให้ช้ากว่า)
@@ -112,6 +115,7 @@ function sanitize(c) {
         : null,
     machineId: /^[\w-]{8,128}$/.test(String(c.machineId || '')) ? String(c.machineId) : '',
     gpu: c.gpu === 'off' ? 'off' : 'auto',
+    autoBackup: sanitizeAutoBackup(c.autoBackup),
   };
 }
 function saveConfig(next) {
@@ -767,6 +771,49 @@ ipcMain.handle('pos:label-print', async (e, html, page, c) => {
   return r;
 });
 
+// ---- สำรองข้อมูลอัตโนมัติลงเครื่องนี้ (หน้า ตั้งค่า → สำรอง & กู้คืนข้อมูล) (แอปรุ่นเก่าไม่มี)
+const autoBackup = createAutoBackup({
+  app, net, safeStorage,
+  getConfig: () => config,
+  saveConfig,
+  broadcast: (ch, data) => { if (win && !win.isDestroyed()) win.webContents.send(ch, data); },
+});
+ipcMain.handle('pos:backup-get', (e) => (fromServer(e) ? { ...autoBackup.state(), machineName: machineName() } : null));
+ipcMain.handle('pos:backup-save', (e, c) => (fromServer(e) ? { ...autoBackup.save(c || {}), machineName: machineName() } : null));
+ipcMain.handle('pos:backup-run', (e) => (fromServer(e) ? autoBackup.run('manual') : deny));
+ipcMain.handle('pos:backup-files', (e) => (fromServer(e) ? autoBackup.listFiles() : []));
+ipcMain.handle('pos:backup-read', (e, name) => {
+  if (!fromServer(e)) return null;
+  return new Uint8Array(autoBackup.readFile(name));
+});
+ipcMain.handle('pos:backup-set-key', (e, k) => (fromServer(e) ? autoBackup.setKey(k || {}) : false));
+ipcMain.handle('pos:backup-clear-key', (e) => {
+  if (fromServer(e)) autoBackup.clearKey();
+  return true;
+});
+ipcMain.handle('pos:backup-open-folder', async (e) => {
+  if (!fromServer(e)) return deny;
+  const dir = autoBackup.state().folder;
+  const bad = autoBackup.checkFolder(dir);
+  if (bad) return { ok: false, error: bad };
+  const err = await shell.openPath(dir);
+  return err ? { ok: false, error: err } : { ok: true };
+});
+ipcMain.handle('pos:backup-choose-folder', async (e) => {
+  if (!fromServer(e)) return null;
+  const r = await dialog.showOpenDialog(win, {
+    title: 'เลือกโฟลเดอร์เก็บไฟล์สำรอง (ในเครื่องนี้)',
+    defaultPath: autoBackup.state().folder,
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (r.canceled || !r.filePaths[0]) return null;
+  const bad = autoBackup.checkFolder(r.filePaths[0]);
+  return bad ? { ok: false, error: bad, folder: r.filePaths[0] } : { ok: true, folder: r.filePaths[0] };
+});
+ipcMain.on('pos:backup-trigger', (e, reason) => {
+  if (fromServer(e)) autoBackup.trigger(String(reason || ''));
+});
+
 ipcMain.handle('shell:save-config', async (e, c) => {
   if (!fromShell(e)) return null;
   const before = config.serverUrl;
@@ -865,6 +912,7 @@ async function minVersionPolicy() {
 function installNow() {
   if (update.status !== 'ready' || installing) return false;
   installing = true;
+  autoBackup.skipOnQuit();
   setUpdate({ status: 'installing' });
   app.removeAllListeners('window-all-closed'); // กัน app.quit() ซ้อนระหว่างปิดหน้าต่าง
   for (const w of BrowserWindow.getAllWindows()) {
@@ -995,5 +1043,10 @@ app.whenReady().then(() => {
   createWindow();
   setupUpdater();
   setInterval(recheckLicense, 2 * 60_000); // ระงับ/ต่ออายุ/ลบเครื่องในแผงควบคุม มีผลภายใน 2 นาทีแม้เปิดค้างไว้
+  autoBackup.start();
+});
+// ปิดโปรแกรม → สำรองข้อมูลก่อน (ถ้าตั้งไว้) แล้วค่อยปิด (รอไม่เกิน 30 วินาที)
+app.on('before-quit', (e) => {
+  if (autoBackup.beforeQuit(() => app.quit())) e.preventDefault();
 });
 app.on('window-all-closed', () => app.quit());

@@ -41,6 +41,7 @@ import { XLSX_TYPE } from './xlsx.ts';
 import { internalAllowed, shopStats } from './internal.ts';
 import { listLogs, logsXlsx, recordAudit, requireLogAccess } from './auditLog.ts';
 import { backupBuffer, backupFileName, dropUpload, newUploadPath, previewUpload, restoreBranches } from './backup.ts';
+import { createDevice, dataStamp, deviceByKey, listDevices, revokeDevice } from './autoBackup.ts';
 import { billNoSettings, nextBillNo, saveBillNo } from './billNo.ts';
 import { permCatalog, resetPerms, savePerms } from './perms.ts';
 import { availablePromos, bestAutoDiscount, createPromo, deletePromo, giftsFor, listPromos, previewFor, updatePromo } from './promos.ts';
@@ -443,6 +444,29 @@ const server = createServer(async (req, res) => {
         throw new HttpError(404, 'Not found');
       }
 
+      // ----- สำรองอัตโนมัติลงคอมของร้าน (แอปเดสก์ท็อป) — ใช้กุญแจของเครื่อง (X-Backup-Key) ไม่ต้องเข้าสู่ระบบ -----
+      if (req.method === 'GET' && (path === '/api/backup/auto' || path === '/api/backup/auto/info')) {
+        deviceByKey(String(req.headers['x-backup-key'] ?? ''), clientIp(req));
+        if (path === '/api/backup/auto/info') {
+          const branches = listBranches().map((b) => ({ id: b.id, name: b.name, code: b.code, isMain: b.isMain }));
+          return json(req, res, 200, { shop: getSettings().shop.name, branches });
+        }
+        const branch = branchParam(url);
+        // ข้อมูลไม่เปลี่ยนตั้งแต่รอบก่อน (แอปส่ง X-Backup-Since มา) → 304 ไม่ต้องสร้างไฟล์ซ้ำ
+        const stamp = dataStamp();
+        if (String(req.headers['x-backup-since'] ?? '') === stamp) {
+          res.writeHead(304, { 'X-Backup-Stamp': stamp, 'Cache-Control': 'no-store' });
+          return res.end();
+        }
+        const buf = backupBuffer(branch);
+        res.writeHead(200, {
+          'Content-Type': 'application/vnd.sqlite3', 'Content-Length': buf.length, 'Cache-Control': 'no-store',
+          'Content-Disposition': `attachment; filename="backup.db"; filename*=UTF-8''${encodeURIComponent(backupFileName(branch))}`,
+          'X-Content-Type-Options': 'nosniff', 'X-Backup-Stamp': stamp,
+        });
+        return res.end(buf);
+      }
+
       // ----- เข้าสู่ระบบด้วย PIN (ไม่ต้องมี token) -----
       if (req.method === 'POST' && path === '/api/auth/login') {
         const body = (await readBody(req)) as { pin?: string };
@@ -498,6 +522,17 @@ const server = createServer(async (req, res) => {
           const by = approveManager(body.pin, clientIp(req), 'settings');
           const ids = Array.isArray(body.branchIds) ? body.branchIds.map(Number).filter(Number.isInteger) : [];
           return json(req, res, 200, restoreBranches(String(body.id ?? ''), ids, by));
+        }
+        // เครื่องที่สำรองอัตโนมัติ (ออกกุญแจ / รายการ / ยกเลิก)
+        if (req.method === 'GET' && path === '/api/backup/devices') return json(req, res, 200, listDevices());
+        if (req.method === 'POST' && path === '/api/backup/devices') {
+          const body = (await readBody(req)) as { name?: string };
+          return json(req, res, 201, createDevice(body.name, me.name));
+        }
+        if (req.method === 'POST' && path === '/api/backup/devices/revoke') {
+          const body = (await readBody(req)) as { id?: number };
+          revokeDevice(body.id);
+          return json(req, res, 200, { ok: true });
         }
         if (req.method === 'POST' && path === '/api/backup/discard') {
           const body = (await readBody(req)) as { id?: string };

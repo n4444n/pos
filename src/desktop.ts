@@ -49,6 +49,41 @@ export type LabelPrinterConfig = {
   labelSilent: boolean;
 };
 
+/** สำรองข้อมูลอัตโนมัติลงเครื่องนี้ (ตั้งค่าแยกแต่ละเครื่อง — เก็บในแอปเดสก์ท็อป) */
+export type AutoBackupConfig = {
+  enabled: boolean;
+  intervalMin: number;
+  /** all = ทั้งร้าน · branches = แยกไฟล์ตามสาขาที่เลือก */
+  scope: 'all' | 'branches';
+  branchIds: number[];
+  /** '' = โฟลเดอร์เริ่มต้น (Documents\Clothing POS Backup) */
+  folder: string;
+  onShiftClose: boolean;
+  onAppClose: boolean;
+  skipUnchanged: boolean;
+  /** 0 = เก็บทุกไฟล์ */
+  keepDays: number;
+  deviceId: number;
+  deviceName: string;
+  route: string;
+};
+export type AutoBackupState = {
+  config: AutoBackupConfig;
+  /** เครื่องนี้มีสิทธิ์ (กุญแจ) สำรองอัตโนมัติแล้ว */
+  hasKey: boolean;
+  /** กุญแจออกให้ร้านอื่น (เปลี่ยน license) */
+  keyForOtherShop: boolean;
+  folder: string;
+  defaultFolder: string;
+  running: boolean;
+  /** เวลาที่จะสำรองรอบถัดไป (ms) */
+  nextAt: number | null;
+  last: { at: string | null; ok: boolean | null; error: string; reason: string; files: { name: string; size: number }[]; skipped: boolean };
+  version: string;
+  machineName?: string;
+};
+export type BackupFileInfo = { name: string; size: number; mtime: number };
+
 export type DesktopBridge = {
   version: string;
   paperWidth: () => 58 | 80 | null;
@@ -77,6 +112,20 @@ export type DesktopBridge = {
   };
   /** ชื่อร้าน/สาขาบนหัวหน้าต่างโปรแกรม — มีตั้งแต่แอปเวอร์ชัน 1.0.3 */
   setTitleInfo?: (info: { shop: string; branch: string }) => void;
+  /** สำรองข้อมูลอัตโนมัติลงเครื่องนี้ — ไม่มีในแอปรุ่นเก่า */
+  backup?: {
+    get: () => Promise<AutoBackupState | null>;
+    save: (c: Partial<AutoBackupConfig>) => Promise<AutoBackupState | null>;
+    runNow: () => Promise<{ ok: boolean; error: string; files: { name: string; size: number }[]; skipped: boolean }>;
+    files: () => Promise<BackupFileInfo[]>;
+    read: (name: string) => Promise<Uint8Array | null>;
+    setKey: (k: { id: number; token: string; name: string }) => Promise<boolean>;
+    clearKey: () => Promise<boolean>;
+    openFolder: () => Promise<{ ok: boolean; error?: string }>;
+    chooseFolder: () => Promise<{ ok: boolean; folder: string; error?: string } | null>;
+    trigger: (reason: 'shift') => void;
+    onStatus: (cb: (s: AutoBackupState) => void) => () => void;
+  };
   /** มีตั้งแต่แอปเวอร์ชัน 1.0.1 */
   update?: {
     get: () => Promise<UpdateState>;

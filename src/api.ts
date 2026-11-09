@@ -2,6 +2,7 @@
 import { Platform } from 'react-native';
 import { auth, type Feature, type Me, type PermLevel, type Role } from './session';
 import { getDeviceTerminal } from './terminal';
+import { desktop } from './desktop';
 import type { PublicSettings } from './appSettings';
 import type {
   Bootstrap, CashMove, CreditNoteDoc, Dashboard, TaxInvoiceDoc, EditPreview, HistoryFilter, HistoryRow, HistorySummary, Order, OrderDetail, PaymentMethod, Promo,
@@ -98,6 +99,7 @@ export interface BackupPreview {
   sameShop: boolean;
   branches: (BackupBranchInfo & { hasData: boolean; current: BackupBranchInfo | null; lostBills: number; shipmentsAfter: number })[];
 }
+export interface BackupDevice { id: number; name: string; createdBy: string; createdAt: string; lastUsedAt: string | null; lastIp: string }
 export interface RestoreResult { branches: { id: number; name: string; rows: number }[]; safetyBackup: string }
 
 /** อัปโหลดไฟล์ .db (ไฟล์ใหญ่ — ไม่จำกัดเวลา 15 วินาทีแบบคำขออื่น) */
@@ -175,7 +177,10 @@ export const api = {
   cashMove: (body: { kind: 'in' | 'out'; amount: number; reason: string; staff: string }) =>
     request<{ shift: Shift; moves: CashMove[] }>('/api/shifts/current/cash', { method: 'POST', body: JSON.stringify(body) }),
   closeShift: (body: { staff: string; countedCash: number; note?: string; denominations?: Record<string, number>; tenders?: Record<string, number> }) =>
-    request<Shift>('/api/shifts/current/close', { method: 'POST', body: JSON.stringify(body) }),
+    request<Shift>('/api/shifts/current/close', { method: 'POST', body: JSON.stringify(body) }).then((r) => {
+      desktop()?.backup?.trigger('shift'); // แอปเดสก์ท็อป: สำรองข้อมูลลงเครื่องนี้หลังปิดกะ (ถ้าตั้งไว้)
+      return r;
+    }),
   shifts: (f: { from?: string; to?: string; limit?: number; offset?: number }) =>
     request<{ rows: Shift[]; summary: ShiftSummary }>(`/api/shifts${qs(f)}`),
   shiftDetail: (id: number) =>
@@ -273,6 +278,10 @@ export const api = {
   restoreBackup: (id: string, branchIds: number[], pin: string) =>
     request<RestoreResult>('/api/backup/restore', { method: 'POST', body: JSON.stringify({ id, branchIds, pin }) }, 300_000),
   discardBackup: (id: string) => request<{ ok: true }>('/api/backup/discard', { method: 'POST', body: JSON.stringify({ id }) }),
+  /** เครื่องที่สำรองอัตโนมัติลงคอมของร้าน */
+  backupDevices: () => request<BackupDevice[]>('/api/backup/devices'),
+  createBackupDevice: (name: string) => request<{ id: number; name: string; token: string }>('/api/backup/devices', { method: 'POST', body: JSON.stringify({ name }) }),
+  revokeBackupDevice: (id: number) => request<{ ok: true }>('/api/backup/devices/revoke', { method: 'POST', body: JSON.stringify({ id }) }),
   branches: () => request<{ current: Branch | null; list: (Branch & { current: boolean })[] }>('/api/branches'),
   switchBranch: (id: number) => request<{ branchId: number }>('/api/branches/switch', { method: 'POST', body: JSON.stringify({ id }) }),
   branchManage: () => request<BranchManage>('/api/branches/manage'),

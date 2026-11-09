@@ -47,6 +47,8 @@ const RULES: Rule[] = [
   ['POST', /^\/api\/backup\/upload$/, 'อัปโหลดไฟล์สำรองเพื่อกู้คืน'],
   ['POST', /^\/api\/backup\/restore$/, 'กู้คืนข้อมูล'],
   ['POST', /^\/api\/backup\/discard$/, 'ยกเลิกไฟล์กู้คืน'],
+  ['POST', /^\/api\/backup\/devices\/revoke$/, 'ยกเลิกสำรองอัตโนมัติของเครื่อง'],
+  ['POST', /^\/api\/backup\/devices$/, 'เปิดสำรองอัตโนมัติลงเครื่อง'],
   ['POST', /^\/api\/perms\/[a-z]+\/reset$/, 'คืนค่าสิทธิ์บทบาท'],
   ['*', /^\/api\/perms\/[a-z]+$/, 'แก้ไขสิทธิ์บทบาท'],
   ['POST', /^\/api\/staff$/, 'เพิ่มพนักงาน'],

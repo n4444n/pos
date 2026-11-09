@@ -57,6 +57,24 @@ if (location.protocol === 'file:') {
       ipcRenderer.invoke('pos:print', String(html), { paperWidth: opts && opts.paperWidth === 58 ? 58 : 80, kind: String((opts && opts.kind) || '') }),
     // ขายเสร็จ → เปิดลิ้นชักเงินตามตั้งค่าเครื่องนี้ (มีตั้งแต่ 1.0.4)
     openDrawer: (info) => ipcRenderer.send('pos:open-drawer', { cash: !!(info && info.cash) }),
+    // สำรองข้อมูลอัตโนมัติลงเครื่องนี้ (หน้า ตั้งค่า → สำรอง & กู้คืนข้อมูล) (แอปรุ่นเก่าไม่มี)
+    backup: {
+      get: () => ipcRenderer.invoke('pos:backup-get'),
+      save: (c) => ipcRenderer.invoke('pos:backup-save', c),
+      runNow: () => ipcRenderer.invoke('pos:backup-run'),
+      files: () => ipcRenderer.invoke('pos:backup-files'),
+      read: (name) => ipcRenderer.invoke('pos:backup-read', String(name || '')),
+      setKey: (k) => ipcRenderer.invoke('pos:backup-set-key', { id: Number(k && k.id) || 0, token: String((k && k.token) || ''), name: String((k && k.name) || '') }),
+      clearKey: () => ipcRenderer.invoke('pos:backup-clear-key'),
+      openFolder: () => ipcRenderer.invoke('pos:backup-open-folder'),
+      chooseFolder: () => ipcRenderer.invoke('pos:backup-choose-folder'),
+      trigger: (reason) => ipcRenderer.send('pos:backup-trigger', String(reason || '')),
+      onStatus: (cb) => {
+        const h = (_e, s) => cb(s);
+        ipcRenderer.on('pos:backup-status', h);
+        return () => ipcRenderer.removeListener('pos:backup-status', h);
+      },
+    },
     // อัปเดตแอป → ปุ่ม "อัปเดต vX.Y.Z" ในหน้า POS
     update: {
       get: () => ipcRenderer.invoke('pos:update-state'),

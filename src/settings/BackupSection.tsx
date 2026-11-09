@@ -1,4 +1,5 @@
 // ตั้งค่า → สำรอง & กู้คืนข้อมูล (ผู้จัดการ)
+// - สำรองอัตโนมัติลงเครื่องนี้ (แอปเดสก์ท็อป): AutoBackupCard.tsx
 // - สำรอง: ดาวน์โหลดไฟล์ .db ทั้งร้าน หรือเฉพาะสาขา
 // - กู้คืน: ลากไฟล์ .db มาวาง → ระบบตรวจไฟล์ + แสดงสาขาในไฟล์ → เลือกสาขาที่จะกู้ → ยืนยันด้วย PIN ผู้จัดการ
 //   กู้เฉพาะข้อมูลของสาขาที่เลือก (บิล กะ เงิน สต็อก ค่าใช้จ่าย เอกสารภาษี) · ก่อนกู้ระบบสำรองข้อมูลปัจจุบันไว้ให้เสมอ
@@ -10,6 +11,7 @@ import { thaiDateTime } from '../format';
 import { colors, font, radius } from '../theme';
 import { Card, s, type Notify } from './ui';
 import { downloadFile } from '../download';
+import { AutoBackupCard } from './AutoBackupCard';
 
 const n = (x: number) => x.toLocaleString('th-TH');
 const when = (at: string | null) => (at ? thaiDateTime(at) : '—');
@@ -23,10 +25,21 @@ const isoLocal = (iso: string | null) => {
 };
 
 export function BackupSection({ notify, onChanged }: { notify: Notify; onChanged: () => void }) {
+  // ไฟล์จากโฟลเดอร์สำรองอัตโนมัติ (กด "กู้คืน…") → ส่งเข้าขั้นตอนกู้คืนด้านล่าง
+  const [incoming, setIncoming] = useState<{ file: File; n: number } | null>(null);
+  const restoreRef = useRef<unknown>(null);
+  const restoreFile = (file: File) => {
+    setIncoming((x) => ({ file, n: (x?.n ?? 0) + 1 }));
+    const el = restoreRef.current as unknown as HTMLElement | null;
+    if (Platform.OS === 'web') setTimeout(() => el?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }), 50);
+  };
   return (
     <>
+      <AutoBackupCard notify={notify} onRestoreFile={restoreFile} />
       <BackupCard />
-      <RestoreCard notify={notify} onChanged={onChanged} />
+      <View ref={restoreRef as never}>
+        <RestoreCard notify={notify} onChanged={onChanged} incoming={incoming} />
+      </View>
     </>
   );
 }
@@ -65,7 +78,7 @@ function BackupCard() {
 // ---------------------------------------------------------------- กู้คืน
 type Phase = { k: 'idle' } | { k: 'uploading'; name: string } | { k: 'ready'; p: BackupPreview; name: string } | { k: 'done'; r: RestoreResult };
 
-function RestoreCard({ notify, onChanged }: { notify: Notify; onChanged: () => void }) {
+function RestoreCard({ notify, onChanged, incoming }: { notify: Notify; onChanged: () => void; incoming: { file: File; n: number } | null }) {
   const [phase, setPhase] = useState<Phase>({ k: 'idle' });
   const [error, setError] = useState<string | null>(null);
   const [over, setOver] = useState(false);
@@ -91,6 +104,11 @@ function RestoreCard({ notify, onChanged }: { notify: Notify; onChanged: () => v
       setPhase({ k: 'idle' });
     }
   }, []);
+
+  // ไฟล์จากโฟลเดอร์สำรองอัตโนมัติ → ตรวจไฟล์เหมือนลากมาวาง
+  useEffect(() => {
+    if (incoming) take(incoming.file);
+  }, [incoming, take]);
 
   // ลากไฟล์มาวาง (เว็บ / แอป .exe)
   useEffect(() => {
