@@ -3,27 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>แผงควบคุม License</title>
+<title>Clothing POS · ศูนย์จัดการ License</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
+  /* โทนเดียวกับโปรแกรม POS (src/theme.ts): น้ำเงิน #2F6BFF · พื้น #EEF1F6 · IBM Plex Sans Thai */
   :root {
-    --bg: #f3f5f9; --card: #ffffff; --text: #1f2633; --muted: #6a7385; --faint: #9aa2b1; --line: #e6e9ef; --soft: #f7f8fb;
-    --head: #1d2433; --head-text: #f3f5f9;
-    --primary: #3563e9; --primary-soft: #eaf0fe; --primary-text: #2448b8;
-    --ok: #12804f; --ok-soft: #e6f5ed; --warn: #a75d00; --warn-soft: #fff3df; --bad: #c93434; --bad-soft: #fcebea;
-    --idle: #5f6b7d; --idle-soft: #eef1f5;
-    --shadow: 0 1px 2px rgba(20, 30, 50, .05), 0 4px 16px rgba(20, 30, 50, .04);
+    --bg: #EEF1F6; --card: #ffffff; --text: #1B1F27; --muted: #6B7280; --faint: #A0A6B1; --line: #E8EBF0; --soft: #F6F7F9;
+    --side: #ffffff; --head: #1B1F27; --head-text: #ffffff;
+    --primary: #2F6BFF; --primary-2: #5B8CFF; --primary-soft: #EAF0FF; --primary-text: #2252D6;
+    --ok: #1F9D63; --ok-soft: #E6F6EE; --warn: #B26A00; --warn-soft: #FFF3DF; --bad: #E5484D; --bad-soft: #FDECEC;
+    --idle: #5F6B7D; --idle-soft: #EEF1F5; --violet: #7A4FE0; --violet-soft: #F1ECFE; --teal: #16946A; --teal-soft: #E7F7F1;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 2px 8px rgba(16, 24, 40, .05);
+    --shadow-lg: 0 10px 30px rgba(16, 24, 40, .10);
     --mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+    --r: 14px; --side-w: 252px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #141820; --card: #1c212b; --text: #e6e9ef; --muted: #9aa3b4; --faint: #6d7688; --line: #2b3240; --soft: #222833;
-      --head: #0f1218; --head-text: #e6e9ef;
-      --primary: #6d8ff5; --primary-soft: #232d48; --primary-text: #a9bcfa;
-      --ok: #4cc58a; --ok-soft: #173326; --warn: #f0ad4e; --warn-soft: #3a2c14; --bad: #f07171; --bad-soft: #3a1d1f;
-      --idle: #a3adbd; --idle-soft: #262c37;
-      --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+      --bg: #12151C; --card: #1A1E27; --text: #E7EAF0; --muted: #9AA3B4; --faint: #6D7688; --line: #2A303C; --soft: #222733;
+      --side: #161A22; --head: #0E1117;
+      --primary: #6D8FF8; --primary-2: #8BA6FA; --primary-soft: #222C47; --primary-text: #AFC2FB;
+      --ok: #4CC58A; --ok-soft: #163326; --warn: #F0AD4E; --warn-soft: #3A2C14; --bad: #F07171; --bad-soft: #3A1D1F;
+      --idle: #A3ADBD; --idle-soft: #262C37; --violet: #A88BF5; --violet-soft: #2C2445; --teal: #4CC5A0; --teal-soft: #15322A;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .35); --shadow-lg: 0 12px 30px rgba(0, 0, 0, .45);
     }
   }
   * { box-sizing: border-box; }
@@ -31,73 +34,158 @@
   html { -webkit-text-size-adjust: 100%; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.55 'IBM Plex Sans Thai', system-ui, sans-serif; }
   a { color: var(--primary); text-decoration: none; } a:hover { text-decoration: underline; }
+  svg.i { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .mono { font-family: var(--mono); }
   .muted { color: var(--muted); } .sub { color: var(--muted); font-size: 12.5px; }
 
-  /* ---- แถบบน */
-  header { background: var(--head); color: var(--head-text); }
-  .bar { max-width: 1280px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .brand { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 220px; }
-  .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--primary); display: grid; place-items: center; font-weight: 700; color: #fff; }
-  .brand b { font-size: 15.5px; font-weight: 600; } .brand small { display: block; font-size: 12px; opacity: .65; }
-  .pill { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: rgba(255,255,255,.1); white-space: nowrap; }
-  .urlchip { display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,.08); border-radius: 10px; padding: 4px 4px 4px 12px; max-width: 100%; }
-  .urlchip span { font-family: var(--mono); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  header button { background: rgba(255,255,255,.12); color: var(--head-text); }
+  /* ---- โครงหน้า: แถบซ้าย + เนื้อหา */
+  .shell { display: grid; grid-template-columns: var(--side-w) 1fr; min-height: 100vh; background: linear-gradient(to right, var(--side) calc(var(--side-w) - 1px), var(--line) 0 var(--side-w), var(--bg) 0); }
+  .side { position: sticky; top: 0; height: 100vh; background: var(--side); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 18px 14px; gap: 6px; overflow-y: auto; z-index: 30; }
+  .brand { display: flex; align-items: center; gap: 11px; padding: 4px 8px 16px; }
+  .logo { width: 36px; height: 36px; border-radius: 11px; background: linear-gradient(135deg, var(--primary), var(--primary-2)); display: grid; place-items: center; color: #fff; box-shadow: 0 4px 12px rgba(47, 107, 255, .35); }
+  .logo svg { width: 20px; height: 20px; stroke-width: 2; }
+  .brand b { display: block; font-size: 15.5px; font-weight: 700; letter-spacing: .1px; line-height: 1.25; }
+  .brand small { display: block; font-size: 12px; color: var(--muted); }
+  .navcap { font-size: 11px; font-weight: 600; letter-spacing: .6px; color: var(--faint); text-transform: uppercase; padding: 14px 12px 6px; }
+  .nav a { display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: 10px; color: var(--text); font-weight: 500; position: relative; }
+  .nav a:hover { background: var(--soft); text-decoration: none; }
+  .nav a.on { background: var(--primary-soft); color: var(--primary-text); font-weight: 600; }
+  .nav a.on::before { content: ''; position: absolute; left: -14px; top: 8px; bottom: 8px; width: 4px; border-radius: 0 4px 4px 0; background: var(--primary); }
+  .nav a .nb { margin-left: auto; font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--soft); color: var(--muted); }
+  .nav a.on .nb { background: var(--card); color: var(--primary-text); }
+  .nav a .nd { margin-left: auto; width: 8px; height: 8px; border-radius: 50%; }
+  .sidefoot { margin-top: auto; padding: 12px 8px 0; display: grid; gap: 8px; }
+  .sidefoot .pill { justify-self: start; }
 
-  main { max-width: 1280px; margin: 0 auto; padding: 20px 20px 56px; display: grid; gap: 18px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
-  .pad { padding: 18px 20px; }
-  h2 { font-size: 15px; font-weight: 600; margin: 0; }
-  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .main { min-width: 0; display: flex; flex-direction: column; }
+  .top { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; padding: 14px 26px; background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: blur(8px); }
+  .search { flex: 1; display: flex; align-items: center; gap: 10px; background: var(--card); border-radius: 12px; padding: 0 14px; box-shadow: var(--shadow); color: var(--faint); min-width: 0; }
+  .search input { border: 0; background: transparent; padding: 11px 0; outline: none; box-shadow: none; }
+  .search input:focus { outline: none; background: transparent; }
+  .iconbtn { background: var(--card); color: var(--muted); width: 40px; height: 40px; padding: 0; border-radius: 12px; display: grid; place-items: center; box-shadow: var(--shadow); font-weight: 500; }
+  .iconbtn:hover { color: var(--primary); }
+  .menu { display: none; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #FFB86B, #FF7A59); color: #fff; display: grid; place-items: center; font-weight: 700; box-shadow: var(--shadow); flex: none; }
+  .urlchip { display: flex; align-items: center; gap: 6px; background: var(--card); border-radius: 12px; padding: 4px 4px 4px 12px; box-shadow: var(--shadow); max-width: 320px; min-width: 0; }
+  .urlchip span { font-family: var(--mono); font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .legacy { margin: 0 26px; }
+  .content { padding: 6px 26px 48px; display: grid; gap: 22px; min-width: 0; }
+  .view { display: grid; gap: 22px; align-content: start; min-width: 0; }
+  .pagehead { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+  .pagehead h1 { margin: 0; font-size: 21px; font-weight: 700; }
+  .pagehead p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+  .scrim { display: none; }
+
+  /* ---- การ์ด */
+  .card { background: var(--card); border-radius: var(--r); box-shadow: var(--shadow); min-width: 0; }
+  .pad { padding: 20px 22px; }
+  h2 { font-size: 15.5px; font-weight: 600; margin: 0; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 
   /* ---- ปุ่ม / ช่องกรอก */
-  button { font: inherit; font-weight: 600; border: 0; border-radius: 9px; padding: 8px 14px; cursor: pointer; background: var(--primary); color: #fff; white-space: nowrap; }
+  button, .btn { font: inherit; font-weight: 600; border: 0; border-radius: 10px; padding: 9px 16px; cursor: pointer; background: var(--primary); color: #fff; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 7px; box-shadow: 0 2px 6px rgba(47, 107, 255, .25); }
+  .btn:hover { text-decoration: none; filter: brightness(1.05); }
   button:disabled { opacity: .5; cursor: progress; }
-  button.ghost { background: var(--soft); color: var(--text); border: 1px solid var(--line); font-weight: 500; }
+  button.ghost, .btn.ghost { background: var(--soft); color: var(--text); border: 1px solid var(--line); font-weight: 500; box-shadow: none; }
   button.ghost:hover { border-color: var(--faint); }
-  button.small { padding: 5px 11px; font-size: 13px; }
-  button.danger { background: var(--bad-soft); color: var(--bad); }
-  button.danger-solid { background: var(--bad); color: #fff; }
-  button.icon { padding: 4px 8px; font-weight: 500; }
-  label { display: grid; gap: 5px; font-size: 13px; color: var(--muted); font-weight: 500; }
-  input { font: inherit; color: var(--text); padding: 9px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--soft); min-width: 0; width: 100%; }
+  button.small { padding: 6px 12px; font-size: 13px; border-radius: 9px; }
+  button.danger { background: var(--bad-soft); color: var(--bad); box-shadow: none; }
+  button.danger-solid { background: var(--bad); color: #fff; box-shadow: none; }
+  button.icon { padding: 4px 9px; font-weight: 500; }
+  button.soft { background: var(--primary-soft); color: var(--primary-text); box-shadow: none; }
+  label { display: grid; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 500; }
+  input { font: inherit; color: var(--text); padding: 10px 13px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); min-width: 0; width: 100%; }
   input:focus { outline: 2px solid var(--primary); outline-offset: -1px; background: var(--card); }
   .err { color: var(--bad); font-size: 13px; min-height: 18px; }
 
-  /* ---- สรุป */
-  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
-  .stat { padding: 14px 16px; display: grid; gap: 2px; cursor: pointer; text-align: left; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); font-weight: 400; }
-  .stat:hover { border-color: var(--faint); }
-  .stat.on { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
-  .stat .n { font-size: 26px; font-weight: 700; line-height: 1.2; }
-  .stat .l { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  /* ---- แดชบอร์ด */
+  .dash { display: grid; grid-template-columns: repeat(12, 1fr); gap: 22px; }
+  .welcome { grid-column: span 8; display: flex; align-items: stretch; overflow: hidden; }
+  .welcome .w-text { padding: 24px 26px; flex: 1; display: grid; gap: 8px; align-content: center; }
+  .welcome h2 { font-size: 18px; color: var(--primary-text); }
+  .welcome p { margin: 0; color: var(--muted); max-width: 460px; }
+  .welcome p b { color: var(--text); }
+  .welcome .w-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .welcome .w-art { width: 230px; flex: none; display: grid; place-items: end center; padding: 14px 18px 0; }
+  .welcome .w-art svg { width: 100%; height: auto; }
+  .mini { grid-column: span 2; padding: 18px 18px 16px; display: grid; gap: 4px; align-content: start; cursor: pointer; text-align: left; color: var(--text); font-weight: 400; box-shadow: var(--shadow); border-radius: var(--r); background: var(--card); border: 0; }
+  .mini:hover { box-shadow: var(--shadow-lg); }
+  .mini .ic { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; margin-bottom: 8px; }
+  .mini .l { font-size: 13px; color: var(--muted); }
+  .mini .n { font-size: 26px; font-weight: 700; line-height: 1.2; }
+  .mini .d { font-size: 12px; color: var(--muted); }
+  .kpis { grid-column: span 12; display: grid; grid-template-columns: repeat(5, 1fr); gap: 22px; }
+  .kpi { padding: 18px 20px; display: flex; align-items: center; gap: 14px; cursor: pointer; text-align: left; color: var(--text); font-weight: 400; background: var(--card); border-radius: var(--r); box-shadow: var(--shadow); border: 2px solid transparent; }
+  .kpi:hover { box-shadow: var(--shadow-lg); }
+  .kpi.on { border-color: var(--primary); }
+  .kpi .ic { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; flex: none; }
+  .kpi .ic svg { width: 22px; height: 22px; }
+  .kpi .n { font-size: 24px; font-weight: 700; line-height: 1.15; }
+  .kpi .l { font-size: 13px; color: var(--muted); }
+  .c-primary { background: var(--primary-soft); color: var(--primary); }
+  .c-ok { background: var(--ok-soft); color: var(--ok); }
+  .c-warn { background: var(--warn-soft); color: var(--warn); }
+  .c-idle { background: var(--idle-soft); color: var(--idle); }
+  .c-bad { background: var(--bad-soft); color: var(--bad); }
+  .c-violet { background: var(--violet-soft); color: var(--violet); }
+  .c-teal { background: var(--teal-soft); color: var(--teal); }
+  .span4 { grid-column: span 4; } .span5 { grid-column: span 5; } .span7 { grid-column: span 7; } .span8 { grid-column: span 8; } .span6 { grid-column: span 6; } .span12 { grid-column: span 12; }
+  .bigline { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .bigline b { font-size: 26px; font-weight: 700; }
+  .ring { --p: 0; width: 132px; height: 132px; border-radius: 50%; background: conic-gradient(var(--primary) calc(var(--p) * 1%), var(--idle-soft) 0); display: grid; place-items: center; flex: none; }
+  .ring > div { width: 100px; height: 100px; border-radius: 50%; background: var(--card); display: grid; place-items: center; text-align: center; line-height: 1.2; }
+  .ring b { font-size: 22px; } .ring span { font-size: 12px; color: var(--muted); }
+  .split { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+  .legend { display: grid; gap: 10px; flex: 1; min-width: 160px; }
+  .legend div { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .legend .ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: none; }
+  .legend .ic svg { width: 17px; height: 17px; }
+  .legend b { margin-left: auto; font-size: 14px; }
+  .list { display: grid; gap: 4px; }
+  .row-item { display: flex; align-items: center; gap: 12px; padding: 9px 4px; border-radius: 10px; }
+  .row-item.click { cursor: pointer; } .row-item.click:hover { background: var(--soft); }
+  .row-item .ic { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; flex: none; }
+  .row-item .ic svg { width: 18px; height: 18px; }
+  .row-item > div { min-width: 0; flex: 1; display: grid; }
+  .row-item b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-item .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-item .end { flex: none; text-align: right; font-size: 13px; font-weight: 600; }
+  .emptybox { color: var(--muted); font-size: 13px; padding: 14px 4px; }
 
   /* ---- ฟอร์มออก license */
-  .issue { display: grid; grid-template-columns: 1.6fr 1.3fr .7fr .7fr 1.6fr auto; gap: 12px; align-items: end; }
-  /* ที่อยู่ร้าน: แถวใต้ฟอร์ม (อัปเดตตามชื่อย่อที่พิมพ์) — ไม่ดันช่องกรอกให้เหลื่อมกัน */
-  .dom-line { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+  .issue { display: grid; grid-template-columns: 1.6fr 1.2fr .7fr .7fr; gap: 14px; align-items: end; }
+  .issue .wide2 { grid-column: span 3; }
+  .issue-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+  .dom-line { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
   .dom-line:empty { display: none; }
-  .dom-line code { font: 12.5px ui-monospace, SFMono-Regular, Consolas, monospace; padding: 4px 10px; border-radius: 999px; background: var(--soft); border: 1px solid var(--line); color: var(--muted); word-break: break-all; }
+  .dom-line code { font: 12.5px var(--mono); padding: 4px 10px; border-radius: 999px; background: var(--soft); border: 1px solid var(--line); color: var(--muted); word-break: break-all; }
   .dom-line code b { color: var(--text); font-weight: 600; }
+  .steps { display: grid; gap: 14px; }
+  .steps div { display: flex; gap: 12px; align-items: flex-start; font-size: 13px; color: var(--muted); }
+  .steps i { width: 26px; height: 26px; border-radius: 50%; background: var(--primary-soft); color: var(--primary-text); font-style: normal; font-weight: 700; display: grid; place-items: center; flex: none; font-size: 12.5px; }
+  .steps b { color: var(--text); display: block; font-weight: 600; }
 
-  /* ---- การ์ดร้าน */
-  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  .toolbar input { max-width: 300px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(236px, 1fr)); gap: 16px; padding: 4px 20px 20px; }
-  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; cursor: pointer; display: flex; flex-direction: column; transition: transform .12s, box-shadow .12s, border-color .12s; }
-  .tile:hover { transform: translateY(-2px); border-color: var(--faint); box-shadow: 0 8px 24px rgba(20, 30, 50, .10); }
+  /* ---- ร้านทั้งหมด */
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { background: var(--card); color: var(--text); border: 1px solid var(--line); box-shadow: none; font-weight: 500; padding: 7px 14px; border-radius: 999px; font-size: 13px; }
+  .chip .dot { margin-right: 2px; }
+  .chip b { font-weight: 700; margin-left: 4px; }
+  .chip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .chip.on .dot { background: #fff !important; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px; }
+  .tile { background: var(--card); border-radius: var(--r); overflow: hidden; cursor: pointer; display: flex; flex-direction: column; box-shadow: var(--shadow); transition: transform .12s, box-shadow .12s; }
+  .tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
   .tile:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   .tile.off .cover { filter: grayscale(.85); opacity: .75; }
-  .cover { position: relative; aspect-ratio: 16 / 9; display: grid; place-items: center; overflow: hidden;
-    background: linear-gradient(135deg, hsl(var(--h) 70% 62%), hsl(calc(var(--h) + 40) 65% 48%)); }
+  .cover { position: relative; aspect-ratio: 16 / 8; display: grid; place-items: center; overflow: hidden;
+    background: linear-gradient(135deg, hsl(var(--h) 75% 64%), hsl(calc(var(--h) + 40) 68% 50%)); }
   .cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-  .cover .ini { font-size: 40px; font-weight: 700; color: rgba(255,255,255,.92); text-shadow: 0 2px 10px rgba(0,0,0,.15); }
+  .cover .ini { font-size: 38px; font-weight: 700; color: rgba(255,255,255,.95); text-shadow: 0 2px 10px rgba(0,0,0,.15); }
   .cover .badge { position: absolute; top: 10px; left: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
   .cover .run { position: absolute; top: 10px; right: 10px; background: rgba(15,20,30,.55); color: #fff; font-size: 11.5px; padding: 2px 9px; border-radius: 999px; display: flex; align-items: center; gap: 5px; }
   .run i { width: 7px; height: 7px; border-radius: 50%; background: #9aa2b1; display: inline-block; } .run.on i { background: #4cd08f; }
-  .tbody { padding: 12px 14px 14px; display: grid; gap: 10px; flex: 1; }
+  .tbody { padding: 14px 16px 16px; display: grid; gap: 10px; flex: 1; }
   .tname { font-size: 15.5px; font-weight: 600; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tname + .sub { margin-top: -9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .kv { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
@@ -113,23 +201,23 @@
   .b-bad { background: var(--bad-soft); color: var(--bad); } .b-idle { background: var(--idle-soft); color: var(--idle); }
   .meter { height: 6px; background: var(--idle-soft); border-radius: 99px; overflow: hidden; }
   .meter i { display: block; height: 100%; border-radius: 99px; }
-  .empty { text-align: center; color: var(--muted); padding: 40px 16px; grid-column: 1 / -1; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 16px; grid-column: 1 / -1; background: var(--card); border-radius: var(--r); }
 
   /* ---- popup รายละเอียดร้าน */
-  dialog.detail { width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: hidden; }
+  dialog.detail { width: min(880px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: hidden; }
   dialog.detail[open] { display: flex; flex-direction: column; }
-  .dhead { display: flex; gap: 16px; align-items: center; padding: 18px 20px; border-bottom: 1px solid var(--line); }
+  .dhead { display: flex; gap: 16px; align-items: center; padding: 18px 22px; border-bottom: 1px solid var(--line); }
   .dhead .cover { width: 128px; aspect-ratio: 16 / 10; border-radius: 12px; flex: none; }
   .dhead .cover .ini { font-size: 30px; }
   .dtitle { flex: 1; min-width: 0; display: grid; gap: 4px; }
   .dtitle h3 { margin: 0; font-size: 19px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dtitle .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-  .x { background: none; color: var(--muted); font-size: 20px; padding: 2px 10px; align-self: flex-start; }
+  .x { background: none; color: var(--muted); font-size: 20px; padding: 2px 10px; align-self: flex-start; box-shadow: none; }
   .x:hover { background: var(--soft); color: var(--text); }
-  .dbody { overflow: auto; padding: 18px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .box { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 9px; align-content: start; }
+  .dbody { overflow: auto; padding: 18px 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; background: var(--bg); }
+  .box { background: var(--card); border-radius: 12px; padding: 14px 16px; display: grid; gap: 9px; align-content: start; box-shadow: var(--shadow); }
   .box.full { grid-column: 1 / -1; }
-  .box h4 { margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+  .box h4 { margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--muted); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .box .kv > span:last-child { text-align: right; min-width: 0; overflow-wrap: anywhere; }
   .mach { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
   .mach li { display: flex; align-items: center; gap: 8px; font-size: 13px; background: var(--soft); border-radius: 9px; padding: 7px 8px 7px 10px; }
@@ -149,56 +237,51 @@
   .bk { display: grid; gap: 8px; }
   .bklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; max-height: 196px; overflow: auto; }
   .bklist li { display: flex; align-items: center; gap: 8px; background: var(--soft); border-radius: 9px; padding: 6px 8px 6px 10px; font-size: 13px; }
-  .bklist.targets { max-height: none; }
   .bklist li > div { flex: 1; min-width: 0; display: grid; } .bklist b { font-weight: 600; }
-  .btnlink { font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 8px; background: var(--primary-soft); color: var(--primary-text); white-space: nowrap; }
+  .btnlink { font-size: 13px; font-weight: 600; padding: 5px 11px; border-radius: 8px; background: var(--primary-soft); color: var(--primary-text); white-space: nowrap; }
   .btnlink:hover { text-decoration: none; filter: brightness(.97); }
-  .dfoot { padding: 14px 20px; border-top: 1px solid var(--line); background: var(--soft); }
+  .dfoot { padding: 14px 22px; border-top: 1px solid var(--line); background: var(--card); }
 
   /* ---- ประวัติ */
-  details > summary { cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; }
-  details > summary::-webkit-details-marker { display: none; }
-  details > summary::after { content: '▾'; color: var(--muted); }
-  details[open] > summary::after { content: '▴'; }
-  .ev { margin-top: 12px; display: grid; gap: 2px; max-height: 320px; overflow: auto; font-size: 13px; }
-  .ev div { display: grid; grid-template-columns: 150px 140px 1fr; gap: 10px; padding: 5px 8px; border-radius: 6px; }
+  .ev { display: grid; gap: 2px; font-size: 13px; }
+  .ev div { display: grid; grid-template-columns: 150px 220px 1fr; gap: 12px; padding: 8px 10px; border-radius: 8px; }
   .ev div:nth-child(odd) { background: var(--soft); }
   .ev .t { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 
   /* ---- หน้าต่าง */
   dialog { border: 0; border-radius: 16px; padding: 0; width: min(460px, calc(100vw - 32px)); background: var(--card); color: var(--text); box-shadow: 0 20px 60px rgba(0,0,0,.25); }
   dialog::backdrop { background: rgba(15, 20, 30, .45); }
-  dialog form { padding: 20px 22px; display: grid; gap: 14px; }
+  dialog form { padding: 22px 24px; display: grid; gap: 14px; }
   dialog h3 { margin: 0; font-size: 16px; }
   dialog .btns { display: flex; justify-content: flex-end; gap: 8px; }
+  dialog.wide { width: min(680px, calc(100vw - 32px)); }
   .msg { white-space: pre-wrap; background: var(--soft); border: 1px dashed var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
   .bigcode { font-family: var(--mono); font-size: 24px; font-weight: 600; letter-spacing: 1px; text-align: center; padding: 10px; border-radius: 10px; background: var(--ok-soft); color: var(--ok); }
   .warnbox { background: var(--bad-soft); color: var(--bad); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
 
-  dialog.wide { width: min(680px, calc(100vw - 32px)); }
-
   /* ---- สำรองข้อมูลทั้งระบบ */
   .sys-acts { display: flex; gap: 8px; flex-wrap: wrap; }
-  .sysbody { display: grid; gap: 12px; }
-  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .sysbody { display: grid; gap: 14px; }
+  .chipsrow { display: flex; gap: 6px; flex-wrap: wrap; }
   .alerts { display: grid; gap: 6px; }
-  .alert { display: flex; gap: 8px; align-items: flex-start; border-radius: 10px; padding: 8px 10px; font-size: 13px; }
+  .alert { display: flex; gap: 8px; align-items: flex-start; border-radius: 10px; padding: 9px 12px; font-size: 13px; }
   .alert > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
   .alert .t { font-family: var(--mono); font-size: 11.5px; opacity: .75; margin-right: 4px; }
   .alert.urgent { background: var(--bad-soft); color: var(--bad); }
   .alert.warn { background: var(--warn-soft); color: var(--warn); }
   .alert.info { background: var(--primary-soft); color: var(--primary-text); }
-  .alert button { background: transparent; color: inherit; border: 0; padding: 0 6px; }
+  .alert button { background: transparent; color: inherit; border: 0; padding: 0 6px; box-shadow: none; }
   .h4 { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
   .months { display: flex; gap: 8px; flex-wrap: wrap; }
   .month { display: flex; align-items: center; gap: 10px; background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px 6px 12px; font-size: 13px; }
   .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
-  .tabs button { background: none; color: var(--muted); border-radius: 8px 8px 0 0; padding: 8px 12px; border-bottom: 2px solid transparent; }
+  .tabs button { background: none; color: var(--muted); border-radius: 8px 8px 0 0; padding: 9px 13px; border-bottom: 2px solid transparent; box-shadow: none; }
   .tabs button.on { color: var(--primary-text); border-bottom-color: var(--primary); }
-  .tblwrap { overflow: auto; max-height: 460px; }
+  .tblwrap { overflow: auto; max-height: 520px; }
   table.bt { width: 100%; border-collapse: collapse; font-size: 13px; }
-  table.bt th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--card); white-space: nowrap; }
-  table.bt td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.bt th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 8px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--card); white-space: nowrap; text-transform: uppercase; letter-spacing: .3px; }
+  table.bt td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.bt tr:hover td { background: var(--soft); }
   table.bt td.r { text-align: right; white-space: nowrap; }
   table.bt .act { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
   .rt { display: grid; gap: 6px; max-height: 46vh; overflow: auto; }
@@ -208,100 +291,234 @@
   .rt input { width: auto; margin: 4px 0 0; }
   .rt label > span { display: grid; gap: 1px; min-width: 0; }
 
-  .login { max-width: 380px; margin: 14vh auto; padding: 26px; display: grid; gap: 14px; }
-  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--head); color: var(--head-text); padding: 9px 16px; border-radius: 10px; font-size: 13px; box-shadow: var(--shadow); opacity: 0; transition: opacity .2s; pointer-events: none; }
+  /* ---- เข้าสู่ระบบ */
+  .loginwrap { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+  .login { width: min(400px, 100%); padding: 30px 28px; display: grid; gap: 14px; }
+  .login .brand { padding: 0 0 6px; }
+  .login h2 { font-size: 19px; }
+  .login p { margin: -6px 0 4px; color: var(--muted); font-size: 13px; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--head); color: var(--head-text); padding: 10px 18px; border-radius: 10px; font-size: 13px; box-shadow: var(--shadow-lg); opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 100; }
   .toast.show { opacity: 1; }
+  .pill { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: var(--primary-soft); color: var(--primary-text); white-space: nowrap; font-weight: 600; }
 
-  @media (max-width: 1100px) {
-    .issue { grid-template-columns: 1fr 1fr; } .issue .wide { grid-column: 1 / -1; }
-    .stats { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 1280px) {
+    .welcome { grid-column: span 12; }
+    .mini { grid-column: span 6; }
+    .kpis { grid-template-columns: repeat(3, 1fr); }
+    .span4, .span5, .span7, .span8 { grid-column: span 6; }
+  }
+  @media (max-width: 1000px) {
+    .shell { grid-template-columns: 1fr; background: var(--bg); }
+    .side { position: fixed; left: 0; top: 0; bottom: 0; width: var(--side-w); transform: translateX(-105%); transition: transform .2s; box-shadow: var(--shadow-lg); }
+    .shell.nav-open .side { transform: none; }
+    .shell.nav-open .scrim { display: block; position: fixed; inset: 0; background: rgba(15, 20, 30, .35); z-index: 25; }
+    .menu { display: grid; }
+    .span4, .span5, .span6, .span7, .span8 { grid-column: span 12; }
+    .issue { grid-template-columns: 1fr 1fr; } .issue .wide2 { grid-column: 1 / -1; }
   }
   @media (max-width: 640px) {
-    .bar, main { padding-left: 16px; padding-right: 16px; }
-    .grid { padding: 4px 16px 16px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+    .top { padding: 12px 16px; gap: 8px; } .content { padding: 4px 16px 40px; gap: 16px; } .legacy { margin: 0 16px; }
+    .urlchip, .avatar { display: none; }
+    .dash, .view { gap: 16px; }
+    .kpis { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .mini { grid-column: span 6; }
+    .welcome .w-art { display: none; }
+    .grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
     .dbody { grid-template-columns: 1fr; padding: 14px 16px; }
     .stgrid { grid-template-columns: repeat(2, 1fr); }
-    table.bt th:nth-child(3), table.bt td:nth-child(3) { display: none; }
     .dhead { padding: 14px 16px; } .dhead .cover { width: 88px; }
-    .hist div { grid-template-columns: 1fr; gap: 0; }
-    .stats { grid-template-columns: repeat(2, 1fr); }
-    .ev div { grid-template-columns: 1fr; gap: 0; }
-    .toolbar input { max-width: none; }
-    .card-head { flex-wrap: wrap; } .card-head > .sub { display: none; }
+    .hist div, .ev div { grid-template-columns: 1fr; gap: 0; }
+    .card-head { flex-wrap: wrap; }
+    table.bt th:nth-child(3), table.bt td:nth-child(3) { display: none; }
+    .issue { grid-template-columns: 1fr; }
   }
 </style>
 </head>
 <body>
-<header>
-  <div class="bar">
-    <div class="brand"><div class="logo">L</div><div><b>แผงควบคุม License</b><small>Clothing POS · ร้านทดลอง</small></div></div>
-    <span class="pill" id="mode"></span>
-    <div class="urlchip" id="urlChip" hidden title="ที่อยู่ที่ทุกร้านใช้เข้าระบบ (ตั้งไว้ในแอปแล้ว)">
-      <span id="publicUrl"></span><button class="small icon" id="copyUrl">คัดลอก</button>
-    </div>
-    <button class="small" id="logout" hidden>ออกจากระบบ</button>
-  </div>
-  <div class="bar" id="legacyWarn" hidden style="padding-top:0">
-    <span class="badge b-warn">ช่วงย้ายระบบ: แอปรุ่นเก่าที่ยังไม่กรอก license ยังเข้าร้านหลักได้ — ปิดเมื่ออัปเดตครบทุกเครื่อง (LEGACY_MAIN=0)</span>
-  </div>
-</header>
+<!-- ไอคอน (เส้น) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-dash" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></symbol>
+  <symbol id="i-store" viewBox="0 0 24 24"><path d="M4 10v9a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-9"/><path d="M3 10l2-6h14l2 6"/><path d="M3 10a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/><path d="M10 20v-5h4v5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 17l-5-5 5-5M5 12h11"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M14 9l2 2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/></symbol>
+  <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M6 6l12 12"/></symbol>
+  <symbol id="i-pc" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a4 4 0 0 1-.5-8A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z"/><path d="M12 12v5M9.5 14.5L12 12l2.5 2.5"/></symbol>
+  <symbol id="i-hourglass" viewBox="0 0 24 24"><path d="M6 3h12M6 21h12M7 3c0 5 10 5 10 9s-10 4-10 9M17 3c0 5-10 5-10 9s10 4 10 9"/></symbol>
+  <symbol id="i-pos" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="10" rx="2"/><path d="M4 17h16v4H4zM8 7h8M8 13v4M16 13v4"/></symbol>
+</svg>
 
 <div id="loginView" hidden>
-  <form class="card login" id="loginForm">
-    <h2>เข้าสู่แผงควบคุม</h2>
-    <label>รหัสผ่านผู้ดูแล<input type="password" id="pw" autocomplete="current-password" autofocus></label>
-    <button>เข้าสู่ระบบ</button>
-    <div class="err" id="loginErr"></div>
-    <div class="sub" id="pwHint" hidden></div>
-  </form>
+  <div class="loginwrap">
+    <form class="card login" id="loginForm">
+      <div class="brand"><div class="logo"><svg class="i"><use href="#i-pos"/></svg></div><div><b>Clothing POS</b><small>ศูนย์จัดการ License</small></div></div>
+      <h2>ยินดีต้อนรับกลับ 👋</h2>
+      <p>เข้าสู่ระบบด้วยรหัสผ่านผู้ดูแล</p>
+      <label>รหัสผ่านผู้ดูแล<input type="password" id="pw" autocomplete="current-password" autofocus></label>
+      <button>เข้าสู่ระบบ</button>
+      <div class="err" id="loginErr"></div>
+      <div class="sub" id="pwHint" hidden></div>
+    </form>
+  </div>
 </div>
 
-<main id="app" hidden>
-  <section class="stats" id="stats"></section>
+<div class="shell" id="app" hidden>
+  <aside class="side" id="side">
+    <div class="brand"><div class="logo"><svg class="i"><use href="#i-pos"/></svg></div><div><b>Clothing POS</b><small>ศูนย์จัดการ License</small></div></div>
+    <nav class="nav" id="nav">
+      <div class="navcap">ภาพรวม</div>
+      <a href="#dashboard" data-view="dashboard"><svg class="i"><use href="#i-dash"/></svg>แดชบอร์ด</a>
+      <div class="navcap">ร้านค้า</div>
+      <a href="#shops" data-view="shops"><svg class="i"><use href="#i-store"/></svg>ร้านทั้งหมด<span class="nb" id="navShops"></span></a>
+      <a href="#issue" data-view="issue"><svg class="i"><use href="#i-plus"/></svg>ออก license ใหม่</a>
+      <div class="navcap">ระบบ</div>
+      <a href="#backup" data-view="backup"><svg class="i"><use href="#i-db"/></svg>สำรองข้อมูล<span class="nd" id="navBackup"></span></a>
+      <a href="#history" data-view="history"><svg class="i"><use href="#i-clock"/></svg>ประวัติการใช้งาน</a>
+    </nav>
+    <div class="sidefoot"><span class="pill" id="mode"></span><span class="sub">Clothing POS · แผงควบคุม</span></div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
 
-  <section class="card pad" id="sysCard">
-    <div class="card-head">
-      <h2>สำรองข้อมูลทั้งระบบ <span class="sub" id="sysSub"></span></h2>
-      <div class="sys-acts">
-        <button class="small ghost" id="sysUpload" title="ใช้ไฟล์ backup_….zip ที่ดาวน์โหลดไว้ (เช่น ย้ายไปเซิร์ฟเวอร์ใหม่)">อัปโหลดไฟล์แล้วกู้คืน</button>
-        <button class="small" id="sysRun">สำรองตอนนี้</button>
+  <div class="main">
+    <header class="top">
+      <button class="iconbtn menu" id="menuBtn" title="เมนู" aria-label="เมนู"><svg class="i"><use href="#i-menu"/></svg></button>
+      <label class="search"><svg class="i"><use href="#i-search"/></svg><input id="q" type="search" placeholder="ค้นหาร้าน · รหัส license · ชื่อย่อ · หมายเหตุ" aria-label="ค้นหาร้าน"></label>
+      <div class="urlchip" id="urlChip" hidden title="ที่อยู่ที่ทุกร้านใช้เข้าระบบ (ตั้งไว้ในแอปแล้ว)">
+        <span id="publicUrl"></span><button class="small soft icon" id="copyUrl">คัดลอก</button>
       </div>
+      <button class="iconbtn" id="logout" hidden title="ออกจากระบบ" aria-label="ออกจากระบบ"><svg class="i"><use href="#i-logout"/></svg></button>
+      <div class="avatar" title="ผู้ดูแลระบบ">A</div>
+    </header>
+    <div class="legacy" id="legacyWarn" hidden>
+      <span class="badge b-warn">ช่วงย้ายระบบ: แอปรุ่นเก่าที่ยังไม่กรอก license ยังเข้าร้านหลักได้ — ปิดเมื่ออัปเดตครบทุกเครื่อง (LEGACY_MAIN=0)</span>
     </div>
-    <div class="sysbody" id="sysBody"><div class="sub">กำลังโหลด…</div></div>
-  </section>
-  <input type="file" id="sysFile" accept=".zip,application/zip" hidden>
 
-  <section class="card pad">
-    <div class="card-head"><h2>ออก license ใหม่</h2><span class="sub">นับวันเริ่มเมื่อร้านกรอกในแอปครั้งแรก</span></div>
-    <form class="issue" id="issueForm">
-      <label class="wide">ชื่อร้าน<input id="shop" required maxlength="80" placeholder="เช่น ร้าน A"></label>
-      <label class="wide"><span id="slugLabel">ชื่อย่อร้าน</span><input id="slug" required maxlength="30" placeholder="a" pattern="[a-z0-9]([a-z0-9-]*[a-z0-9])?" title="a-z 0-9 และ - เท่านั้น"></label>
-      <label>จำนวนวัน<input id="days" type="number" min="1" max="3650" value="60" required></label>
-      <label>จำนวนเครื่อง<input id="machines" type="number" min="1" max="50" value="2" required></label>
-      <label class="wide">หมายเหตุ<input id="note" maxlength="300" placeholder="เบอร์โทร / ผู้ติดต่อ"></label>
-      <button id="issueBtn">ออก license</button>
-    </form>
-    <div class="dom-line" id="dom"></div>
-    <div class="err" id="issueErr"></div>
-  </section>
+    <main class="content">
+      <!-- ================= แดชบอร์ด ================= -->
+      <section class="view" data-view="dashboard">
+        <div class="dash">
+          <div class="card welcome">
+            <div class="w-text">
+              <h2>สวัสดี ผู้ดูแลระบบ 🎉</h2>
+              <p id="welcomeText">กำลังโหลดข้อมูลร้าน…</p>
+              <div class="w-acts"><a class="btn" href="#issue"><svg class="i"><use href="#i-plus"/></svg>ออก license ใหม่</a><a class="btn ghost" href="#shops">ดูร้านทั้งหมด</a></div>
+            </div>
+            <div class="w-art" aria-hidden="true">
+              <svg viewBox="0 0 220 150">
+                <ellipse cx="110" cy="142" rx="96" ry="7" fill="currentColor" opacity=".06"/>
+                <rect x="34" y="96" width="152" height="44" rx="8" fill="#2F6BFF" opacity=".14"/>
+                <rect x="46" y="104" width="128" height="8" rx="4" fill="#2F6BFF" opacity=".35"/>
+                <rect x="58" y="34" width="104" height="66" rx="10" fill="#2F6BFF"/>
+                <rect x="66" y="42" width="88" height="46" rx="5" fill="#fff"/>
+                <rect x="74" y="50" width="40" height="6" rx="3" fill="#2F6BFF" opacity=".55"/>
+                <rect x="74" y="62" width="64" height="5" rx="2.5" fill="#A0A6B1" opacity=".6"/>
+                <rect x="74" y="72" width="30" height="8" rx="4" fill="#1F9D63" opacity=".8"/>
+                <rect x="100" y="100" width="20" height="4" fill="#2F6BFF" opacity=".55"/>
+                <rect x="150" y="14" width="46" height="34" rx="6" fill="#FFB86B"/>
+                <path d="M158 24h30M158 31h22M158 38h14" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+                <circle cx="34" cy="40" r="14" fill="#1F9D63" opacity=".18"/>
+                <path d="M27 40l5 5 9-10" stroke="#1F9D63" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+          </div>
+          <button class="mini" data-go="shops" data-filter="ok"><span class="ic c-ok"><svg class="i"><use href="#i-store"/></svg></span><span class="l">ร้านเปิดอยู่</span><span class="n" id="mRunning">—</span><span class="d" id="mRunningSub"></span></button>
+          <button class="mini" data-go="shops"><span class="ic c-violet"><svg class="i"><use href="#i-pc"/></svg></span><span class="l">เครื่องที่ลงทะเบียน</span><span class="n" id="mMachines">—</span><span class="d" id="mMachinesSub"></span></button>
 
-  <section class="card">
-    <div class="pad" style="padding-bottom: 6px">
-      <div class="card-head" style="margin-bottom: 8px">
-        <h2>ร้านทั้งหมด <span class="sub" id="count"></span></h2>
-        <div class="toolbar"><input id="q" type="search" placeholder="ค้นหา ชื่อร้าน · รหัส · ชื่อย่อ · หมายเหตุ"></div>
-      </div>
-    </div>
-    <div class="grid" id="rows"></div>
-  </section>
+          <div class="kpis" id="stats"></div>
 
-  <details class="card pad" id="evBox">
-    <summary><h2>ประวัติล่าสุด</h2></summary>
-    <div class="ev" id="events"></div>
-  </details>
-</main>
+          <div class="card pad span5">
+            <div class="card-head"><h2>สถานะ license</h2><span class="sub" id="ringSub"></span></div>
+            <div class="split">
+              <div class="ring" id="ring"><div><b id="ringPct">0%</b><span>ใช้งานอยู่</span></div></div>
+              <div class="legend" id="legend"></div>
+            </div>
+          </div>
+          <div class="card pad span7">
+            <div class="card-head"><h2>ใกล้หมดอายุ</h2><a class="sub" href="#shops" data-go="shops" data-filter="warn">ดูทั้งหมด →</a></div>
+            <div class="list" id="expiring"></div>
+          </div>
+          <div class="card pad span6">
+            <div class="card-head"><h2>สำรองข้อมูลทั้งระบบ</h2><a class="sub" href="#backup">จัดการ →</a></div>
+            <div id="dashBackup" class="list"><div class="emptybox">กำลังโหลด…</div></div>
+          </div>
+          <div class="card pad span6">
+            <div class="card-head"><h2>กิจกรรมล่าสุด</h2><a class="sub" href="#history">ดูทั้งหมด →</a></div>
+            <div class="list" id="dashEvents"></div>
+          </div>
+        </div>
+      </section>
 
-<!-- หน้าต่างแสดงผล / ยืนยัน (ใช้ร่วมกัน) -->
+      <!-- ================= ร้านทั้งหมด ================= -->
+      <section class="view" data-view="shops" hidden>
+        <div class="pagehead">
+          <div><h1>ร้านทั้งหมด <span class="sub" id="count"></span></h1><p>คลิกการ์ดเพื่อดูรายละเอียด ต่ออายุ จัดการเครื่อง หรือเปิดดูร้าน</p></div>
+          <a class="btn" href="#issue"><svg class="i"><use href="#i-plus"/></svg>ออก license ใหม่</a>
+        </div>
+        <div class="chips" id="chips"></div>
+        <div class="grid" id="rows"></div>
+      </section>
+
+      <!-- ================= ออก license ================= -->
+      <section class="view" data-view="issue" hidden>
+        <div class="pagehead"><div><h1>ออก license ใหม่</h1><p>นับวันเริ่มเมื่อร้านกรอกรหัสในแอปครั้งแรก</p></div></div>
+        <div class="dash">
+          <section class="card pad span8">
+            <form class="issue" id="issueForm">
+              <label>ชื่อร้าน<input id="shop" required maxlength="80" placeholder="เช่น ร้าน A"></label>
+              <label><span id="slugLabel">ชื่อย่อร้าน</span><input id="slug" required maxlength="30" placeholder="a" pattern="[a-z0-9]([a-z0-9-]*[a-z0-9])?" title="a-z 0-9 และ - เท่านั้น"></label>
+              <label>จำนวนวัน<input id="days" type="number" min="1" max="3650" value="60" required></label>
+              <label>จำนวนเครื่อง<input id="machines" type="number" min="1" max="50" value="2" required></label>
+              <label class="wide2">หมายเหตุ<input id="note" maxlength="300" placeholder="เบอร์โทร / ผู้ติดต่อ"></label>
+              <button id="issueBtn"><svg class="i"><use href="#i-key"/></svg>ออก license</button>
+            </form>
+            <div class="issue-foot"><div class="dom-line" id="dom"></div></div>
+            <div class="err" id="issueErr"></div>
+          </section>
+          <section class="card pad span4">
+            <div class="card-head"><h2>ขั้นตอนให้ร้าน</h2></div>
+            <div class="steps">
+              <div><i>1</i><span><b>ออก license</b>ได้รหัส POS-XXXX-XXXX + ข้อความพร้อมส่ง</span></div>
+              <div><i>2</i><span><b>ร้านติดตั้งโปรแกรม</b>ดาวน์โหลดตัวติดตั้งแล้วเปิดโปรแกรม</span></div>
+              <div><i>3</i><span><b>กรอกรหัสในแอป</b>ระบบสร้างร้านให้อัตโนมัติ แล้วแสดง PIN ผู้จัดการ</span></div>
+              <div><i>4</i><span><b>เริ่มขายได้ทันที</b>ร้านเปลี่ยน PIN ได้ที่เมนู "พนักงาน"</span></div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ================= สำรองข้อมูล ================= -->
+      <section class="view" data-view="backup" hidden>
+        <div class="pagehead"><div><h1>สำรองข้อมูลทั้งระบบ</h1><p>license + ทุกร้าน ในไฟล์ zip เดียว — ใช้กู้คืนเมื่อย้ายเซิร์ฟเวอร์ / เซิร์ฟเวอร์ล่ม / โดนแฮก</p></div></div>
+        <section class="card pad" id="sysCard">
+          <div class="card-head">
+            <h2>ไฟล์สำรอง <span class="sub" id="sysSub"></span></h2>
+            <div class="sys-acts">
+              <button class="small ghost" id="sysUpload" title="ใช้ไฟล์ backup_….zip ที่ดาวน์โหลดไว้ (เช่น ย้ายไปเซิร์ฟเวอร์ใหม่)"><svg class="i"><use href="#i-cloud"/></svg>อัปโหลดไฟล์แล้วกู้คืน</button>
+              <button class="small" id="sysRun"><svg class="i"><use href="#i-db"/></svg>สำรองตอนนี้</button>
+            </div>
+          </div>
+          <div class="sysbody" id="sysBody"><div class="sub">กำลังโหลด…</div></div>
+        </section>
+        <input type="file" id="sysFile" accept=".zip,application/zip" hidden>
+      </section>
+
+      <!-- ================= ประวัติ ================= -->
+      <section class="view" data-view="history" hidden>
+        <div class="pagehead"><div><h1>ประวัติการใช้งาน</h1><p>100 รายการล่าสุด — ออก license · ต่ออายุ · เครื่อง · กู้คืนข้อมูล</p></div></div>
+        <section class="card pad"><div class="ev" id="events"></div></section>
+      </section>
+    </main>
+  </div>
+</div>
+
 <!-- popup รายละเอียดร้าน -->
 <dialog id="detail" class="detail"></dialog>
 <input type="file" id="imgFile" accept="image/png,image/jpeg,image/webp" hidden>
@@ -384,24 +601,121 @@ function statusOf(l) {
   return { key: 'ok', label: 'ใช้งานอยู่', cls: 'b-ok' };
 }
 const FILTERS = [
-  ['all', 'ทั้งหมด', 'var(--primary)'],
-  ['ok', 'ใช้งานอยู่', 'var(--ok)'],
-  ['warn', 'ใกล้หมดอายุ', 'var(--warn)'],
-  ['idle', 'ยังไม่เปิดใช้', 'var(--idle)'],
-  ['bad', 'หมดอายุ / ระงับ', 'var(--bad)'],
+  ['all', 'ทั้งหมด', 'var(--primary)', 'c-primary', 'i-store'],
+  ['ok', 'ใช้งานอยู่', 'var(--ok)', 'c-ok', 'i-check'],
+  ['warn', 'ใกล้หมดอายุ', 'var(--warn)', 'c-warn', 'i-hourglass'],
+  ['idle', 'ยังไม่เปิดใช้', 'var(--idle)', 'c-idle', 'i-pause'],
+  ['bad', 'หมดอายุ / ระงับ', 'var(--bad)', 'c-bad', 'i-ban'],
 ];
+const svg = (id) => `<svg class="i"><use href="#${id}"/></svg>`;
+const countOf = (k) => (k === 'all' ? licenses.length : licenses.filter((l) => statusOf(l).key === k).length);
 function renderStats() {
-  const n = (k) => (k === 'all' ? licenses.length : licenses.filter((l) => statusOf(l).key === k).length);
-  $('stats').innerHTML = FILTERS.map(([k, label, color]) =>
-    `<button class="stat ${filter === k ? 'on' : ''}" data-filter="${k}"><span class="n">${n(k)}</span><span class="l"><i class="dot" style="background:${color}"></i>${label}</span></button>`).join('');
+  // แดชบอร์ด: การ์ดตัวเลข (คลิก = ไปหน้าร้านพร้อมตัวกรอง) · หน้าร้าน: ชิปตัวกรอง
+  $('stats').innerHTML = FILTERS.map(([k, label, , cls, icon]) =>
+    `<button class="kpi" data-go="shops" data-filter="${k}"><span class="ic ${cls}">${svg(icon)}</span><span><span class="n">${countOf(k)}</span><br><span class="l">${label}</span></span></button>`).join('');
+  $('chips').innerHTML = FILTERS.map(([k, label, color]) =>
+    `<button class="chip ${filter === k ? 'on' : ''}" data-filter="${k}"><i class="dot" style="background:${color}"></i>${label}<b>${countOf(k)}</b></button>`).join('');
 }
-$('stats').onclick = (e) => {
+$('chips').onclick = (e) => {
   const b = e.target.closest('[data-filter]');
   if (!b) return;
-  filter = filter === b.dataset.filter ? 'all' : b.dataset.filter;
+  filter = b.dataset.filter;
   render();
 };
-$('q').oninput = () => render();
+$('q').oninput = () => {
+  if (view !== 'shops' && $('q').value.trim()) go('shops');
+  render();
+};
+
+// ---------------------------------------------------------------- หน้า (แถบซ้าย) — จำไว้ใน URL (#shops ฯลฯ)
+const VIEWS = ['dashboard', 'shops', 'issue', 'backup', 'history'];
+let view = 'dashboard';
+function applyView() {
+  const h = location.hash.slice(1);
+  view = VIEWS.includes(h) ? h : 'dashboard';
+  document.querySelectorAll('.view').forEach((v) => (v.hidden = v.dataset.view !== view));
+  document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.view === view));
+  $('app').classList.remove('nav-open');
+  if (view === 'issue') setTimeout(() => $('shop').focus(), 50);
+  if (view === 'history' || view === 'dashboard') loadEvents().catch(() => {});
+  if (view === 'backup' || view === 'dashboard') loadSys().catch(() => {});
+}
+function go(v) {
+  if (location.hash.slice(1) === v) applyView();
+  else location.hash = v;
+}
+window.addEventListener('hashchange', applyView);
+$('menuBtn').onclick = () => $('app').classList.toggle('nav-open');
+$('scrim').onclick = () => $('app').classList.remove('nav-open');
+// ปุ่ม/ลิงก์ที่พาไปหน้าร้านพร้อมตัวกรอง (การ์ดตัวเลข · ดูทั้งหมด)
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-go]');
+  if (!t || !$('app').contains(t)) return;
+  e.preventDefault();
+  if (t.dataset.filter) filter = t.dataset.filter;
+  render();
+  go(t.dataset.go);
+});
+
+// ---------------------------------------------------------------- แดชบอร์ด
+function renderDash() {
+  const n = (k) => countOf(k);
+  const total = licenses.length;
+  const running = licenses.filter((l) => l.instance?.state === 'running').length;
+  const withInst = licenses.filter((l) => l.instance).length;
+  const machines = licenses.reduce((a, l) => a + l.machines.length, 0);
+  const seats = licenses.filter((l) => l.status === 'active' && !l.expired).reduce((a, l) => a + l.max_machines, 0);
+  $('welcomeText').innerHTML = total
+    ? `ตอนนี้มีร้านใช้งานอยู่ <b>${n('ok')}</b> ร้าน จากทั้งหมด <b>${total}</b> ร้าน${n('warn') ? ` · ใกล้หมดอายุ <b style="color:var(--warn)">${n('warn')}</b> ร้าน — ต่ออายุได้จากหน้ารายละเอียดร้าน` : ' · ไม่มีร้านใกล้หมดอายุ'}`
+    : 'ยังไม่มีร้านในระบบ — เริ่มจากออก license ใบแรกให้ร้าน';
+  $('mRunning').textContent = num(running);
+  $('mRunningSub').textContent = `จาก ${num(withInst)} ร้านที่สร้างระบบแล้ว`;
+  $('mMachines').textContent = num(machines);
+  $('mMachinesSub').textContent = `ใช้ได้รวม ${num(seats)} เครื่อง`;
+  $('navShops').textContent = total || '';
+  // วงแหวนสัดส่วน
+  const pct = total ? Math.round((n('ok') + n('warn')) / total * 100) : 0;
+  $('ring').style.setProperty('--p', pct);
+  $('ringPct').textContent = `${pct}%`;
+  $('ringSub').textContent = `${num(total)} license`;
+  $('legend').innerHTML = FILTERS.slice(1).map(([k, label, , cls, icon]) =>
+    `<div><span class="ic ${cls}">${svg(icon)}</span>${label}<b>${num(n(k))}</b></div>`).join('');
+  // ใกล้หมดอายุ (≤ 14 วัน)
+  const soon = licenses.filter((l) => !l.main && l.status === 'active' && l.activated_at && !l.expired && l.daysLeft <= 14).sort((a, b) => a.daysLeft - b.daysLeft).slice(0, 6);
+  $('expiring').innerHTML = soon.length ? soon.map((l) => `<div class="row-item click" data-open-detail="${l.id}">
+      <span class="ic ${l.daysLeft <= 3 ? 'c-bad' : 'c-warn'}">${svg('i-hourglass')}</span>
+      <div><b>${esc(l.shop)}</b><span class="sub">${esc(l.code)} · หมดอายุ ${thDate(l.expires_at)}</span></div>
+      <span class="end" style="color:var(--${l.daysLeft <= 3 ? 'bad' : 'warn'})">เหลือ ${l.daysLeft} วัน</span></div>`).join('')
+    : '<div class="emptybox">ไม่มีร้านที่จะหมดอายุภายใน 14 วัน 👍</div>';
+}
+$('expiring').onclick = (e) => {
+  const t = e.target.closest('[data-open-detail]');
+  if (t) openDetail(Number(t.dataset.openDetail));
+};
+const EV_ICON = (k) => k.startsWith('backup') ? ['i-db', 'c-teal'] : k.startsWith('machine') ? ['i-pc', 'c-violet'] : /revoke|delete|error/.test(k) ? ['i-ban', 'c-bad'] : k.includes('extend') ? ['i-hourglass', 'c-warn'] : k.startsWith('instance') ? ['i-store', 'c-ok'] : ['i-key', 'c-primary'];
+function renderDashBackup() {
+  const s = sys;
+  const el = $('dashBackup');
+  const dot = $('navBackup');
+  if (!s) return;
+  if (!s.ready) {
+    dot.style.background = 'var(--bad)';
+    el.innerHTML = `<div class="row-item"><span class="ic c-bad">${svg('i-alert')}</span><div><b>ระบบสำรองข้อมูลยังไม่ทำงาน</b><span class="sub">${esc(s.error)}</span></div></div>`;
+    return;
+  }
+  const last = s.last;
+  const bad = (s.lastAttempt && s.lastAttempt.result === 'failed') || s.alerts.some((a) => a.level === 'urgent');
+  dot.style.background = bad ? 'var(--bad)' : s.overdue ? 'var(--warn)' : 'var(--ok)';
+  const d = s.disk;
+  el.innerHTML = `
+    <div class="row-item"><span class="ic ${last ? (last.status === 'ok' ? 'c-ok' : 'c-warn') : 'c-idle'}">${svg(last ? 'i-check' : 'i-clock')}</span>
+      <div><b>${last ? `สำรองล่าสุด ${thDate(last.createdAt, true)}` : 'ยังไม่มีไฟล์สำรอง'}</b><span class="sub">${last ? `${esc(last.kindLabel)} · ${kb(last.size)} · ${last.shops.filter((x) => x.ok).length}/${last.shops.length} ร้าน` : 'กด "สำรองตอนนี้" ในหน้าสำรองข้อมูล'}</span></div>
+      <span class="end">${last ? `<span class="badge ${last.status === 'ok' ? 'b-ok' : 'b-warn'}">${last.status === 'ok' ? 'สำเร็จ' : 'บางส่วน'}</span>` : ''}</span></div>
+    <div class="row-item"><span class="ic c-primary">${svg('i-clock')}</span><div><b>รอบถัดไป ${esc(s.busy ? `กำลัง${s.busy}` : s.nextRun)}</b><span class="sub">ทุก ${s.config.interval} นาที · ปิดวัน ${s.config.finalStart}–${s.config.finalEnd}</span></div></div>
+    <div class="row-item"><span class="ic c-violet">${svg('i-db')}</span><div><b>ดิสก์ว่าง ${d ? `${d.freePct}%` : '—'}</b><span class="sub">${d ? `${kb(d.free)} · ไฟล์สำรองใช้ ${kb(d.backups)}` : ''}</span></div>
+      ${s.overdue ? `<span class="end"><span class="badge b-warn">รอดาวน์โหลด ${s.overdue}</span></span>` : ''}</div>
+    ${bad ? `<div class="alert urgent"><span>มีการแจ้งเตือนสำคัญ — เปิดหน้าสำรองข้อมูลเพื่อดูรายละเอียด</span></div>` : ''}`;
+}
 
 // ---------------------------------------------------------------- การ์ดร้าน
 const instBadge = (i) => !i ? '<span class="badge b-idle">ยังไม่สร้าง</span>'
@@ -454,6 +768,7 @@ function tile(l) {
 
 function render() {
   renderStats();
+  renderDash();
   const q = $('q').value.trim().toLowerCase();
   const shown = licenses.filter((l) => (filter === 'all' || statusOf(l).key === filter)
     && (!q || [l.shop, l.code, l.slug, l.note].some((v) => String(v || '').toLowerCase().includes(q))));
@@ -512,7 +827,7 @@ const KIND = {
   'license.issue': 'ออก license', 'license.extend': 'ต่ออายุ', 'license.machines': 'เปลี่ยนจำนวนเครื่อง', 'license.revoke': 'ระงับ',
   'license.restore': 'คืนสถานะ', 'backup.restore': 'กู้คืนข้อมูล', 'backup.restore-failed': 'กู้คืนไม่สำเร็จ', 'license.image': 'เปลี่ยนรูป', 'license.image-remove': 'ลบรูป', 'machine.remove': 'ลบเครื่อง', 'machine.add': 'เพิ่มเครื่อง',
   'backup.auto': 'สำรองอัตโนมัติ', 'backup.manual': 'สำรองข้อมูล', 'backup.delete': 'ลบไฟล์สำรอง', 'backup.error': 'สำรองไม่สำเร็จ',
-  'instance.create': 'สร้างระบบร้าน', 'instance.start': 'เปิดร้าน', 'instance.stop': 'หยุดร้าน', 'instance.error': 'ร้านผิดพลาด',
+  'instance.create': 'สร้างระบบร้าน', 'instance.start': 'เปิดร้าน', 'instance.stop': 'หยุดร้าน', 'instance.error': 'ร้านผิดพลาด', 'license.delete': 'ลบ license',
 };
 function renderDetail() {
   const l = licenses.find((x) => x.id === openId);
@@ -665,14 +980,17 @@ async function load() {
   $('publicUrl').textContent = String(j.appBase || j.publicUrl).replace(/^https?:\/\//, '').replace(/\/+$/, '');
   $('legacyWarn').hidden = !j.legacyMain;
   render();
-  if ($('evBox').open) loadEvents();
+  if (view === 'dashboard' || view === 'history') loadEvents().catch(() => {});
   loadSys().catch(() => {});
 }
 async function loadEvents() {
   const ev = await api('/admin/api/events');
-  $('events').innerHTML = ev.map((e) => `<div><span class="t">${esc(e.at)}</span><span><b>${esc(e.kind)}</b> ${esc(e.shop || '')}</span><span class="sub">${esc(e.detail)}</span></div>`).join('') || '<div class="sub">ยังไม่มี</div>';
+  $('events').innerHTML = ev.map((e) => `<div><span class="t">${esc(e.at)}</span><span><b>${esc(KIND[e.kind] || e.kind)}</b> ${esc(e.shop || '')}</span><span class="sub">${esc(e.detail)}</span></div>`).join('') || '<div class="sub">ยังไม่มี</div>';
+  $('dashEvents').innerHTML = ev.slice(0, 7).map((e) => {
+    const [icon, cls] = EV_ICON(e.kind);
+    return `<div class="row-item"><span class="ic ${cls}">${svg(icon)}</span><div><b>${esc(KIND[e.kind] || e.kind)}${e.shop ? ` · ${esc(e.shop)}` : ''}</b><span class="sub">${esc(e.detail || '—')}</span></div><span class="end sub">${esc(thDate(e.at, true))}</span></div>`;
+  }).join('') || '<div class="emptybox">ยังไม่มีกิจกรรม</div>';
 }
-$('evBox').ontoggle = () => $('evBox').open && loadEvents().catch(() => {});
 
 // ---------------------------------------------------------------- ออก license
 $('shop').oninput = () => {
@@ -717,7 +1035,7 @@ $('detail').addEventListener('click', async (e) => {
   const { act } = b.dataset;
   if (act === 'close') return $('detail').close();
   if (act === 'image') return $('imgFile').click();
-  if (act === 'sys-goto') { $('detail').close(); $('sysCard').scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+  if (act === 'sys-goto') { $('detail').close(); go('backup'); return; }
   if (act === 'open') {
     // แผงควบคุมอยู่คนละโดเมนกับร้าน — ขอลิงก์ใช้ครั้งเดียวจากเซิร์ฟเวอร์ แล้วเปิดแท็บใหม่
     const w = window.open('', '_blank');
@@ -802,6 +1120,7 @@ function renderSys() {
     $('sysRun').disabled = $('sysUpload').disabled = true;
     box.innerHTML = `<div class="warnbox">ระบบสำรองข้อมูลยังไม่ทำงาน: ${esc(s.error)}</div>
       <div class="sub">${meta.mode === 'local' ? `โฟลเดอร์: ${esc(s.root)}` : 'บน VPS: รัน pos-update ใหม่ แล้วดู journalctl -u pos-license -n 50 (ต้องมี sqlite3 และ pos-trial-ctl รุ่นใหม่)'}</div>`;
+    renderDashBackup();
     return;
   }
   $('sysRun').disabled = $('sysUpload').disabled = !!s.busy;
@@ -836,6 +1155,7 @@ function renderSys() {
         <td>${r.name ? `<div class="act"><a class="btnlink" href="/admin/api/sysbackup/${r.id}/download" data-dl title="${esc(r.name)}">ดาวน์โหลด</a><button class="small ghost" data-sys="restore" data-id="${r.id}">กู้คืน…</button></div>` : ''}</td>
       </tr>`).join('')}</tbody></table></div>`
       : `<div class="sub">${sysTab === 'today' ? 'ยังไม่มีไฟล์ของวันนี้' : 'ยังไม่มีไฟล์'}</div>`}`;
+  renderDashBackup();
 }
 $('sysCard').addEventListener('click', async (e) => {
   if (e.target.closest('[data-dl]')) return setTimeout(() => loadSys().catch(() => {}), 2500);
@@ -966,6 +1286,7 @@ async function restoreFlow(id) {
   load().catch(() => {});
 }
 
+applyView();
 api('/admin/api/licenses').then(() => { show(true); load(); }).catch(() => show(false));
 setInterval(() => { if (!$('app').hidden && !$('dlg').open && document.visibilityState === 'visible') load().catch(() => {}); }, 15000);
 </script>
