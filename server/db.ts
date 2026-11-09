@@ -566,6 +566,13 @@ for (const t of SCOPED) {
   `);
 }
 
+/**
+ * รุ่นโครงสร้างฐานข้อมูล (PRAGMA user_version) — ระบบสำรองข้อมูลทั้งระบบใช้กันกู้คืนไฟล์จากระบบรุ่นใหม่กว่าลงระบบรุ่นเก่า
+ * เพิ่มเลขนี้เมื่อเปลี่ยนโครงสร้างแบบที่โค้ดรุ่นเก่าใช้ไม่ได้ (ไฟล์เก่า = 0 · ระบบรุ่นใหม่เปิดไฟล์เก่าแล้วปรับโครงสร้างเอง)
+ */
+export const SCHEMA_VERSION = 1;
+if (((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version ?? 0) < SCHEMA_VERSION) db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+
 const setCtx = db.prepare('UPDATE temp.ctx SET branch_id = ?');
 const getCtx = db.prepare('SELECT branch_id AS b, n FROM temp.ctx');
 

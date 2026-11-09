@@ -69,6 +69,21 @@ gunzip -c /var/backups/pos/pos-YYYYMMDD-HHMMSS.db.gz > pos.db
 chown pos:pos pos.db && systemctl start pos
 ```
 
+## สำรองข้อมูลทั้งระบบ (แผงควบคุม License → "สำรองข้อมูลทั้งระบบ")
+ระบบ license สำรอง **license + ทุกร้าน** ลงไฟล์ zip เดียวอัตโนมัติ — ไม่ต้องเข้า VPS (`license-server/sysbackup.ts`)
+
+| | |
+|---|---|
+| ที่เก็บ | `/var/lib/pos-backups/` (ของ poslic · chmod 700) · รายการไฟล์ `backups.db` |
+| ชื่อไฟล์ | `backup_<วัน>_<เดือน>_<ปี ค.ศ.>_<HHMM>_<ครั้งที่>.zip` — ข้างในมี `license/` + folder ตามชื่อร้าน (`pos.db`, `.pin-secret`, `uploads/`) + `manifest.json` |
+| ตารางเวลา (เวลาไทย) | ทุก 30 นาที (ข้ามถ้าข้อมูลไม่เปลี่ยน) · รอบปิดวัน 02:50–02:59 ลองทุก 2 นาที (มีรูปสินค้า) · หลังตี 3 เก็บเป็นไฟล์รายวัน แล้วลบไฟล์ระหว่างวัน |
+| การเก็บ | รายวัน 35 วัน · วันที่ 1 ของเดือน = รายเดือน 12 เดือน · เก่ากว่านั้นลบเฉพาะไฟล์ที่ดาวน์โหลดแล้ว · ด้วยมือ/ก่อนกู้คืน/อัปโหลด 14 วัน |
+| กู้คืน | เลือกไฟล์ → กู้คืน… → ทั้งระบบ / เฉพาะ license / เฉพาะร้าน → พิมพ์ยืนยัน · สำรองข้อมูลปัจจุบันก่อนเสมอ · ร้านไม่ขึ้นใน 30 วินาที → ย้อนกลับเอง |
+| ย้ายเซิร์ฟเวอร์ | ติดตั้ง VPS ใหม่ (`setup-vps.sh` + `license-setup.sh`) → แผงควบคุม → "อัปโหลดไฟล์แล้วกู้คืน" → ทั้งระบบ |
+
+ไฟล์ข้อมูลร้านเป็นของผู้ใช้ `pos` — ระบบ license อ่าน/วางไฟล์ผ่าน `sudo pos-trial-ctl data-*` (กฎ sudoers เดิม ไม่ต้องตั้งเพิ่ม) · ต้องมี `sqlite3` (setup-vps.sh ติดตั้งให้แล้ว)
+ตั้งค่าเพิ่มได้ใน `/etc/pos-license/env`: `BACKUP_INTERVAL_MIN` `BACKUP_DAY_CUTOFF` `BACKUP_FINAL_START` `BACKUP_FINAL_END` `BACKUP_DAILY_KEEP_DAYS` `BACKUP_MONTHLY_KEEP_MONTHS` `BACKUP_PRERESTORE_KEEP_DAYS` `BACKUP_DISK_WARN_PCT` `BACKUP_UPLOAD_MAX_MB` `SYSTEM_BACKUP_DIR`
+
 ## สำรองนอกเครื่อง (ขั้นถัดไป)
 ไฟล์สำรองตอนนี้อยู่บน VPS เครื่องเดียวกัน ถ้า VPS เสียจะหายไปด้วย
 ควรตั้ง `rclone` ส่งไฟล์ใน `/var/backups/pos` ขึ้น Google Drive ทุกวัน

@@ -10,6 +10,7 @@
 // โดเมนผู้ดูแล (ADMIN_DOMAIN เช่น license.sh0p.tech) = แผงควบคุมเท่านั้น · โหมดทดสอบใช้โดเมนเดียวกันทั้งหมด
 // ครบกำหนด → ปิดบริการของร้านให้อัตโนมัติ (ข้อมูลยังอยู่ ต่ออายุแล้วเปิดใหม่ได้)
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { once } from 'node:events';
 import { createReadStream, existsSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { randomBytes, randomInt, timingSafeEqual, createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
@@ -18,8 +19,9 @@ import {
   db, DB_PATH, daysLeft, freePort, getInstance, getLicense, getLicenseById, isExpired, localStamp, logEvent, machinesOf, newCode,
   getLicenseBySlug, normalizeCode, parseStamp, SLUG_RE, slugOk, tx, type Instance, type License,
 } from './store.ts';
-import { makeProvisioner } from './provision.ts';
-import { archiveBackups, BACKUP_ROOT, backupPath, backupShop, listBackups, needsAutoBackup, shopStats, tokenFor } from './shopdata.ts';
+import { makeProvisioner, waitHealthy } from './provision.ts';
+import { archiveBackups, backupPath, listBackups, shopStats, tokenFor } from './shopdata.ts';
+import { BusyError, SystemBackup, ZipWriter } from './sysbackup.ts';
 import { clientIp, cookies, failed, guard, pruneGuards, HttpError, int, json, publicBase, readBody, SEC_HEADERS, serial, str } from './http.ts';
 import { proxyToShop, selectShop, shopOf } from './gateway.ts';
 
@@ -292,14 +294,7 @@ async function adminAction(id: number, action: string, b: Record<string, unknown
       db.prepare('UPDATE licenses SET image = ?, image_at = ? WHERE id = ?').run(img, img ? localStamp() : '', id);
       return logEvent(id, img ? 'license.image' : 'license.image-remove');
     }
-    case 'backup': {
-      const inst = getInstance(l.slug);
-      if (!inst || inst.state !== 'running') throw new HttpError(400, 'ร้านต้องเปิดอยู่จึงจะสำรองข้อมูลได้');
-      const branch = b.branch === undefined || b.branch === null || b.branch === 'all' ? undefined : int(b.branch, 1, 999_999);
-      const bk = await serial(l.slug, () => backupShop(l.slug, inst.port, false, branch));
-      logEvent(id, 'backup.manual', `${bk.file} · ${Math.round(bk.size / 1024)} KB`);
-      return;
-    }
+    // ไฟล์สำรองแบบเดิม (รายร้าน) — ดาวน์โหลด/ลบได้ · สำรองใหม่ใช้ระบบสำรองทั้งระบบ
     case 'backup-delete': {
       const file = str(b.file, 80);
       const path = backupPath(l.slug, file);
@@ -345,21 +340,56 @@ function ensureMainShop() {
   console.log(`  ร้านหลัก      → ${l.shop} (${MAIN_SLUG}) พอร์ต ${MAIN_PORT} · license ${l.code}`);
 }
 
+// ---------------------------------------------------------------- สำรองข้อมูลทั้งระบบ (sysbackup.ts)
+const sysBackup = new SystemBackup({
+  mode: prov.mode,
+  shops: () =>
+    (db.prepare('SELECT l.id, l.slug, l.shop, i.port FROM licenses l JOIN instances i ON i.slug = l.slug ORDER BY l.id').all() as { id: number; slug: string; shop: string; port: number }[])
+      .map((r) => ({ slug: r.slug, name: r.shop, isMain: isMain(r.slug), port: r.port, licenseId: r.id })),
+  stopShop: async (slug) => {
+    const inst = getInstance(slug);
+    await prov.stop(slug);
+    return inst?.state === 'running';
+  },
+  startShop: async (slug) => {
+    const inst = getInstance(slug);
+    if (!inst) throw new Error('ไม่พบระบบร้าน');
+    await prov.start(slug, inst.port, inst.manager_pin);
+    setState(slug, 'running');
+  },
+  createShop: async (slug) => {
+    const inst = getInstance(slug);
+    if (!inst) throw new Error('ไม่พบข้อมูลระบบร้านใน license');
+    await prov.create(slug, inst.port, inst.manager_pin);
+    setState(slug, 'running');
+  },
+  waitHealthy,
+  afterLicenseRestore: (restart) => {
+    ensureMainShop();
+    // ไฟล์ความลับเปลี่ยน (กู้คืนลงเซิร์ฟเวอร์ใหม่) → systemd เปิดระบบ license ให้ใหม่เอง (Restart=always)
+    if (restart && !LOCAL) setTimeout(() => process.exit(0), 2000).unref();
+  },
+  logEvent: (id, kind, detail) => logEvent(id, kind, detail),
+});
+
+/** ข้อผิดพลาดของระบบสำรองข้อมูล → HttpError (ข้อความแสดงในแผงควบคุม) */
+async function sb<T>(fn: () => T | Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (e instanceof HttpError) throw e;
+    const status = e instanceof BusyError ? 409 : Number((e as { status?: number }).status) || 400;
+    throw new HttpError(status, (e as Error).message);
+  }
+}
+
 // ---------------------------------------------------------------- ครบกำหนด → ปิดร้าน
 async function sweep() {
   const rows = db.prepare("SELECT l.* FROM licenses l JOIN instances i ON i.slug = l.slug WHERE i.state = 'running'").all() as unknown as License[];
   for (const l of rows) {
     if (isMain(l.slug)) continue;
     if (l.status === 'revoked' || isExpired(l)) await serial(l.slug, () => stopInstance(l, l.status === 'revoked' ? 'revoked' : 'expired'));
-    // สำรองข้อมูลอัตโนมัติวันละครั้ง (เฉพาะร้านที่เปิดอยู่)
-    else if (needsAutoBackup(l.slug)) {
-      const inst = getInstance(l.slug);
-      if (inst) {
-        await backupShop(l.slug, inst.port, true)
-          .then((b) => logEvent(l.id, 'backup.auto', `${b.file} · ${Math.round(b.size / 1024)} KB`))
-          .catch((e) => logEvent(l.id, 'backup.error', (e as Error).message));
-      }
-    }
+    // สำรองข้อมูลอัตโนมัติ: ย้ายไประบบสำรองทั้งระบบแล้ว (sysBackup — ทุก 30 นาที + ปิดวันตี 3)
   }
 }
 
@@ -426,7 +456,11 @@ function serveApp(res: ServerResponse, p: string) {
 }
 
 // ---------------------------------------------------------------- HTTP
-const ADMIN_HTML = readFileSync(join(HERE, 'admin.html'));
+// คำใบ้ที่อยู่ไฟล์รหัสผ่าน: ใส่เฉพาะโหมดทดสอบ (บน VPS ไม่มีข้อความนี้ในหน้าเว็บเลย แม้เปิดดูซอร์ส)
+const ADMIN_HTML = Buffer.from(readFileSync(join(HERE, 'admin.html'), 'utf8').replace(
+  '<div class="sub" id="pwHint" hidden></div>',
+  LOCAL && !process.env.ADMIN_PASSWORD ? `<div class="sub" id="pwHint">โหมดทดสอบ: รหัสผ่านอยู่ในไฟล์ license-server\\data\\admin-password.txt</div>` : '',
+));
 const ADMIN_CSP =
   "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; img-src 'self' data:";
 
@@ -456,6 +490,7 @@ async function handleAdminApi(req: IncomingMessage, p: string, base: string, ip:
   if (req.method === 'GET' && p === '/admin/api/events') {
     return { status: 200, body: db.prepare('SELECT e.*, l.shop FROM events e LEFT JOIN licenses l ON l.id = e.license_id ORDER BY e.id DESC LIMIT 100').all() };
   }
+  if (p.startsWith('/admin/api/sysbackup/')) return { status: 200, body: await sysBackupApi(req, p) };
   const m = /^\/admin\/api\/licenses\/(\d+)\/([a-z-]+)$/.exec(p);
   if (req.method === 'GET' && m && m[2] === 'view') {
     const l = getLicenseById(Number(m[1]));
@@ -475,6 +510,67 @@ async function handleAdminApi(req: IncomingMessage, p: string, base: string, ip:
     return { status: 200, body: { ok: true } };
   }
   throw new HttpError(404, 'Not found');
+}
+
+/** API ระบบสำรองข้อมูลทั้งระบบ (JSON) — ต้องล็อกอินแผงควบคุมแล้ว */
+async function sysBackupApi(req: IncomingMessage, p: string) {
+  const url = new URL(req.url ?? '/', 'http://x');
+  const sub = p.slice('/admin/api/sysbackup/'.length);
+  if (req.method === 'GET' && sub === 'status') return sb(() => sysBackup.status());
+  if (req.method === 'GET' && sub === 'list') {
+    const tab = url.searchParams.get('tab');
+    if (tab !== 'today' && tab !== 'daily' && tab !== 'other') throw new HttpError(400, 'tab ไม่ถูกต้อง');
+    return sb(() => sysBackup.list(tab));
+  }
+  if (req.method === 'POST' && sub === 'run') return sb(() => sysBackup.backupNow());
+  const a = /^alerts\/(\d+)\/dismiss$/.exec(sub);
+  if (req.method === 'POST' && a) return sb(() => { sysBackup.dismissAlert(Number(a[1])); return { ok: true }; });
+  const i = /^(\d+)\/(inspect|restore)$/.exec(sub);
+  if (i && i[2] === 'inspect' && req.method === 'GET') return sb(() => sysBackup.inspect(Number(i[1])));
+  if (i && i[2] === 'restore' && req.method === 'POST') {
+    const b = await readBody(req);
+    return sb(() => sysBackup.restore(Number(i[1]), str(b.target, 40), str(b.confirm, 120), `แผงควบคุม (${clientIp(req)})`));
+  }
+  throw new HttpError(404, 'Not found');
+}
+
+/** ไฟล์สำรองทั้งระบบแบบไบนารี: ดาวน์โหลด 1 ไฟล์ · zip รายเดือน · อัปโหลด — true = ตอบแล้ว */
+async function sysBackupFiles(req: IncomingMessage, res: ServerResponse, p: string) {
+  const dl = req.method === 'GET' ? /^\/admin\/api\/sysbackup\/(\d+)\/download$/.exec(p) : null;
+  if (dl) {
+    requireAdmin(req);
+    const f = await sb(() => sysBackup.download(Number(dl[1])));
+    res.writeHead(200, {
+      'Content-Type': 'application/zip', 'Content-Length': f.size,
+      'Content-Disposition': `attachment; filename="${f.name}"`, 'Cache-Control': 'no-store', ...SEC_HEADERS,
+    });
+    createReadStream(f.path).pipe(res);
+    return true;
+  }
+  const mo = req.method === 'GET' ? /^\/admin\/api\/sysbackup\/month\/(\d{4}-\d{2})\.zip$/.exec(p) : null;
+  if (mo) {
+    requireAdmin(req);
+    const mz = await sb(() => sysBackup.monthFiles(mo[1]));
+    res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Disposition': `attachment; filename="${mz.name}"`, 'Cache-Control': 'no-store', ...SEC_HEADERS });
+    try {
+      const zw = new ZipWriter(async (b) => { if (!res.write(b)) await once(res, 'drain'); });
+      for (const f of mz.files) await zw.add(f.name, readFileSync(f.path), false, statSync(f.path).mtimeMs);
+      await zw.finish();
+      res.end();
+      mz.markDownloaded();
+    } catch (e) {
+      console.error('[sysbackup] zip รายเดือน', e);
+      res.destroy();
+    }
+    return true;
+  }
+  if (req.method === 'POST' && p === '/admin/api/sysbackup/upload') {
+    requireAdmin(req);
+    const row = await sb(() => sysBackup.receiveUpload(req));
+    json(res, 201, row);
+    return true;
+  }
+  return false;
 }
 
 const server = createServer(async (req, res) => {
@@ -511,6 +607,7 @@ const server = createServer(async (req, res) => {
         });
         return createReadStream(path).pipe(res);
       }
+      if (p.startsWith('/admin/api/sysbackup/') && (await sysBackupFiles(req, res, p))) return;
       if (p.startsWith('/admin/api/')) {
         const r = await handleAdminApi(req, p, base, ip);
         return json(res, r.status, r.body, r.cookie ? { 'Set-Cookie': r.cookie } : {});
@@ -582,11 +679,13 @@ server.listen(PORT, process.env.LICENSE_HOST ?? '127.0.0.1', async () => {
   if (LOCAL && !process.env.ADMIN_PASSWORD) console.log(`  รหัสผ่าน      → ${ADMIN_PASSWORD}   (เปลี่ยนได้ที่ ${PASSWORD_FILE})`);
   if (LOCAL) console.log(`  เปิดผ่าน ngrok → ngrok http ${PORT}   (แผงควบคุม + แอป + ทุกร้าน ใช้ลิงก์เดียวกัน)`);
   console.log(`  ฐานข้อมูล    → ${DB_PATH}`);
-  console.log(`  ไฟล์สำรองร้าน → ${BACKUP_ROOT}`);
+  console.log(`  ไฟล์สำรองทั้งระบบ → ${sysBackup.root}`);
   console.log(`  สร้างร้านแบบ → ${prov.mode}\n`);
   ensureMainShop();
   await resume();
   await sweep();
+  await sysBackup.init();
+  sysBackup.start();
   setInterval(() => {
     sweep().catch((e) => console.error('[sweep]', e));
     pruneGuards();

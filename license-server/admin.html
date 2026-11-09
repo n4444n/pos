@@ -175,6 +175,39 @@
   .bigcode { font-family: var(--mono); font-size: 24px; font-weight: 600; letter-spacing: 1px; text-align: center; padding: 10px; border-radius: 10px; background: var(--ok-soft); color: var(--ok); }
   .warnbox { background: var(--bad-soft); color: var(--bad); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
 
+  dialog.wide { width: min(680px, calc(100vw - 32px)); }
+
+  /* ---- สำรองข้อมูลทั้งระบบ */
+  .sys-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .sysbody { display: grid; gap: 12px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .alerts { display: grid; gap: 6px; }
+  .alert { display: flex; gap: 8px; align-items: flex-start; border-radius: 10px; padding: 8px 10px; font-size: 13px; }
+  .alert > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .alert .t { font-family: var(--mono); font-size: 11.5px; opacity: .75; margin-right: 4px; }
+  .alert.urgent { background: var(--bad-soft); color: var(--bad); }
+  .alert.warn { background: var(--warn-soft); color: var(--warn); }
+  .alert.info { background: var(--primary-soft); color: var(--primary-text); }
+  .alert button { background: transparent; color: inherit; border: 0; padding: 0 6px; }
+  .h4 { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .months { display: flex; gap: 8px; flex-wrap: wrap; }
+  .month { display: flex; align-items: center; gap: 10px; background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px 6px 12px; font-size: 13px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .tabs button { background: none; color: var(--muted); border-radius: 8px 8px 0 0; padding: 8px 12px; border-bottom: 2px solid transparent; }
+  .tabs button.on { color: var(--primary-text); border-bottom-color: var(--primary); }
+  .tblwrap { overflow: auto; max-height: 460px; }
+  table.bt { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.bt th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--card); white-space: nowrap; }
+  table.bt td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.bt td.r { text-align: right; white-space: nowrap; }
+  table.bt .act { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+  .rt { display: grid; gap: 6px; max-height: 46vh; overflow: auto; }
+  .rt label { display: flex; flex-direction: row; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; color: var(--text); cursor: pointer; font-weight: 400; }
+  .rt label:has(input:checked) { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+  .rt label.off { opacity: .55; cursor: not-allowed; }
+  .rt input { width: auto; margin: 4px 0 0; }
+  .rt label > span { display: grid; gap: 1px; min-width: 0; }
+
   .login { max-width: 380px; margin: 14vh auto; padding: 26px; display: grid; gap: 14px; }
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--head); color: var(--head-text); padding: 9px 16px; border-radius: 10px; font-size: 13px; box-shadow: var(--shadow); opacity: 0; transition: opacity .2s; pointer-events: none; }
   .toast.show { opacity: 1; }
@@ -188,6 +221,7 @@
     .grid { padding: 4px 16px 16px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
     .dbody { grid-template-columns: 1fr; padding: 14px 16px; }
     .stgrid { grid-template-columns: repeat(2, 1fr); }
+    table.bt th:nth-child(3), table.bt td:nth-child(3) { display: none; }
     .dhead { padding: 14px 16px; } .dhead .cover { width: 88px; }
     .hist div { grid-template-columns: 1fr; gap: 0; }
     .stats { grid-template-columns: repeat(2, 1fr); }
@@ -218,12 +252,24 @@
     <label>รหัสผ่านผู้ดูแล<input type="password" id="pw" autocomplete="current-password" autofocus></label>
     <button>เข้าสู่ระบบ</button>
     <div class="err" id="loginErr"></div>
-    <div class="sub" id="pwHint" hidden>โหมดทดสอบ: รหัสผ่านอยู่ในไฟล์ license-server\data\admin-password.txt</div>
+    <div class="sub" id="pwHint" hidden></div>
   </form>
 </div>
 
 <main id="app" hidden>
   <section class="stats" id="stats"></section>
+
+  <section class="card pad" id="sysCard">
+    <div class="card-head">
+      <h2>สำรองข้อมูลทั้งระบบ <span class="sub" id="sysSub"></span></h2>
+      <div class="sys-acts">
+        <button class="small ghost" id="sysUpload" title="ใช้ไฟล์ backup_….zip ที่ดาวน์โหลดไว้ (เช่น ย้ายไปเซิร์ฟเวอร์ใหม่)">อัปโหลดไฟล์แล้วกู้คืน</button>
+        <button class="small" id="sysRun">สำรองตอนนี้</button>
+      </div>
+    </div>
+    <div class="sysbody" id="sysBody"><div class="sub">กำลังโหลด…</div></div>
+  </section>
+  <input type="file" id="sysFile" accept=".zip,application/zip" hidden>
 
   <section class="card pad">
     <div class="card-head"><h2>ออก license ใหม่</h2><span class="sub">นับวันเริ่มเมื่อร้านกรอกในแอปครั้งแรก</span></div>
@@ -292,11 +338,14 @@ const copy = (text, what = 'คัดลอกแล้ว') => navigator.clipbo
 function ask(opts) {
   const dlg = $('dlg');
   const f = $('dlgForm');
+  dlg.classList.toggle('wide', !!opts.wide);
+  dlg.oncancel = null;
   f.innerHTML = `<h3>${esc(opts.title)}</h3>${opts.html || ''}
     ${opts.input ? `<label>${esc(opts.input.label)}<input id="dlgIn" type="${opts.input.type || 'text'}" value="${esc(opts.input.value ?? '')}" placeholder="${esc(opts.input.placeholder || '')}" autocomplete="off"></label>` : ''}
     <div class="btns">${opts.cancel === false ? '' : '<button value="" class="ghost">ยกเลิก</button>'}<button value="ok" class="${opts.danger ? 'danger-solid' : ''}" id="dlgOk">${esc(opts.ok || 'ตกลง')}</button></div>`;
   return new Promise((done) => {
-    dlg.onclose = () => done(dlg.returnValue === 'ok' ? (opts.input ? $('dlgIn').value.trim() : true) : null);
+    // close ของหน้าต่างก่อนหน้า (เช่น "กำลังตรวจไฟล์") อาจมาถึงหลังเปิดหน้าต่างนี้แล้ว — ข้ามถ้ายังเปิดอยู่
+    dlg.onclose = () => { if (!dlg.open) done(dlg.returnValue === 'ok' ? (opts.input ? $('dlgIn').value.trim() : true) : null); };
     dlg.returnValue = '';
     dlg.showModal();
     (opts.input ? $('dlgIn') : $('dlgOk')).focus();
@@ -442,32 +491,26 @@ function statsBox() {
     ${s.shopName && s.shopName !== '' ? `<div class="sub">ชื่อร้านในระบบ POS: ${esc(s.shopName)}</div>` : ''}
   </section>`;
 }
-function backupBlock(l, running) {
+function backupBlock(l) {
   const d = shopData;
   const list = d?.backups || [];
-  const branches = d?.stats?.branchList || [];
-  const bName = (id) => (id == null ? 'ทั้งร้าน' : (branches.find((x) => x.id === id)?.name || `สาขา #${id}`));
-  const dis = running ? '' : 'disabled title="ร้านต้องเปิดอยู่"';
-  const target = (label, sub, branch) => `<li><div><b>${esc(label)}</b><span class="sub">${sub}</span></div>
-      <button class="small" data-act="backup" ${branch == null ? '' : `data-branch="${branch}"`} ${dis}>สำรอง</button></li>`;
+  const last = sys?.last;
+  const mine = last?.shops.find((x) => x.slug === l.slug);
   return `<div class="bk">
-    <h4>สำรองข้อมูล <span class="sub">${running ? '' : 'เปิดร้านก่อนจึงสำรองได้'}</span></h4>
-    <ul class="bklist targets">
-      ${target('ทั้งร้าน (ทุกสาขา)', 'สินค้า · พนักงาน · ตั้งค่า + ข้อมูลทุกสาขา', null)}
-      ${branches.map((b) => target(b.name, `${b.code ? `${esc(b.code)} · ` : ''}${num(b.bills)} บิล${b.lastBillAt ? ` · ล่าสุด ${thDate(b.lastBillAt, true)}` : ''}`, b.id)).join('')}
-    </ul>
-    <div class="sub">สำรองทั้งร้านอัตโนมัติวันละครั้งขณะร้านเปิด · เก็บไฟล์ล่าสุด 20 ไฟล์ · ไฟล์สาขาใช้กู้คืนเฉพาะสาขานั้นในแอป (ตั้งค่า → สำรอง & กู้คืนข้อมูล)</div>
-    <h4 style="margin-top:4px">ไฟล์สำรอง <span class="sub">${list.length} ไฟล์</span></h4>
-    ${!d ? '<div class="sub">กำลังโหลด…</div>' : list.length ? `<ul class="bklist">${list.map((b) => `<li>
-        <div><b>${thDate(b.at, true)}</b><span class="sub">${esc(bName(b.branch))} · ${b.auto ? 'อัตโนมัติ' : 'สำรองเอง'} · ${kb(b.size)}</span></div>
+    <h4>สำรองข้อมูล <button class="small ghost" data-act="sys-goto">ไปที่สำรองข้อมูลทั้งระบบ</button></h4>
+    <div class="sub">ร้านนี้ถูกสำรองพร้อมทั้งระบบอัตโนมัติ (ทุก ${sys?.config?.interval || 30} นาที + ปิดวันตี 3) · กู้คืน: เลือกไฟล์ในส่วน "สำรองข้อมูลทั้งระบบ" → กู้คืน… → เลือกร้านนี้</div>
+    ${mine ? `<div class="kv"><span>สำรองล่าสุด</span><span>${mine.ok ? '<span class="badge b-ok">สำเร็จ</span>' : `<span class="badge b-bad" title="${esc(mine.error)}">ไม่สำเร็จ</span>`} ${thDate(last.createdAt, true)}</span></div>` : ''}
+    <div class="sub">กู้คืนเฉพาะบางสาขา: ในโปรแกรมร้าน ตั้งค่า → สำรอง & กู้คืนข้อมูล (ใช้ไฟล์ pos.db ใน folder ของร้านนี้จากไฟล์ zip)</div>
+    ${list.length ? `<h4 style="margin-top:4px">ไฟล์สำรองแบบเดิม <span class="sub">${list.length} ไฟล์ · ระบบใหม่ไม่สร้างเพิ่มแล้ว</span></h4>
+      <ul class="bklist">${list.map((b) => `<li>
+        <div><b>${thDate(b.at, true)}</b><span class="sub">${b.branch == null ? 'ทั้งร้าน' : `สาขา #${b.branch}`} · ${b.auto ? 'อัตโนมัติ' : 'สำรองเอง'} · ${kb(b.size)}</span></div>
         <a class="btnlink" href="/admin/api/licenses/${l.id}/backups/${encodeURIComponent(b.file)}" download title="${esc(b.file)}">ดาวน์โหลด</a>
-        <button class="small danger icon" data-act="backup-delete" data-file="${esc(b.file)}" title="ลบไฟล์นี้">ลบ</button></li>`).join('')}</ul>`
-      : '<div class="sub">ยังไม่มีไฟล์สำรอง</div>'}
+        <button class="small danger icon" data-act="backup-delete" data-file="${esc(b.file)}" title="ลบไฟล์นี้">ลบ</button></li>`).join('')}</ul>` : ''}
   </div>`;
 }
 const KIND = {
   'license.issue': 'ออก license', 'license.extend': 'ต่ออายุ', 'license.machines': 'เปลี่ยนจำนวนเครื่อง', 'license.revoke': 'ระงับ',
-  'license.restore': 'คืนสถานะ', 'license.image': 'เปลี่ยนรูป', 'license.image-remove': 'ลบรูป', 'machine.remove': 'ลบเครื่อง', 'machine.add': 'เพิ่มเครื่อง',
+  'license.restore': 'คืนสถานะ', 'backup.restore': 'กู้คืนข้อมูล', 'backup.restore-failed': 'กู้คืนไม่สำเร็จ', 'license.image': 'เปลี่ยนรูป', 'license.image-remove': 'ลบรูป', 'machine.remove': 'ลบเครื่อง', 'machine.add': 'เพิ่มเครื่อง',
   'backup.auto': 'สำรองอัตโนมัติ', 'backup.manual': 'สำรองข้อมูล', 'backup.delete': 'ลบไฟล์สำรอง', 'backup.error': 'สำรองไม่สำเร็จ',
   'instance.create': 'สร้างระบบร้าน', 'instance.start': 'เปิดร้าน', 'instance.stop': 'หยุดร้าน', 'instance.error': 'ร้านผิดพลาด',
 };
@@ -623,6 +666,7 @@ async function load() {
   $('legacyWarn').hidden = !j.legacyMain;
   render();
   if ($('evBox').open) loadEvents();
+  loadSys().catch(() => {});
 }
 async function loadEvents() {
   const ev = await api('/admin/api/events');
@@ -673,6 +717,7 @@ $('detail').addEventListener('click', async (e) => {
   const { act } = b.dataset;
   if (act === 'close') return $('detail').close();
   if (act === 'image') return $('imgFile').click();
+  if (act === 'sys-goto') { $('detail').close(); $('sysCard').scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
   if (act === 'open') {
     // แผงควบคุมอยู่คนละโดเมนกับร้าน — ขอลิงก์ใช้ครั้งเดียวจากเซิร์ฟเวอร์ แล้วเปิดแท็บใหม่
     const w = window.open('', '_blank');
@@ -707,9 +752,6 @@ $('detail').addEventListener('click', async (e) => {
   } else if (act === 'backup-delete') {
     if (!await ask({ title: 'ลบไฟล์สำรองนี้?', html: `${who}<div class="sub mono">${esc(b.dataset.file)}</div>`, ok: 'ลบไฟล์', danger: true })) return;
     body = { file: b.dataset.file };
-  } else if (act === 'backup') {
-    b.textContent = 'กำลังสำรอง…';
-    if (b.dataset.branch) body = { branch: Number(b.dataset.branch) };
   } else if (act === 'image-remove') {
     if (!await ask({ title: 'ลบรูปร้านนี้?', html: who, ok: 'ลบรูป', danger: true })) return;
     body = { image: '' };
@@ -726,7 +768,7 @@ $('detail').addEventListener('click', async (e) => {
   b.disabled = true;
   try {
     await api(`/admin/api/licenses/${id}/${act === 'image-remove' ? 'image' : act}`, body);
-    toast(act === 'delete' ? 'ลบ license แล้ว' : act === 'backup' ? 'สำรองข้อมูลแล้ว' : act === 'backup-delete' ? 'ลบไฟล์สำรองแล้ว' : 'บันทึกแล้ว');
+    toast(act === 'delete' ? 'ลบ license แล้ว' : act === 'backup-delete' ? 'ลบไฟล์สำรองแล้ว' : 'บันทึกแล้ว');
     if (act === 'delete') $('detail').close();
     await load();
     if ($('detail').open) { await loadHistory(); renderDetail(); }
@@ -736,8 +778,194 @@ $('detail').addEventListener('click', async (e) => {
   }
 });
 
-// คำใบ้ที่อยู่ไฟล์รหัสผ่าน แสดงเฉพาะตอนเปิดบนเครื่องตัวเอง (ไม่แสดงบน VPS / ลิงก์สาธารณะ)
-$('pwHint').hidden = !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+// ---------------------------------------------------------------- สำรองข้อมูลทั้งระบบ
+let sys = null;
+let sysTab = 'today';
+let sysRows = [];
+const ST_CLS = { ok: 'b-ok', partial: 'b-warn', failed: 'b-bad' };
+const ST_TXT = { ok: 'สำเร็จ', partial: 'บางส่วน', failed: 'ล้มเหลว' };
+const pad4 = (n) => String(n).padStart(4, '0');
+const monthTh = (ym) => `${MONTHS[+ym.slice(5, 7) - 1]} ${+ym.slice(0, 4) + 543}`;
+const isDay = (r) => r.kind === 'daily' || r.kind === 'monthly';
+
+async function loadSys() {
+  const [s, rows] = await Promise.all([api('/admin/api/sysbackup/status'), api(`/admin/api/sysbackup/list?tab=${sysTab}`).catch(() => [])]);
+  sys = s;
+  sysRows = rows;
+  renderSys();
+}
+function renderSys() {
+  const s = sys;
+  const box = $('sysBody');
+  if (!s) return;
+  if (!s.ready) {
+    $('sysRun').disabled = $('sysUpload').disabled = true;
+    box.innerHTML = `<div class="warnbox">ระบบสำรองข้อมูลยังไม่ทำงาน: ${esc(s.error)}</div>
+      <div class="sub">${meta.mode === 'local' ? `โฟลเดอร์: ${esc(s.root)}` : 'บน VPS: รัน pos-update ใหม่ แล้วดู journalctl -u pos-license -n 50 (ต้องมี sqlite3 และ pos-trial-ctl รุ่นใหม่)'}</div>`;
+    return;
+  }
+  $('sysRun').disabled = $('sysUpload').disabled = !!s.busy;
+  $('sysRun').textContent = s.busy ? `กำลัง${s.busy}…` : 'สำรองตอนนี้';
+  $('sysSub').textContent = `ทุก ${s.config.interval} นาที · ปิดวัน ${s.config.finalStart}–${s.config.finalEnd} · รายวัน ${s.config.dailyKeep} วัน · รายเดือน ${s.config.monthlyKeep} เดือน`;
+  const last = s.last;
+  const d = s.disk;
+  const tile = (label, value, sub = '') => `<div class="st"><span>${label}</span><b>${value}</b>${sub ? `<small title="${esc(sub.replace(/<[^>]+>/g, ''))}">${sub}</small>` : ''}</div>`;
+  const tabs = [['today', `วันนี้ · ${thDate(s.businessDate)}`], ['daily', 'รายวัน / รายเดือน'], ['other', 'ด้วยมือ / ก่อนกู้คืน / อัปโหลด']];
+  box.innerHTML = `
+    <div class="stgrid">
+      ${tile('สำรองล่าสุด', last ? thDate(last.createdAt, true) : '—', last ? `<span style="color:var(--${last.status === 'ok' ? 'ok' : 'warn'})">● ${ST_TXT[last.status]}</span> · ${esc(last.kindLabel)} · ${kb(last.size)} · #${pad4(last.seq)}` : 'ยังไม่มีไฟล์สำรอง')}
+      ${tile('รอบถัดไป', s.busy ? `กำลัง${esc(s.busy)}` : esc(s.nextRun), s.lastRun ? `ตรวจล่าสุด ${esc(s.lastRun.at.slice(11, 16))} · ${s.lastRun.result === 'skipped' ? 'ข้าม (ข้อมูลไม่เปลี่ยน)' : esc(ST_TXT[s.lastRun.result] || s.lastRun.result)}` : '')}
+      ${tile('พื้นที่ดิสก์ว่าง', d ? `${d.freePct}%` : '—', d ? `${kb(d.free)} จาก ${kb(d.total)} · ไฟล์สำรองใช้ ${kb(d.backups)}` : '')}
+      ${tile('รอดาวน์โหลด', `${num(s.overdue)} ไฟล์`, `เกิน ${s.config.dailyKeep} วัน — ลบให้เมื่อดาวน์โหลดแล้ว`)}
+    </div>
+    ${last ? `<div class="chips">${last.shops.map((x) => `<span class="badge ${x.ok ? 'b-ok' : 'b-bad'}" title="${esc(x.error || `${num(x.bills)} บิล`)}">${x.ok ? '✓' : '✗'} ${esc(x.name)}</span>`).join('')}</div>` : ''}
+    ${s.lastAttempt && s.lastAttempt.result === 'failed' ? `<div class="alert urgent"><span><b>สำรองครั้งล่าสุดล้มเหลว</b> (${esc(s.lastAttempt.at.slice(0, 16))}): ${esc(s.lastAttempt.detail)}</span></div>` : ''}
+    ${s.alerts.length ? `<div class="alerts">${s.alerts.map((a) => `<div class="alert ${a.level}"><span><span class="t">${esc(a.at.slice(0, 16))}</span>${esc(a.message)}</span><button class="small" data-sys="dismiss" data-id="${a.id}" title="รับทราบ (ซ่อน)">✕</button></div>`).join('')}</div>` : ''}
+    ${s.months.length ? `<div class="h4">ดาวน์โหลดรายเดือน — ไฟล์รายวันทั้งเดือนใน zip เดียว (ระบบจะจำว่าดาวน์โหลดแล้ว)</div>
+      <div class="months">${s.months.map((m) => `<div class="month"><div><b>${monthTh(m.month)}</b> <span class="sub">${m.files} ไฟล์ · ${kb(m.size)} · ${m.notDownloaded ? `<span style="color:var(--warn)">ยังไม่โหลด ${m.notDownloaded}</span>` : 'โหลดแล้ว'}</span></div>
+        <a class="btnlink" href="/admin/api/sysbackup/month/${m.month}.zip" data-dl>ดาวน์โหลด .zip</a></div>`).join('')}</div>` : ''}
+    <div class="tabs">${tabs.map(([k, label]) => `<button data-sys="tab" data-tab="${k}" class="${sysTab === k ? 'on' : ''}">${label} <span class="sub">${s.counts[k]}</span></button>`).join('')}</div>
+    ${sysRows.length ? `<div class="tblwrap"><table class="bt"><thead><tr><th>${sysTab === 'daily' ? 'วันทำการ' : 'เวลา'}</th><th>ชนิด</th><th>ครั้งที่</th><th>ร้าน</th><th class="r">ขนาด</th><th>สถานะ</th><th></th></tr></thead><tbody>
+      ${sysRows.map((r) => `<tr>
+        <td><b>${isDay(r) ? thDate(r.businessDate) : thDate(r.createdAt, true)}</b>${r.note ? `<div class="sub">${esc(r.note)}</div>` : ''}</td>
+        <td>${esc(r.kindLabel)}${r.withFiles ? '<div class="sub">มีรูปสินค้า</div>' : ''}</td>
+        <td class="mono">${r.seq ? `#${pad4(r.seq)}` : '—'}</td>
+        <td>${r.shops.length ? `<span title="${esc(r.shops.map((x) => `${x.ok ? '✓' : '✗'} ${x.name}`).join('\n'))}">${r.shops.filter((x) => x.ok).length}/${r.shops.length} ร้าน</span>` : '—'}</td>
+        <td class="r">${r.size ? kb(r.size) : '—'}</td>
+        <td><span class="badge ${ST_CLS[r.status]}">${ST_TXT[r.status]}</span>${r.downloadedAt ? '<div class="sub">ดาวน์โหลดแล้ว</div>' : ''}${r.status !== 'ok' && r.error ? `<div class="sub" style="color:var(--bad)">${esc(r.error.slice(0, 160))}</div>` : ''}</td>
+        <td>${r.name ? `<div class="act"><a class="btnlink" href="/admin/api/sysbackup/${r.id}/download" data-dl title="${esc(r.name)}">ดาวน์โหลด</a><button class="small ghost" data-sys="restore" data-id="${r.id}">กู้คืน…</button></div>` : ''}</td>
+      </tr>`).join('')}</tbody></table></div>`
+      : `<div class="sub">${sysTab === 'today' ? 'ยังไม่มีไฟล์ของวันนี้' : 'ยังไม่มีไฟล์'}</div>`}`;
+}
+$('sysCard').addEventListener('click', async (e) => {
+  if (e.target.closest('[data-dl]')) return setTimeout(() => loadSys().catch(() => {}), 2500);
+  const b = e.target.closest('[data-sys]');
+  if (!b) return;
+  if (b.dataset.sys === 'tab') { sysTab = b.dataset.tab; return loadSys().catch((err) => toast(err.message)); }
+  if (b.dataset.sys === 'dismiss') { await api(`/admin/api/sysbackup/alerts/${b.dataset.id}/dismiss`, {}).catch(() => {}); return loadSys(); }
+  if (b.dataset.sys === 'restore') return restoreFlow(Number(b.dataset.id));
+});
+$('sysRun').onclick = async () => {
+  $('sysRun').disabled = true;
+  $('sysRun').textContent = 'กำลังสำรอง…';
+  try {
+    const r = await api('/admin/api/sysbackup/run', {});
+    toast(`สำรองแล้ว: ${r.name} · ${kb(r.size)}`);
+    sysTab = 'other';
+  } catch (err) {
+    await ask({ title: 'สำรองข้อมูลไม่สำเร็จ', html: `<div class="warnbox">${esc(err.message)}</div>`, cancel: false });
+  }
+  await loadSys().catch(() => {});
+};
+
+/** หน้าต่าง "กำลังทำงาน" (ปิดเองไม่ได้จนกว่าจะเสร็จ) */
+function busyDlg(title) {
+  const dlg = $('dlg');
+  dlg.classList.remove('wide');
+  dlg.onclose = null;
+  dlg.oncancel = (e) => e.preventDefault();
+  $('dlgForm').innerHTML = `<h3>${esc(title)}</h3><div class="sub">อย่าปิดหน้านี้ — อาจใช้เวลาสักครู่ <b id="busyPct"></b></div>`;
+  if (!dlg.open) dlg.showModal();
+}
+function busyEnd() {
+  $('dlg').oncancel = null;
+  if ($('dlg').open) $('dlg').close();
+}
+
+$('sysUpload').onclick = () => $('sysFile').click();
+$('sysFile').onchange = async () => {
+  const f = $('sysFile').files[0];
+  $('sysFile').value = '';
+  if (!f) return;
+  if (!/\.zip$/i.test(f.name)) return ask({ title: 'เลือกไฟล์ .zip', html: '<div class="sub">ใช้ไฟล์ backup_….zip ที่ดาวน์โหลดจากระบบนี้ (ไม่ต้องแตกไฟล์)</div>', cancel: false });
+  busyDlg(`กำลังอัปโหลด ${f.name}`);
+  try {
+    const row = await new Promise((ok, fail) => {
+      const x = new XMLHttpRequest();
+      x.open('POST', '/admin/api/sysbackup/upload');
+      x.setRequestHeader('Content-Type', 'application/zip');
+      x.upload.onprogress = (ev) => { if (ev.lengthComputable && $('busyPct')) $('busyPct').textContent = `${Math.round((ev.loaded / ev.total) * 100)}%`; };
+      x.onload = () => {
+        let j = {};
+        try { j = JSON.parse(x.responseText); } catch { /* ไม่ใช่ JSON */ }
+        if (x.status === 401) show(false);
+        return x.status < 300 ? ok(j) : fail(new Error(j.error || `HTTP ${x.status}`));
+      };
+      x.onerror = () => fail(new Error('อัปโหลดไม่สำเร็จ (เครือข่าย)'));
+      x.send(f);
+    });
+    busyEnd();
+    sysTab = 'other';
+    await loadSys().catch(() => {});
+    restoreFlow(row.id);
+  } catch (err) {
+    busyEnd();
+    ask({ title: 'อัปโหลดไม่สำเร็จ', html: `<div class="warnbox">${esc(err.message)}</div>`, cancel: false });
+  }
+};
+
+/** กู้คืน: ตรวจไฟล์ → เลือก (ทั้งระบบ / license / ร้าน) → พิมพ์ยืนยัน → กู้คืน → สรุปผล */
+async function restoreFlow(id) {
+  let info;
+  busyDlg('กำลังตรวจไฟล์สำรอง');
+  try {
+    info = await api(`/admin/api/sysbackup/${id}/inspect`);
+    busyEnd();
+  } catch (err) {
+    busyEnd();
+    return ask({ title: 'ใช้ไฟล์นี้กู้คืนไม่ได้', html: `<div class="warnbox">${esc(err.message)}</div>`, cancel: false });
+  }
+  const m = info.manifest;
+  const localMain = (x) => x.isMain && meta.mode === 'local';
+  const opt = (value, title, sub, enabled) => `<label class="${enabled ? '' : 'off'}"><input type="radio" name="rt" value="${esc(value)}" ${enabled ? '' : 'disabled'}><span><b>${title}</b><span class="sub">${sub}</span></span></label>`;
+  const shopOpt = (x) => {
+    const lost = x.latest ? Math.max(0, x.latest.bills - x.bills) : 0;
+    const sub = !x.ok ? `ไฟล์นี้ไม่มีข้อมูลร้านนี้ (${esc(x.error)})`
+      : !x.existsNow ? 'ยังไม่มีร้านนี้ในระบบ — เลือก "ทั้งระบบ"'
+      : `ในไฟล์ ${num(x.bills)} บิล · บิลล่าสุด ${thDate(x.lastBillAt, true)} · ${num(x.branches)} สาขา${x.latest ? ` · ข้อมูลล่าสุด ${num(x.latest.bills)} บิล` : ''}${lost ? ` → <b style="color:var(--bad)">บิลจะหายประมาณ ${num(lost)} บิล</b>` : ''}${localMain(x) ? ' · โหมดทดสอบ: กู้คืนร้านหลักจากแผงไม่ได้' : ''}`;
+    return opt(x.slug, `${esc(x.name)}${x.isMain ? ' <span class="badge b-idle">★ ร้านหลัก</span>' : ''}`, sub, x.ok && x.existsNow && !localMain(x));
+  };
+  const go = await ask({
+    wide: true, title: 'กู้คืนจากไฟล์สำรอง', ok: 'ถัดไป',
+    html: `<div class="msg">${esc(info.snapshot.name)}\n${esc(info.snapshot.kindLabel)} · สร้างเมื่อ ${thDate(m.createdAt, true)} · วันทำการ ${thDate(m.businessDate)} · ${m.withFiles ? 'มีรูปสินค้า' : 'ไม่มีรูปสินค้า (รูปปัจจุบันคงไว้)'}</div>
+      <div class="sub">เลือกสิ่งที่จะกู้คืน — ร้านที่ไม่ได้เลือกทำงานต่อตามปกติ</div>
+      <div class="rt">
+        ${opt('all', 'ทั้งระบบ', 'license + ทุกร้านในไฟล์ — ใช้เมื่อเซิร์ฟเวอร์ล่ม / โดนแฮก / ย้ายไปเซิร์ฟเวอร์ใหม่', m.license.ok)}
+        ${opt('license', 'เฉพาะข้อมูล license', `${num(m.license.licenses)} license · เครื่องที่ลงทะเบียน · ประวัติ`, m.license.ok)}
+        ${info.shops.map(shopOpt).join('')}
+      </div>`,
+  });
+  if (!go) return;
+  const picked = document.querySelector('#dlgForm input[name="rt"]:checked')?.value;
+  if (!picked) return toast('ยังไม่ได้เลือกสิ่งที่จะกู้คืน');
+  const shop = info.shops.find((x) => x.slug === picked);
+  const expect = picked === 'all' ? 'กู้คืนทั้งระบบ' : picked === 'license' ? 'license' : shop.confirmText;
+  const what = picked === 'all' ? 'ทั้งระบบ' : picked === 'license' ? 'ข้อมูล license' : /^ร้าน/.test(shop.name) ? shop.name : `ร้าน ${shop.name}`;
+  const typed = await ask({
+    wide: true, danger: true, ok: 'กู้คืนข้อมูล', title: `ยืนยันกู้คืน${what}`,
+    html: `<div class="warnbox">ข้อมูลปัจจุบันจะถูกแทนที่ด้วยข้อมูลจากไฟล์ ${esc(thDate(m.createdAt, true))}<br>
+      • ระบบสำรองข้อมูลปัจจุบันไว้ก่อน (แท็บ "ก่อนกู้คืน") — กู้คืนผิดไฟล์ย้อนกลับได้<br>
+      ${picked === 'license' ? '' : '• ร้านจะหยุดชั่วครู่แล้วเปิดใหม่ · พนักงานต้องเข้าสู่ระบบใหม่<br>• เลขบิลใหม่รันต่อจากเลขเดิม ไม่ซ้ำกับใบเสร็จที่ออกไปแล้ว<br>• ร้านเปิดไม่ขึ้นภายใน 30 วินาที → ย้อนกลับให้เอง'}</div>`,
+    input: { label: `พิมพ์ "${expect}" เพื่อยืนยัน`, placeholder: expect },
+  });
+  if (typed === null) return;
+  if (typed !== expect) return toast('ข้อความยืนยันไม่ตรง — ยกเลิกการกู้คืน');
+  busyDlg(`กำลังกู้คืน${what}`);
+  try {
+    const r = await api(`/admin/api/sysbackup/${id}/restore`, { target: picked, confirm: typed });
+    busyEnd();
+    await ask({
+      wide: true, cancel: false, title: r.ok ? 'กู้คืนสำเร็จ' : 'กู้คืนไม่สำเร็จบางส่วน',
+      html: `<div class="alerts">${r.results.map((x) => `<div class="alert ${x.ok ? 'info' : 'urgent'}"><span><b>${x.ok ? '✓' : '✗'} ${esc(x.name)}</b> — ${esc(x.message)}</span></div>`).join('')}</div>
+        ${r.preRestore ? `<div class="sub">ข้อมูลก่อนกู้คืน: ${esc(r.preRestore.name)} (แท็บ "ด้วยมือ / ก่อนกู้คืน") — ใช้ย้อนกลับได้ ${sys?.config?.shortKeep || 14} วัน</div>` : ''}`,
+    });
+  } catch (err) {
+    busyEnd();
+    await ask({ title: 'กู้คืนไม่สำเร็จ', html: `<div class="warnbox">${esc(err.message)}</div>`, cancel: false });
+  }
+  load().catch(() => {});
+}
+
 api('/admin/api/licenses').then(() => { show(true); load(); }).catch(() => show(false));
 setInterval(() => { if (!$('app').hidden && !$('dlg').open && document.visibilityState === 'visible') load().catch(() => {}); }, 15000);
 </script>

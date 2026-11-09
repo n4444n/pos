@@ -5,6 +5,12 @@
 #   pos-trial-ctl delete <ร้าน>          ปิด + ย้ายข้อมูลไป /var/lib/pos-trial/_deleted (ชื่อเดิมใช้ใหม่ได้โดยไม่เห็นข้อมูลร้านเก่า)
 # ทุกร้านเข้าผ่านประตูเดียวของเซิร์ฟเวอร์ license (โดเมนของแอป) — ไม่มีโดเมนย่อยต่อร้านแล้ว
 #   pos-trial-ctl list
+# ระบบสำรองข้อมูลทั้งระบบ (license-server/sysbackup.ts) — <เป้าหมาย> = @main (ร้านหลัก /var/lib/pos) หรือชื่อร้านทดลอง
+#   pos-trial-ctl data-init                          สร้าง /var/lib/pos-backups (ของ poslic)
+#   pos-trial-ctl data-stat <เป้าหมาย>                เวลาแก้ไขล่าสุดของฐานข้อมูล (ms) · missing = ไม่มี
+#   pos-trial-ctl data-snap <เป้าหมาย> <งาน> <0|1>     สำเนาฐานข้อมูล (+ รูปสินค้าถ้า 1) ไป /var/lib/pos-backups/.staging/<งาน>
+#   pos-trial-ctl data-restore <เป้าหมาย> <งาน>        หยุดร้าน → เก็บไฟล์เดิมใน .restore-old → วางไฟล์จาก .staging/<งาน> → เปิดร้าน
+#   pos-trial-ctl data-rollback <เป้าหมาย>             ย้อนกลับไปใช้ไฟล์ใน .restore-old
 # ตรวจค่าทุกตัวเข้มงวด เพราะรันเป็น root
 set -euo pipefail
 
@@ -13,9 +19,20 @@ ENV_DIR=/etc/pos-trial
 CADDY_DIR=/etc/caddy/trials   # รุ่นเก่าเคยสร้างโดเมนย่อยต่อร้านไว้ที่นี่ — ลบทิ้งเมื่อลบร้าน
 PORT_MIN=3101
 PORT_MAX=3999
+BK_ROOT=/var/lib/pos-backups
+STAGE=$BK_ROOT/.staging
 
 die() { echo "$*" >&2; exit 1; }
 [ "$(id -u)" = 0 ] || die "ต้องรันด้วย root"
+
+job_ok() { [[ "$1" =~ ^[a-z0-9-]{1,60}$ ]] || die "ชื่องานไม่ถูกต้อง: $1"; }
+# เป้าหมาย → T_DIR (โฟลเดอร์ข้อมูล) T_DB (ฐานข้อมูล) T_SVC (บริการ)
+target_of() {
+  if [ "$1" = "@main" ]; then T_DIR=/var/lib/pos; T_SVC=pos
+  else slug_ok "$1"; T_DIR="$DATA_ROOT/$1"; T_SVC="pos-trial@$1"; fi
+  T_DB="$T_DIR/pos.db"
+}
+ms_of() { if [ -e "$1" ]; then date -r "$1" +%s%3N; else echo 0; fi; }
 
 slug_ok() { [[ "$1" =~ ^[a-z0-9]([a-z0-9-]{0,28}[a-z0-9])?$ ]] || die "ชื่อร้านไม่ถูกต้อง: $1"; }
 
@@ -76,5 +93,77 @@ case "$cmd" in
   list)
     systemctl list-units --all --no-legend 'pos-trial@*' || true
     ;;
-  *) die "ใช้: $0 create <ร้าน> <พอร์ต> | start|stop|status|delete <ร้าน> | list" ;;
+  data-init)
+    mkdir -p "$STAGE"
+    chown poslic:poslic "$BK_ROOT" "$STAGE" && chmod 700 "$BK_ROOT" "$STAGE"
+    ;;
+  data-stat)
+    target_of "${2:-}"
+    if [ ! -f "$T_DB" ]; then echo missing; exit 0; fi
+    a=$(ms_of "$T_DB"); b=$(ms_of "$T_DB-wal")
+    if [ "$a" -gt "$b" ]; then echo "$a"; else echo "$b"; fi
+    ;;
+  data-snap)
+    target_of "${2:-}"; job_ok "${3:-}"
+    [ -f "$T_DB" ] || die "ยังไม่มีฐานข้อมูลของร้านนี้"
+    command -v sqlite3 >/dev/null || die "ต้องติดตั้ง sqlite3 ก่อน: apt install -y sqlite3"
+    out="$STAGE/$3"
+    rm -rf "$out" && mkdir -p "$out"
+    tmp="$T_DIR/.snap-$3.db"
+    rm -f "$tmp"
+    # VACUUM INTO ด้วยผู้ใช้ pos = สำเนาสมบูรณ์แม้ร้านกำลังขาย (ถ้าใช้ root ไฟล์ -wal/-shm อาจกลายเป็นของ root แล้วร้านเปิดฐานข้อมูลไม่ได้)
+    if ! runuser -u pos -- sqlite3 -bail -cmd ".timeout 15000" "$T_DB" "VACUUM INTO '$tmp'"; then rm -f "$tmp"; die "สำเนาฐานข้อมูลไม่สำเร็จ"; fi
+    mv "$tmp" "$out/pos.db"
+    if [ -f "$T_DIR/.pin-secret" ]; then cp -p "$T_DIR/.pin-secret" "$out/.pin-secret"; fi
+    if [ "${4:-0}" = 1 ] && [ -d "$T_DIR/uploads" ]; then cp -a "$T_DIR/uploads" "$out/uploads"; fi
+    chown -R poslic:poslic "$out" && chmod -R u+rwX,go-rwx "$out"
+    echo ok
+    ;;
+  data-restore)
+    target_of "${2:-}"; job_ok "${3:-}"
+    src="$STAGE/$3"
+    [ -f "$src/pos.db" ] || die "ไม่พบไฟล์ที่จะกู้คืน"
+    [ "$(head -c 15 "$src/pos.db")" = "SQLite format 3" ] || die "ไฟล์ที่จะกู้คืนไม่ใช่ฐานข้อมูล SQLite"
+    if [ "$2" != "@main" ] && [ ! -f "$ENV_DIR/$2.env" ]; then die "ยังไม่มีร้าน $2 บนเครื่องนี้"; fi
+    was=0
+    if systemctl is-active --quiet "$T_SVC"; then was=1; fi
+    systemctl stop "$T_SVC" || true
+    mkdir -p "$T_DIR"
+    old="$T_DIR/.restore-old"
+    rm -rf "$old" && mkdir -p "$old" && chmod 700 "$old"
+    for f in pos.db pos.db-wal pos.db-shm; do
+      if [ -e "$T_DIR/$f" ]; then mv "$T_DIR/$f" "$old/$f"; fi
+    done
+    if [ -f "$src/.pin-secret" ]; then
+      if [ -e "$T_DIR/.pin-secret" ]; then mv "$T_DIR/.pin-secret" "$old/.pin-secret"; fi
+      cp "$src/.pin-secret" "$T_DIR/.pin-secret"
+    fi
+    if [ -d "$src/uploads" ]; then
+      if [ -e "$T_DIR/uploads" ]; then mv "$T_DIR/uploads" "$old/uploads"; fi
+      cp -a "$src/uploads" "$T_DIR/uploads"
+    fi
+    cp "$src/pos.db" "$T_DB"
+    chown -R pos:pos "$T_DIR"
+    chmod 600 "$T_DB"
+    if [ -f "$T_DIR/.pin-secret" ]; then chmod 600 "$T_DIR/.pin-secret"; fi
+    if [ "$was" = 1 ]; then systemctl start "$T_SVC"; echo started; else echo stopped; fi
+    ;;
+  data-rollback)
+    target_of "${2:-}"
+    old="$T_DIR/.restore-old"
+    [ -d "$old" ] || die "ไม่มีไฟล์เดิมให้ย้อนกลับ"
+    systemctl stop "$T_SVC" || true
+    rm -f "$T_DB" "$T_DB-wal" "$T_DB-shm"
+    for f in "$old"/* "$old/.pin-secret"; do
+      [ -e "$f" ] || continue
+      n=$(basename "$f")
+      rm -rf "${T_DIR:?}/$n"
+      mv "$f" "$T_DIR/$n"
+    done
+    rm -rf "$old"
+    chown -R pos:pos "$T_DIR"
+    systemctl start "$T_SVC"
+    echo started
+    ;;
+  *) die "ใช้: $0 create <ร้าน> <พอร์ต> | start|stop|status|delete <ร้าน> | list | data-init | data-stat|data-snap|data-restore|data-rollback ..." ;;
 esac
