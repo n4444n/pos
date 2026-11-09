@@ -344,7 +344,8 @@ const s = StyleSheet.create({
   emptyText: { fontFamily: font, fontSize: 14, color: colors.sub, marginTop: 4 },
   emptyHint: { fontFamily: font, fontSize: 11, color: colors.faint },
   item: { flexDirection: 'row', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F1F3F6', alignItems: 'flex-start' },
-  itemMedia: { width: 54, height: 54, borderRadius: radius.sm, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  // รูปสี่เหลี่ยมจัตุรัสสูงเท่าแถว (ชื่อ · ตัวเลือก · จำนวน) — ไม่เหลือช่องว่างใต้รูป
+  itemMedia: { alignSelf: 'stretch', aspectRatio: 1, minHeight: 54, borderRadius: radius.sm, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   itemImg: { width: '100%', height: '100%' },
   itemName: { fontFamily: font, fontSize: 13, fontWeight: '500', color: colors.text, paddingRight: 18 },
   itemVar: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
