@@ -186,6 +186,10 @@ export class SystemBackup {
         CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       `);
       if (!this.meta('closed_through')) this.setMeta('closed_through', addDays(businessDate(), -1));
+      // รอบ 30 นาทีที่ทำไปแล้ว (รวม "ข้าม") — เปิดระบบใหม่กลางรอบไม่สำรองซ้ำ รอรอบถัดไป (:00 / :30)
+      const lastRun = this.idx.prepare("SELECT at FROM runs WHERE kind = 'intraday' ORDER BY id DESC LIMIT 1").get() as { at: string } | undefined;
+      const lastMs = lastRun ? Date.parse(`${lastRun.at.replace(' ', 'T')}+07:00`) : NaN;
+      if (Number.isFinite(lastMs)) this.lastSlot = this.slotOf(lastMs);
       this.ready = true;
       this.cleanStage(0);
     } catch (e) {
@@ -253,11 +257,16 @@ export class SystemBackup {
       }
       return;
     }
-    const slot = Math.floor((now + TZ) / 60_000 / CFG.interval);
+    // สำรองระหว่างวัน 1 ครั้งต่อรอบ (ทุก 30 นาที ตรง :00 / :30) — ไม่ใช่ทุกครั้งที่ข้อมูลเปลี่ยน
+    const slot = this.slotOf(now);
     if (slot !== this.lastSlot) {
       this.lastSlot = slot;
       await this.exclusive('สำรองข้อมูล', () => this.snapshot('intraday', false, false)).catch((e) => console.error('[system-backup] intraday', e));
     }
+  }
+
+  private slotOf(ms: number) {
+    return Math.floor((ms + TZ) / 60_000 / CFG.interval);
   }
 
   /** เวลาที่จะสำรองรอบถัดไป (เวลาไทย HH:MM) */
