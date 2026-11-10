@@ -40,6 +40,7 @@ import { stockXlsx } from './stockExport.ts';
 import { XLSX_TYPE } from './xlsx.ts';
 import { internalAllowed, shopStats } from './internal.ts';
 import { listLogs, logsXlsx, recordAudit, requireLogAccess } from './auditLog.ts';
+import { listActivity } from './activity.ts';
 import { backupBuffer, backupFileName, dropUpload, newUploadPath, previewUpload, restoreBranches } from './backup.ts';
 import { createDevice, dataStamp, deviceByKey, listDevices, revokeDevice } from './autoBackup.ts';
 import { billNoSettings, nextBillNo, saveBillNo } from './billNo.ts';
@@ -492,6 +493,12 @@ const server = createServer(async (req, res) => {
         const { file, range } = logsXlsx(f);
         res.setHeader('Content-Disposition', `attachment; filename="log-${range.from}-to-${range.to}.xlsx"`);
         return send(req, res, 200, file, XLSX_TYPE);
+      }
+
+      // ----- กิจกรรมของร้านสำหรับแอปมือถือ (คัดจาก LOG · สิทธิ์ตามเมนู · ไม่ส่งข้อมูลดิบ) -----
+      if (path === '/api/activity' && req.method === 'GET') {
+        const p = url.searchParams;
+        return json(req, res, 200, listActivity(me, { since: p.get('since'), limit: p.get('limit'), topics: p.get('topics'), minSale: p.get('minSale') }));
       }
 
       // ----- สำรอง / กู้คืนข้อมูล (ผู้จัดการ) -----
