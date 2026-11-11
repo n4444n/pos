@@ -29,5 +29,10 @@ test-beam.bat
 start-ngrok.bat
 run-ngrok.bat
 license-demo.bat
+build-web.bat
+build-desktop.bat
+publish-update.bat
+restart-server.bat
+typecheck.bat
 desktop/tools/
 server/demo-sales.ts
