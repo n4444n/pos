@@ -306,21 +306,23 @@ export function usePos() {
     [subtotal, notify],
   );
 
-  const placeOrder = useCallback(async (override?: { method: PaymentMethod; cashReceived?: number }): Promise<Order | null> => {
-    const pay = override ?? payment;
-    if (!data || rows.length === 0 || !pay) return null;
-    setPlacing(true);
-    try {
-      const res = await api.placeOrder({
-        customerName: customerName || undefined,
-        salesperson: salesperson ?? undefined,
-        orderType: orderType ?? data.settings?.display.defaultOrderType ?? data.orderTypes[0],
-        promoCode: promo && discount > 0 ? promo.code : undefined,
-        paymentMethod: pay.method,
-        cashReceived: pay.method === 'cash' ? pay.cashReceived : undefined,
-        items: cart.map((l) => ({ variantId: l.variantId, qty: l.qty })),
-      });
-      // อัปเดตสต็อกในเครื่องทันที โดยไม่ต้องโหลดข้อมูลทั้งหมดใหม่
+  /** ข้อมูลบิลที่จะส่งให้เซิร์ฟเวอร์ — ใช้ทั้งตอนขายปกติและตอนส่งยอดไปเครื่องรับบัตร */
+  const orderBody = useCallback(
+    (pay: { method: PaymentMethod; cashReceived?: number }) => ({
+      customerName: customerName || undefined,
+      salesperson: salesperson ?? undefined,
+      orderType: orderType ?? data?.settings?.display.defaultOrderType ?? data?.orderTypes[0] ?? '',
+      promoCode: promo && discount > 0 ? promo.code : undefined,
+      paymentMethod: pay.method,
+      cashReceived: pay.method === 'cash' ? pay.cashReceived : undefined,
+      items: cart.map((l) => ({ variantId: l.variantId, qty: l.qty })),
+    }),
+    [customerName, salesperson, orderType, data, promo, discount, cart],
+  );
+
+  /** ผลลัพธ์จากการออกบิล → อัปเดตสต็อกในเครื่อง ล้างตะกร้า แล้วคืนบิล */
+  const afterOrder = useCallback(
+    (res: { order: Order; stock: { id: number; stock: number }[]; nextOrderNo: string }) => {
       const stock = new Map(res.stock.map((s) => [s.id, s.stock]));
       setData((d) =>
         d && {
@@ -332,6 +334,17 @@ export function usePos() {
       const order = { ...res.order, customerName, salesperson };
       resetOrder();
       return order;
+    },
+    [customerName, salesperson, resetOrder],
+  );
+
+  const placeOrder = useCallback(async (override?: { method: PaymentMethod; cashReceived?: number }): Promise<Order | null> => {
+    const pay = override ?? payment;
+    if (!data || rows.length === 0 || !pay) return null;
+    setPlacing(true);
+    try {
+      const res = await api.placeOrder(orderBody(pay));
+      return afterOrder(res);
     } catch (e) {
       if (e instanceof ApiError && e.code === 'NO_SHIFT') {
         // กะถูกปิดจากเครื่องอื่น → อัปเดตสถานะ แล้วให้หน้าขายเปิดหน้าต่างเปิดกะ
@@ -344,7 +357,28 @@ export function usePos() {
     } finally {
       setPlacing(false);
     }
-  }, [data, rows, payment, customerName, salesperson, orderType, promo, discount, cart, resetOrder, notify, load]);
+  }, [data, rows, payment, orderBody, afterOrder, notify, load]);
+
+  // ---------- รับเงินผ่านเครื่องรับบัตร Beam ----------
+  /** ส่งยอดไปขึ้นบนเครื่อง (ยังไม่ออกบิล ยังไม่ตัดสต็อก) */
+  const beamCharge = useCallback(
+    (method: string, pin: string) => api.beamCharge({ ...orderBody({ method: 'beam' }), method, pin }),
+    [orderBody],
+  );
+  /** ลูกค้าจ่ายสำเร็จแล้ว → ออกบิลและตัดสต็อก */
+  const beamBill = useCallback(
+    async (intentId: string): Promise<Order | null> => {
+      const res = await api.beamBill(intentId);
+      if (!('order' in res)) return null;
+      // ยอดที่เรียกเก็บไปแล้ว ≠ ยอดบิล (เช่นราคาสินค้าถูกแก้ระหว่างรอลูกค้าจ่าย) — ต้องรู้ทันที
+      if (res.mismatch) {
+        const m = (n: number) => `฿${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        notify('error', `ยอดที่เก็บจากลูกค้า ${m(res.mismatch.charged)} ไม่ตรงกับยอดบิล ${m(res.mismatch.billed)} — ตรวจสอบกับรายงานของ Beam`);
+      }
+      return afterOrder(res);
+    },
+    [afterOrder, notify],
+  );
 
   // ---------- พักบิล ----------
   const [held, setHeld] = useState<HeldBill[]>([]);
@@ -425,6 +459,7 @@ export function usePos() {
     addToCart, addBySku, setQty, removeLine, resetOrder,
     customerName, setCustomerName, salesperson, setSalesperson, orderType: orderType ?? data?.settings?.display.defaultOrderType ?? null, setOrderType,
     payment, setPayment, placeOrder, placing,
+    beamCharge, beamBill,
     toast, notify, clearToast,
   };
 }

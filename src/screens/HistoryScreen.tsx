@@ -254,7 +254,7 @@ export function HistoryScreen({ onNavigate, onStockChanged }: Props) {
             </View>
             <View style={[s.row, { flexWrap: 'wrap' }]}>
               <Text style={s.fLabel}>ชำระโดย</Text>
-              {(['', 'cash', 'promptpay', 'card', 'transfer'] as (PaymentMethod | '')[]).map((p) => (
+              {(['', 'cash', 'promptpay', 'card', 'transfer', 'beam'] as (PaymentMethod | '')[]).map((p) => (
                 <Pressable key={p || 'all'} style={[s.chip, filter.payment === p && s.chipOn]} onPress={() => setF({ payment: p })}>
                   <Text style={[s.chipText, filter.payment === p && s.chipTextOn]}>{p ? PAYMENT_LABEL[p] : 'ทั้งหมด'}</Text>
                 </Pressable>

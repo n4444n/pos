@@ -44,6 +44,7 @@ import { listActivity } from './activity.ts';
 import { backupBuffer, backupFileName, dropUpload, newUploadPath, previewUpload, restoreBranches } from './backup.ts';
 import { createDevice, dataStamp, deviceByKey, listDevices, revokeDevice } from './autoBackup.ts';
 import { billNoSettings, nextBillNo, saveBillNo } from './billNo.ts';
+import { beamCheckoutInfo, beamOfOrder, beamStatus, cancelIntent, getIntentRow, markBilled, openIntents, pairDevice, refreshIntent, startIntent, testConnection, unpairDevice } from './beam.ts';
 import { permCatalog, resetPerms, savePerms } from './perms.ts';
 import { availablePromos, bestAutoDiscount, createPromo, deletePromo, giftsFor, listPromos, previewFor, updatePromo } from './promos.ts';
 import { adjustShipment, cancelShipment, createShipment, deleteShippedShipment, editShippedItems, holdShipment, listShipments, restoreShipment, resumeShipment, scanShipment, setShipmentItem, shipmentDetail, shipShipment, updateShipment } from './shipments.ts';
@@ -157,13 +158,42 @@ interface OrderBody {
   items?: { variantId: number; qty: number }[];
 }
 
-function createOrder(body: OrderBody, terminalHeader?: unknown) {
+/**
+ * ยอดที่ต้องเรียกเก็บของตะกร้านี้ — ใช้ก่อนส่งยอดไปเครื่องรับบัตร (ตอนนั้นยังไม่ออกบิล)
+ * คิดด้วยฟังก์ชันชุดเดียวกับ createOrder (ราคาจากฐานข้อมูล · โปรโมชั่น · ค่าธรรมเนียม) เพื่อไม่ให้ยอดเพี้ยนกัน
+ * ของแถมราคา 0 จึงไม่กระทบยอด · VAT รวมในราคาอยู่แล้ว ยอดนี้คือยอดที่ลูกค้าจ่ายจริง
+ */
+function quoteTotal(body: OrderBody, payment: string) {
+  const items = Array.isArray(body.items) ? body.items : [];
+  if (items.length === 0) throw new HttpError(400, 'ยังไม่มีสินค้าในรายการ');
+  if (items.length > 200) throw new HttpError(400, 'รายการสินค้ามากเกินไป');
+  let subtotal = 0;
+  for (const { variantId, qty } of items) {
+    const qn = Math.floor(Number(qty));
+    if (!Number.isFinite(qn) || qn <= 0 || qn > 999) throw new HttpError(400, 'จำนวนสินค้าไม่ถูกต้อง');
+    const v = q.variantForSale.get(Number(variantId)) as { id: number; name: string; price: number; stock: number } | undefined;
+    if (!v) throw new HttpError(404, `ไม่พบสินค้า #${variantId}`);
+    if (v.stock < qn && !allowNegativeStock()) throw new HttpError(409, `${v.name} คงเหลือ ${v.stock} ชิ้น`);
+    subtotal = round2(subtotal + round2(v.price * qn));
+  }
+  const discount = body.promoCode ? checkPromo(body.promoCode, subtotal).discount : bestAutoDiscount(subtotal)?.discount ?? 0;
+  const goods = round2(subtotal - discount);
+  const fee = feeFor(payment, goods);
+  return { subtotal, discount, fee, total: round2(goods + (feePayer() === 'customer' ? fee : 0)) };
+}
+
+/** afterBeam = เรียกจากขั้นตอนออกบิลหลังเครื่องรับบัตรแจ้งว่าได้เงินแล้วเท่านั้น */
+function createOrder(body: OrderBody, terminalHeader?: unknown, afterBeam = false) {
   const items = Array.isArray(body.items) ? body.items : [];
   if (items.length === 0) throw new HttpError(400, 'ยังไม่มีสินค้าในรายการ');
   if (items.length > 200) throw new HttpError(400, 'รายการสินค้ามากเกินไป');
   const orderType = ORDER_TYPES.includes(body.orderType ?? '') ? body.orderType! : ORDER_TYPES[0];
   const payment = body.paymentMethod ?? '';
   if (!PAYMENT_METHODS.includes(payment)) throw new HttpError(400, 'กรุณาเลือกวิธีชำระเงิน');
+  // กันออกบิลโดยยังไม่ได้รับเงิน: บิลที่ชำระด้วยเครื่องรับบัตรต้องมาจาก /api/beam/charge/{id}/bill เท่านั้น
+  if (payment === 'beam' && !afterBeam) {
+    throw new HttpError(409, 'บิลที่ชำระด้วยเครื่องรับบัตรต้องผ่านขั้นตอนรับเงินที่เครื่องก่อน', 'BEAM_REQUIRED');
+  }
   if (!methodEnabled(payment)) throw new HttpError(400, 'วิธีชำระเงินนี้ถูกปิดใช้งาน (ตั้งค่า → วิธีชำระเงิน)');
 
   const shift = requireShift(); // ต้องเปิดกะก่อนขาย
@@ -667,6 +697,92 @@ const server = createServer(async (req, res) => {
       }
       if (path === '/api/billno' && req.method === 'GET') { requireFeature(me, 'settings', 'view'); return json(req, res, 200, billNoSettings()); }
       if (path === '/api/billno' && req.method === 'PUT') { requireFeature(me, 'settings', 'edit'); return json(req, res, 200, saveBillNo((await readBody(req)) as Record<string, unknown>)); }
+      // ----- Beam Checkout (เครื่องรับบัตร Bolt) -----
+      if (path === '/api/beam' && req.method === 'GET') { requireFeature(me, 'settings', 'view'); return json(req, res, 200, beamStatus()); }
+      // หน้าขายใช้ตอนรับเงิน — พนักงานขายต้องเรียกได้ จึงใช้สิทธิ์ "หน้าขาย" ไม่ใช่ "ตั้งค่า"
+      // (ส่งเฉพาะวิธีรับเงิน/เวลารอ/ชื่อเครื่อง — ไม่มีกุญแจหรือ Merchant ID)
+      if (path === '/api/beam/checkout' && req.method === 'GET') {
+        requireFeature(me, 'sales', 'edit');
+        return json(req, res, 200, beamCheckoutInfo(Number(req.headers['x-pos-terminal']) || 0));
+      }
+      if (path === '/api/beam/test' && req.method === 'POST') { requireFeature(me, 'settings', 'edit'); return json(req, res, 200, await testConnection()); }
+      if (path === '/api/beam/pair' && req.method === 'POST') {
+        requireFeature(me, 'settings', 'edit');
+        const b = (await readBody(req)) as { pairingCode?: unknown; terminalId?: unknown };
+        return json(req, res, 200, await pairDevice(b.pairingCode, Number(b.terminalId) || 0));
+      }
+      if (path === '/api/beam/pair' && req.method === 'DELETE') {
+        requireFeature(me, 'settings', 'edit');
+        return json(req, res, 200, await unpairDevice(Number(url.searchParams.get('terminal')) || 0));
+      }
+      // ----- Beam: รับเงินหน้าร้าน (ขั้นตอน: ส่งยอด → ลูกค้าจ่าย → ถามผล → ออกบิล) -----
+      if (path === '/api/beam/charge' && req.method === 'POST') {
+        requireFeature(me, 'sales', 'edit');
+        const body = (await readBody(req)) as OrderBody & { method?: string; pin?: unknown };
+        requireShift(); // ต้องเปิดกะก่อน ไม่งั้นรับเงินแล้วออกบิลไม่ได้
+        const cfg = getSettings().beam;
+        const method = String(body.method ?? cfg.methods[0] ?? '');
+        // ผู้จัดการยืนยันก่อนเงินออก (ตั้งปิดได้ในหน้าตั้งค่า) — ใช้สิทธิ์ระดับ "ประวัติการขาย" คือระดับผู้จัดการขึ้นไป
+        const approvedBy = cfg.requireManager ? approveManager(body.pin, clientIp(req), 'history') : '';
+        const { total } = quoteTotal(body, 'beam');
+        const cart = { ...body, pin: undefined, paymentMethod: 'beam', salesperson: body.salesperson || me.name };
+        const refId = `${currentBranch()}-${Date.now()}`;
+        const r = await startIntent({
+          amount: total, method, refId, note: `${publicSettings().shop.name} · ${me.name}`,
+          terminalId: Number(req.headers['x-pos-terminal']) || 0, staff: me.name, approvedBy, cart,
+        });
+        return json(req, res, 201, { ...r, total, approvedBy });
+      }
+      {
+        const bm = /^\/api\/beam\/charge\/([^/]+)(\/bill|\/cancel)?$/.exec(path);
+        if (bm) {
+          requireFeature(me, 'sales', 'edit');
+          const id = decodeURIComponent(bm[1]);
+          // ถามผลจาก Beam (หน้าจอเรียกซ้ำทุก 2 วินาที) — ไม่ออกบิลที่นี่ เพื่อให้การออกบิลถูกบันทึกลง LOG เสมอ
+          if (!bm[2] && req.method === 'GET') {
+            const row = await refreshIntent(id);
+            return json(req, res, 200, { status: row.status, result: row.result, chargeId: row.chargeId, orderId: row.orderId, amount: row.amount });
+          }
+          if (bm[2] === '/cancel' && req.method === 'POST') {
+            const row = await cancelIntent(id);
+            return json(req, res, 200, { status: row.status, result: row.result });
+          }
+          // ออกบิลหลังรับเงินสำเร็จ — ตัดสต็อกตรงนี้ (ไม่ใช่ตอนกดชำระ)
+          if (bm[2] === '/bill' && req.method === 'POST') {
+            const row = getIntentRow(id) ?? (await refreshIntent(id));
+            if (row.status === 'BILLED' && row.orderId) return json(req, res, 200, { already: true, orderId: row.orderId });
+            if (row.status !== 'PAID') throw new HttpError(409, 'รายการนี้ยังไม่ได้รับเงิน — ออกบิลไม่ได้');
+            // เงินของลูกค้าออกไปแล้ว ถ้าออกบิลไม่ผ่านต้องบอกให้ชัดว่าติดอะไรและต้องทำอะไรต่อ
+            // (รายการยังค้างอยู่ในระบบ กดออกบิลซ้ำได้เสมอ — ห้ามทิ้งให้เงินหาย)
+            let out;
+            try {
+              out = createOrder(JSON.parse(row.cart) as OrderBody, req.headers['x-pos-terminal'], true);
+            } catch (e) {
+              const why = e instanceof HttpError ? e.message : 'เกิดข้อผิดพลาดระหว่างออกบิล';
+              const how = e instanceof HttpError && e.code === 'NO_SHIFT'
+                ? 'เปิดกะก่อน แล้วกดออกบิลอีกครั้ง'
+                : 'แก้ตามข้อความด้านบน (เช่น เติมสต็อก หรือเปิดแสดงขายสินค้า) แล้วกดออกบิลอีกครั้ง — ถ้าทำไม่ได้ ต้องคืนเงินลูกค้าผ่านแผงควบคุมของ Beam';
+              throw new HttpError(409, `รับเงินแล้ว ${row.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} บาท แต่ออกบิลไม่สำเร็จ: ${why} · ${how}`, 'BEAM_BILL_FAILED');
+            }
+            markBilled(id, out.order.id);
+            // ยอดที่เรียกเก็บกับยอดบิลต้องตรงกัน ถ้าไม่ตรง (เช่นมีคนแก้ราคาระหว่างรอจ่าย) ต้องรู้ทันที
+            const mismatch = Math.abs(out.order.total - row.amount) > 0.009 ? { charged: row.amount, billed: out.order.total } : null;
+            return json(req, res, 201, { ...out, chargeId: row.chargeId, mismatch });
+          }
+        }
+      }
+      // บิลที่จ่ายแล้วแต่ยังไม่ได้ออกบิล (เปิดโปรแกรมแล้วเช็คครั้งเดียว — กันเงินหายเวลาไฟดับกลางคัน)
+      // ถามซ้ำทุกรายการที่ยังไม่ได้ออกบิล ไม่ใช่เฉพาะที่รออยู่ — เอกสาร Beam ระบุว่ารายการที่
+      // ยกเลิก/หมดอายุไปแล้ว ยังมีโอกาสที่เงินจะเข้าตามมาทีหลัง ถ้าไม่ถามซ้ำจะได้เงินแต่ไม่มีบิล
+      if (path === '/api/beam/pending' && req.method === 'GET') {
+        requireFeature(me, 'sales', 'edit');
+        const rows = [];
+        for (const it of openIntents()) {
+          const r = it.status === 'PAID' ? it : await refreshIntent(it.intentId).catch(() => it);
+          if (r.status === 'PAID') rows.push({ intentId: r.intentId, amount: r.amount, chargeId: r.chargeId, staff: r.staff, createdAt: r.createdAt });
+        }
+        return json(req, res, 200, { rows });
+      }
       if (path === '/api/settings' && req.method === 'GET') { requireFeature(me, 'settings', 'view'); return json(req, res, 200, { settings: forAdmin(), keys: listKeys() }); }
       {
         const sm2 = /^\/api\/settings\/([a-z]+)$/.exec(path);
@@ -935,7 +1051,8 @@ const server = createServer(async (req, res) => {
       const m = path.match(/^\/api\/orders\/(\d+)(\/void)?$/);
       if (m) {
         const id = Number(m[1]);
-        if (!m[2] && req.method === 'GET') return json(req, res, 200, orderDetail(id));
+        // แนบข้อมูล Beam ของบิล (รหัสการชำระเงิน) ไว้กระทบยอดกับรายงานฝั่ง Beam
+        if (!m[2] && req.method === 'GET') return json(req, res, 200, { ...orderDetail(id), beam: beamOfOrder(id) });
         if (!m[2] && req.method === 'PUT') {
           const b = (await readBody(req)) as Record<string, unknown>;
           const out = editOrder(id, { ...b, staff: me.name });

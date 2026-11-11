@@ -15,6 +15,7 @@ const METHODS: { id: PaymentMethod; icon: IconName }[] = [
   { id: 'promptpay', icon: 'qr-code-outline' },
   { id: 'card', icon: 'card-outline' },
   { id: 'transfer', icon: 'swap-horizontal-outline' },
+  { id: 'beam', icon: 'card-outline' },
 ];
 
 interface Props {

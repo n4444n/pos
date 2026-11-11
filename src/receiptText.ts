@@ -24,6 +24,7 @@ export const RECEIPT_LABELS = [
   ['pay_promptpay', 'วิธีชำระ: พร้อมเพย์', '', 'PromptPay (QR)'],
   ['pay_card', 'วิธีชำระ: บัตร', '', 'Credit/Debit card'],
   ['pay_transfer', 'วิธีชำระ: โอน', '', 'Bank transfer'],
+  ['pay_beam', 'วิธีชำระ: เครื่องรับบัตร', '', 'Card terminal'],
 ] as const;
 export type ReceiptLabelKey = (typeof RECEIPT_LABELS)[number][0];
 

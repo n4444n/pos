@@ -77,7 +77,7 @@ export interface Promo {
   discount: number;
 }
 
-export type PaymentMethod = 'cash' | 'promptpay' | 'card' | 'transfer';
+export type PaymentMethod = 'cash' | 'promptpay' | 'card' | 'transfer' | 'beam';
 
 export interface CartLine {
   variantId: number;

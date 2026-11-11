@@ -23,7 +23,7 @@ const imgUrl = (v: unknown) => {
 };
 const RECEIPT_LABEL_KEYS = [
   'tel', 'taxId', 'orderNo', 'date', 'customer', 'staff', 'orderType', 'colItem', 'colQty', 'colAmount', 'subtotal', 'discount', 'fee', 'total', 'vatIncluded', 'paidBy', 'change',
-  'pay_cash', 'pay_promptpay', 'pay_card', 'pay_transfer',
+  'pay_cash', 'pay_promptpay', 'pay_card', 'pay_transfer', 'pay_beam',
 ];
 
 db.exec(`
@@ -34,7 +34,13 @@ db.exec(`
   );
 `);
 
-export type PayId = 'cash' | 'promptpay' | 'card' | 'transfer';
+export type PayId = 'cash' | 'promptpay' | 'card' | 'transfer' | 'beam';
+
+// Beam ใช้ได้จริงหรือยัง — server/beam.ts เป็นคนบอก (ที่นี่ import beam.ts ตรง ๆ ไม่ได้ จะวนกัน)
+let beamUsable: () => boolean = () => false;
+export const setBeamUsable = (fn: () => boolean) => {
+  beamUsable = fn;
+};
 export interface PayMethod { id: PayId; label: string; enabled: boolean; feePercent: number; feeFixed: number }
 
 export interface Settings {
@@ -109,7 +115,28 @@ export interface Settings {
     /** ห้ามแก้ไขบิลที่ออกแล้วในสาขาที่จด VAT — เปลี่ยน/คืนสินค้าต้องยกเลิกบิลแล้วออกใหม่ */
     lockEdit: boolean;
   };
+  /** รับเงินผ่านเครื่อง Beam Bolt หน้าร้าน (โหมด Pairing) — รายละเอียดการทำงานอยู่ใน server/beam.ts */
+  beam: {
+    enabled: boolean;
+    /** playground = สนามทดสอบของ Beam (เงินไม่เดินจริง) · กุญแจคนละชุดกับ production */
+    env: 'playground' | 'production';
+    merchantId: string;
+    /** กุญแจลับ — ไม่เคยส่งให้หน้าจอ (forAdmin ปิดบังไว้) */
+    apiKey: string;
+    /** วิธีรับเงินที่จะให้เครื่องเสนอลูกค้า */
+    methods: BeamMethod[];
+    /** ผู้จัดการต้องใส่ PIN ก่อนส่งยอดไปขึ้นบนเครื่อง */
+    requireManager: boolean;
+    /** รอลูกค้าจ่ายนานสุดกี่วินาที ครบแล้วยกเลิกรายการบนเครื่อง */
+    timeoutSec: number;
+  };
 }
+
+/** วิธีรับเงินของ Beam Bolt (ชื่อตามเอกสารของ Beam — ส่งค่านี้ตรง ๆ ตอนสร้าง Bolt Intent) */
+export const BEAM_METHODS = [
+  'CARD', 'CARD_INSTALLMENTS', 'QR_PROMPT_PAY', 'TRUE_MONEY', 'LINE_PAY', 'SHOPEE_PAY', 'ALIPAY', 'ALIPAY_PLUS', 'WECHAT_PAY', 'SPAY_LATER',
+] as const;
+export type BeamMethod = (typeof BEAM_METHODS)[number];
 
 
 // ---------- ป้ายบาร์โค้ด (ตั้งค่า → กระดาษบาร์โค้ด) ----------
@@ -233,6 +260,8 @@ export const DEFAULTS: Settings = {
       { id: 'promptpay', label: 'พร้อมเพย์ (QR)', enabled: true, feePercent: 0, feeFixed: 0 },
       { id: 'card', label: 'บัตรเครดิต/เดบิต', enabled: true, feePercent: 0, feeFixed: 0 },
       { id: 'transfer', label: 'โอนผ่านธนาคาร', enabled: true, feePercent: 0, feeFixed: 0 },
+      // แสดงในหน้าขายเฉพาะตอนเปิดใช้งาน Beam และผูกเครื่องไว้แล้ว (ดู publicSettings)
+      { id: 'beam', label: 'เครื่องรับบัตร (Beam)', enabled: true, feePercent: 0, feeFixed: 0 },
     ],
     promptpayId: '',
     promptpayName: '',
@@ -262,6 +291,8 @@ export const DEFAULTS: Settings = {
   },
   api: { enabled: false },
   tax: { legalName: '', lockEdit: true },
+  // ปิดไว้ก่อน — เปิดเมื่อร้านมีบัญชี Beam และเครื่อง Bolt แล้ว
+  beam: { enabled: false, env: 'playground', merchantId: '', apiKey: '', methods: ['CARD', 'QR_PROMPT_PAY'], requireManager: true, timeoutSec: 180 },
 };
 export const SECTIONS = Object.keys(DEFAULTS) as (keyof Settings)[];
 
@@ -459,6 +490,21 @@ function clean(section: keyof Settings, v: Record<string, any>, old: Settings): 
       return { enabled: bool(v.enabled, false) };
     case 'tax':
       return { legalName: str(v.legalName, 160), lockEdit: bool(v.lockEdit, true) };
+    case 'beam': {
+      const list = Array.isArray(v.methods) ? v.methods : [];
+      const methods = BEAM_METHODS.filter((m) => list.includes(m));
+      const merchantId = str(v.merchantId, 100).trim();
+      const apiKey = secret(v.apiKey, old.beam.apiKey);
+      const enabled = bool(v.enabled, false);
+      if (enabled && (!merchantId || !apiKey)) throw new HttpError(422, 'ต้องใส่ Merchant ID และ API Key ก่อนเปิดใช้งาน Beam');
+      if (enabled && !methods.length) throw new HttpError(422, 'เลือกวิธีรับเงินอย่างน้อย 1 อย่าง');
+      return {
+        enabled, env: pick(v.env, ['playground', 'production'] as const, 'playground'), merchantId, apiKey, methods,
+        requireManager: bool(v.requireManager, true),
+        // 60–600 วินาที: สั้นกว่านี้ลูกค้าหยิบบัตรไม่ทัน ยาวกว่านี้เครื่องค้างรอนานเกินไป
+        timeoutSec: Math.floor(num(v.timeoutSec, 60, 600, 180)),
+      };
+    }
   }
 }
 
@@ -487,6 +533,7 @@ export function forAdmin() {
       ...s.notify, line: { ...s.notify.line, token: mask(s.notify.line.token) }, whatsapp: { ...s.notify.whatsapp, token: mask(s.notify.whatsapp.token) },
       webhook: { ...s.notify.webhook, secret: mask(s.notify.webhook.secret) },
     },
+    beam: { ...s.beam, apiKey: mask(s.beam.apiKey) },
   };
 }
 
@@ -500,7 +547,9 @@ export function publicSettings() {
     photoUrl: b.photo || s.shop.photoUrl,
   };
   // อัตรา VAT = อัตราที่มีผลวันนี้จากตารางอัตรา VAT (ตั้งค่า → ภาษี)
-  const payments = { ...s.payments, vat: { enabled: b.vatRegistered, rate: Math.round(getVatRate() * 10000) / 100 } };
+  // วิธีชำระ "เครื่องรับบัตร (Beam)" โผล่ในหน้าขายเฉพาะตอนที่ใช้ได้จริง (เปิดใช้งาน + ใส่กุญแจ + ผูกเครื่องกับสาขานี้แล้ว)
+  const methods = s.payments.methods.filter((m) => m.id !== 'beam' || beamUsable());
+  const payments = { ...s.payments, methods, vat: { enabled: b.vatRegistered, rate: Math.round(getVatRate() * 10000) / 100 } };
   return {
     shop, display: s.display, payments, receipt: s.receipt, barcode: { symbology: s.barcode.symbology, labelProfiles: s.barcode.labelProfiles, labelProfile: s.barcode.labelProfile, labelPresets: s.barcode.labelPresets ?? [] }, stock: { lowStockDefault: s.stock.lowStockDefault, allowNegative: s.stock.allowNegative },
     branch: { id: b.id, name: b.name, code: b.code, isMain: b.isMain },

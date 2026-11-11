@@ -25,6 +25,7 @@ printer-output/
 # ไฟล์ทดสอบ/ngrok สำหรับเครื่องนักพัฒนา — ไม่ขึ้น GitHub
 run-test.bat
 test-printer.bat
+test-beam.bat
 start-ngrok.bat
 run-ngrok.bat
 license-demo.bat

@@ -13,7 +13,7 @@ export type EventName =
   | 'shift.opened' | 'shift.closed' | 'cash.moved' | 'expense.created' | 'report.daily';
 
 const baht = (n: number) => `฿${Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
-const PAY: Record<string, string> = { cash: 'เงินสด', promptpay: 'พร้อมเพย์ (QR)', card: 'บัตรเครดิต/เดบิต', transfer: 'โอนผ่านธนาคาร' };
+const PAY: Record<string, string> = { cash: 'เงินสด', promptpay: 'พร้อมเพย์ (QR)', card: 'บัตรเครดิต/เดบิต', transfer: 'โอนผ่านธนาคาร', beam: 'เครื่องรับบัตร (Beam)' };
 const payLabel = (m: string) => getSettings().payments.methods.find((x) => x.id === m)?.label ?? PAY[m] ?? m;
 
 async function post(url: string, body: string, headers: Record<string, string>, timeoutMs = 8000) {

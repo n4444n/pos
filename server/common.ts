@@ -16,7 +16,7 @@ export function setVatSwitch(fn: () => boolean) {
   vatOn = fn;
 }
 export const ORDER_TYPES = ['หน้าร้าน', 'ออนไลน์ (รับที่ร้าน)', 'จัดส่ง'];
-export const PAYMENT_METHODS = ['cash', 'promptpay', 'card', 'transfer'];
+export const PAYMENT_METHODS = ['cash', 'promptpay', 'card', 'transfer', 'beam'];
 
 export const round2 = (n: number) => Math.round(n * 100) / 100;
 

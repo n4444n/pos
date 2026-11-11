@@ -25,6 +25,7 @@ import { auth, useSession } from '../session';
 import { CART_MIN, GRID_GAP, maxCartW, useCartWidth, useDefaultViewMode, useResponsive, useViewMode } from '../layout';
 import { beep, useAppSettings } from '../appSettings';
 import { baht } from '../format';
+import { BeamPayDialog, BeamPendingDialog } from '../components/BeamPayDialog';
 import { printReceipt } from '../print';
 import { desktop } from '../desktop';
 import { hasThai, inModal, isEditable, thaiToEn } from '../scanInput';
@@ -84,6 +85,8 @@ export function SalesScreen({ onMenu, onNavigate, active, stockVersion }: Props)
   const deferredQuery = useDeferredValue(query);
   const [picked, setPicked] = useState<Product | null>(null);
   const [payOpen, setPayOpen] = useState<null | 'select' | 'checkout'>(null);
+  // เครื่องรับบัตร Beam: ออกบิลหลังได้เงิน จึงไม่ผ่าน doPlace ปกติ
+  const [beamOpen, setBeamOpen] = useState(false);
   const [receipt, setReceipt] = useState<Order | null>(null);
   const [ordersOpen, setOrdersOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
@@ -300,19 +303,26 @@ export function SalesScreen({ onMenu, onNavigate, active, stockVersion }: Props)
       setNeedShift(true);
       return;
     }
-    if (order) {
-      setPayOpen(null);
-      setCartOpen(false);
-      setReceipt(order);
-      // แอปเดสก์ท็อป: เปิดลิ้นชักเงินตามตั้งค่าเครื่องนี้ (เปิดเฉพาะตอนขาย ไม่เปิดตอนพิมพ์ซ้ำ)
-      desktop()?.openDrawer?.({ cash: order.paymentMethod === 'cash' });
-      if (settings.receipt.autoPrint) printReceipt(order); // ตั้งค่า → ใบเสร็จ → พิมพ์อัตโนมัติ
-    }
+    if (order) afterOrder(order);
+  };
+
+  /** ได้บิลแล้ว (ขายปกติ หรือรับเงินผ่านเครื่องรับบัตร) — ปิดหน้าต่าง เปิดลิ้นชัก พิมพ์ใบเสร็จ */
+  const afterOrder = (order: Order) => {
+    setPayOpen(null);
+    setBeamOpen(false);
+    setCartOpen(false);
+    setReceipt(order);
+    // แอปเดสก์ท็อป: เปิดลิ้นชักเงินตามตั้งค่าเครื่องนี้ (เปิดเฉพาะตอนขาย ไม่เปิดตอนพิมพ์ซ้ำ)
+    desktop()?.openDrawer?.({ cash: order.paymentMethod === 'cash' });
+    if (settings.receipt.autoPrint) printReceipt(order); // ตั้งค่า → ใบเสร็จ → พิมพ์อัตโนมัติ
   };
 
   const onPlace = () => {
     if (!pos.data?.shift) setNeedShift(true);
     else if (!pos.payment) setPayOpen('checkout');
+    // เลือก "เครื่องรับบัตร" ไว้ล่วงหน้าแล้วกดปุ่มชำระเงิน → ต้องไปทางเครื่องรับบัตรเสมอ
+    // (ห้ามออกบิลตรง ๆ ไม่งั้นได้ของไปโดยยังไม่จ่ายเงิน)
+    else if (pos.payment.method === 'beam') setBeamOpen(true);
     else doPlace();
   };
 
@@ -490,10 +500,17 @@ export function SalesScreen({ onMenu, onNavigate, active, stockVersion }: Props)
         onClose={() => setPayOpen(null)}
         onConfirm={(p) => {
           pos.setPayment(p);
-          if (payOpen === 'checkout') doPlace(p);
-          else setPayOpen(null);
+          if (payOpen !== 'checkout') return setPayOpen(null);
+          // เครื่องรับบัตร: ส่งยอดไปที่เครื่องก่อน ออกบิลเมื่อได้เงินแล้วเท่านั้น
+          if (p.method === 'beam') {
+            setPayOpen(null);
+            setBeamOpen(true);
+          } else doPlace(p);
         }}
       />
+
+      <BeamPendingDialog pos={pos} onDone={afterOrder} />
+      <BeamPayDialog visible={beamOpen} total={pos.totals.total} pos={pos} onClose={() => setBeamOpen(false)} onDone={afterOrder} />
 
       <Sheet
         visible={!!receipt}

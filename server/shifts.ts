@@ -60,8 +60,8 @@ export type Tender = { label?: string; system: number; count: number; actual: nu
 
 /** ตัวเลขสดของกะ (คำนวณจากสมุดรับจ่าย) */
 function live(shiftId: number, openingCash: number) {
-  const byMethod: Record<string, number> = { cash: 0, promptpay: 0, card: 0, transfer: 0 };
-  const countByMethod: Record<string, number> = { cash: 0, promptpay: 0, card: 0, transfer: 0 };
+  const byMethod: Record<string, number> = { cash: 0, promptpay: 0, card: 0, transfer: 0, beam: 0 };
+  const countByMethod: Record<string, number> = { cash: 0, promptpay: 0, card: 0, transfer: 0, beam: 0 };
   for (const r of q.payByMethod.all(shiftId) as { method: string; amount: number; n: number }[]) {
     byMethod[r.method] = round2(r.amount);
     countByMethod[r.method] = r.n;

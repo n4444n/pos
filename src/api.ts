@@ -204,6 +204,27 @@ export const api = {
     request<SkuPage>(`/api/stock/skus${qs(f)}`),
   // ----- ตั้งค่า -----
   settings: () => request<{ settings: AdminSettings; keys: ApiKeyRow[] }>('/api/settings'),
+  // ----- Beam Checkout -----
+  /** หน้าตั้งค่า (ต้องมีสิทธิ์ "ตั้งค่า") */
+  beam: () => request<BeamStatus>('/api/beam'),
+  /** หน้าขายตอนรับเงิน (พนักงานขายเรียกได้ — ไม่มีกุญแจ/Merchant ID) */
+  beamCheckout: () => request<BeamCheckoutInfo>('/api/beam/checkout'),
+  beamTest: () => request<{ ok: true; env: string; merchantId: string }>('/api/beam/test', { method: 'POST' }),
+  beamPair: (pairingCode: string, terminalId = 0) =>
+    request<{ ok: true }>('/api/beam/pair', { method: 'POST', body: JSON.stringify({ pairingCode, terminalId }) }),
+  beamUnpair: (terminalId = 0) => request<{ ok: true; warning: string }>(`/api/beam/pair?terminal=${terminalId}`, { method: 'DELETE' }),
+  /** ส่งยอดไปขึ้นบนเครื่อง (ยังไม่ออกบิล) — pin = PIN ผู้จัดการ ถ้าตั้งให้ต้องยืนยัน */
+  beamCharge: (body: Record<string, unknown>) => request<BeamCharge>('/api/beam/charge', { method: 'POST', body: JSON.stringify(body) }),
+  /** ถามผลเป็นระยะระหว่างลูกค้าจ่าย */
+  beamPoll: (intentId: string) => request<BeamPoll>(`/api/beam/charge/${encodeURIComponent(intentId)}`),
+  beamCancel: (intentId: string) => request<{ status: BeamPoll['status']; result: string | null }>(`/api/beam/charge/${encodeURIComponent(intentId)}/cancel`, { method: 'POST' }),
+  /** จ่ายสำเร็จแล้ว → ออกบิลและตัดสต็อก */
+  beamBill: (intentId: string) =>
+    request<({ order: Order; stock: { id: number; stock: number }[]; nextOrderNo: string; chargeId: string | null; mismatch: { charged: number; billed: number } | null }) | { already: true; orderId: number }>(
+      `/api/beam/charge/${encodeURIComponent(intentId)}/bill`, { method: 'POST' },
+    ),
+  /** รายการที่จ่ายแล้วแต่ยังไม่ได้ออกบิล (เช็คตอนเปิดโปรแกรม) */
+  beamPending: () => request<{ rows: BeamPending[] }>('/api/beam/pending'),
   saveSettings: <K extends keyof AdminSettings>(section: K, value: AdminSettings[K]) =>
     request<{ settings: AdminSettings }>(`/api/settings/${section}`, { method: 'PUT', body: JSON.stringify(value) }),
   testNotify: (channel: 'line' | 'whatsapp' | 'webhook', event?: NotifyEventKey) =>
@@ -459,7 +480,68 @@ export interface AdminSettings extends PublicSettings {
     templates: Record<NotifyEventKey, CardTemplate>;
   };
   api: { enabled: boolean };
+  beam: BeamConfig;
 }
+
+// ----- Beam Checkout (เครื่องรับบัตร Bolt) -----
+/** ชื่อวิธีรับเงินตามเอกสารของ Beam — ส่งค่านี้ตรง ๆ ตอนสร้างรายการบนเครื่อง */
+export type BeamMethod = 'CARD' | 'CARD_INSTALLMENTS' | 'QR_PROMPT_PAY' | 'TRUE_MONEY' | 'LINE_PAY' | 'SHOPEE_PAY' | 'ALIPAY' | 'ALIPAY_PLUS' | 'WECHAT_PAY' | 'SPAY_LATER';
+export interface BeamConfig {
+  enabled: boolean;
+  env: 'playground' | 'production';
+  merchantId: string;
+  /** ซ่อนไว้เป็น ••••xxxx — ส่งค่าเดิมกลับไป = ไม่เปลี่ยน · ส่ง '-' = ลบ */
+  apiKey: string;
+  methods: BeamMethod[];
+  requireManager: boolean;
+  timeoutSec: number;
+}
+export interface BeamDevice {
+  /** 0 = ใช้ได้ทั้งสาขา · >0 = ผูกกับเครื่อง POS เครื่องนั้น */
+  terminalId: number;
+  deviceId: string;
+  deviceName: string;
+  env: string;
+  createdAt: string;
+  /** ผูกไว้คนละโหมด (playground/production) กับที่ตั้งอยู่ตอนนี้ → ต้องผูกใหม่ */
+  stale: boolean;
+}
+export interface BeamCharge {
+  intentId: string;
+  /** ยอดที่ส่งไปขึ้นบนเครื่อง */
+  amount: number;
+  total: number;
+  method: BeamMethod;
+  /** เครื่องจะยกเลิกเองเมื่อครบเวลานี้ (วินาที) */
+  expirySec: number;
+  device: string;
+  /** ชื่อผู้จัดการที่ยืนยัน (ว่าง = ไม่ได้ตั้งให้ยืนยัน) */
+  approvedBy: string;
+}
+export interface BeamPoll {
+  status: 'WAITING' | 'PAID' | 'BILLED' | 'CANCELED' | 'EXPIRED' | 'FAILED';
+  result: string | null;
+  chargeId: string | null;
+  orderId: number | null;
+  amount: number;
+}
+export interface BeamPending { intentId: string; amount: number; chargeId: string | null; staff: string; createdAt: string }
+export interface BeamStatus extends Omit<BeamConfig, 'merchantId' | 'apiKey'> {
+  /** ใส่ Merchant ID + API Key ครบแล้วและเปิดใช้งานอยู่ */
+  configured: boolean;
+  connections: BeamDevice[];
+}
+/** เท่าที่หน้าขายต้องใช้ — ไม่มีกุญแจ ไม่มี Merchant ID ไม่มีรหัสเครื่อง */
+export interface BeamCheckoutInfo {
+  /** พร้อมรับเงินจริง (เปิดใช้งาน + ใส่กุญแจ + ผูกเครื่องโหมดเดียวกันไว้แล้ว) */
+  ready: boolean;
+  methods: BeamMethod[];
+  requireManager: boolean;
+  timeoutSec: number;
+  /** ชื่อเครื่องที่ยอดจะไปขึ้น (ว่าง = ยังไม่ได้ผูก) */
+  device: string;
+}
+
 export type NotifyEventKey = 'sale' | 'promptpay' | 'void' | 'edit' | 'lowStock' | 'outStock' | 'shiftOpen' | 'shiftClose' | 'cash' | 'expense' | 'daily';
 export interface NotifyChannels { on: boolean; line: boolean; whatsapp: boolean; webhook: boolean }
 export interface CardLine { label: string; value: string }

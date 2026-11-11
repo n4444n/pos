@@ -194,6 +194,7 @@ export function printShiftReport(s: import('./types').Shift, shopName = getAppSe
     ${row('พร้อมเพย์', m(s.byMethod.promptpay ?? 0))}
     ${row('บัตร', m(s.byMethod.card ?? 0))}
     ${row('โอน', m(s.byMethod.transfer ?? 0))}
+    ${s.byMethod.beam ? row('เครื่องรับบัตร', m(s.byMethod.beam)) : ''}
     ${row('ยอดขายรวม', m(s.totalSales), true)}
   </table>
   ${s.closeNote ? `<hr><div>หมายเหตุ: ${esc(s.closeNote)}</div>` : ''}
@@ -216,7 +217,7 @@ export function printDaySummary(d: import('./api').DaySummary, closed?: import('
   const pw = paperWidth();
   const { receipt: r, shop } = getAppSettings();
   const row = (l: string, v: string, cls = '') => `<tr class="${cls}"><td>${esc(l)}</td><td class="r">${v}</td></tr>`;
-  const PAY: Record<string, string> = { cash: 'เงินสด', promptpay: 'พร้อมเพย์', card: 'บัตร', transfer: 'โอน' };
+  const PAY: Record<string, string> = { cash: 'เงินสด', promptpay: 'พร้อมเพย์', card: 'บัตร', transfer: 'โอน', beam: 'เครื่องรับบัตร' };
   const payName = (m: string) => getAppSettings().payments.methods.find((x) => x.id === m)?.label ?? PAY[m] ?? m;
   const dateLabel = new Date(`${d.date}T12:00:00`).toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const now = new Date().toLocaleString('th-TH', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });

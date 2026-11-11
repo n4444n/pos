@@ -10,7 +10,7 @@ import { PROMPTPAY_KIND_LABEL, promptPayKind, promptPayPayload } from '../prompt
 
 /** สาขาหลัก: รายชื่อสาขาย่อย + ปุ่มเพิ่มสาขา (สร้าง key เชื่อมสาขาให้อัตโนมัติ) */
 export function PaymentsSection({ v, set, goTax }: { v: AdminSettings['payments']; set: Upd<AdminSettings['payments']>; goTax: () => void }) {
-  const ICON: Record<string, IconName> = { cash: 'cash-outline', promptpay: 'qr-code-outline', card: 'card-outline', transfer: 'swap-horizontal-outline' };
+  const ICON: Record<string, IconName> = { cash: 'cash-outline', promptpay: 'qr-code-outline', card: 'card-outline', transfer: 'swap-horizontal-outline', beam: 'card-outline' };
   const upd = (id: string, x: Partial<AdminSettings['payments']['methods'][number]>) => set({ methods: v.methods.map((m) => (m.id === id ? { ...m, ...x } : m)) });
   const move = (i: number, d: number) => {
     const a = [...v.methods];

@@ -27,6 +27,7 @@ export const PAYMENT_LABEL: Record<string, string> = {
   promptpay: 'พร้อมเพย์ (QR)',
   card: 'บัตรเครดิต/เดบิต',
   transfer: 'โอนเงิน',
+  beam: 'เครื่องรับบัตร (Beam)',
 };
 
 /**

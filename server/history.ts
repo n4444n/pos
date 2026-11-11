@@ -9,7 +9,7 @@ import { assertVoidable, docsForOrder } from './taxDocs.ts';
 import { recordPayment, requireShift } from './shifts.ts';
 import { variantLabel } from './products.ts';
 
-const PAY_LABEL: Record<string, string> = { cash: 'เงินสด', promptpay: 'พร้อมเพย์', card: 'บัตร', transfer: 'โอน' };
+const PAY_LABEL: Record<string, string> = { cash: 'เงินสด', promptpay: 'พร้อมเพย์', card: 'บัตร', transfer: 'โอน', beam: 'เครื่องรับบัตร' };
 const STATUS_LABEL: Record<string, string> = { paid: 'ชำระแล้ว', edited: 'แก้ไขแล้ว', void: 'ยกเลิก' };
 
 const q = {

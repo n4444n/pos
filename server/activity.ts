@@ -105,7 +105,7 @@ const q = {
 
 const baht = (n: number) => `฿${round2(n).toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(round2(n)) ? 0 : 2, maximumFractionDigits: 2 })}`;
 const n0 = (n: number) => Math.round(n).toLocaleString('en-US');
-const PAY: Record<string, string> = { cash: 'เงินสด', promptpay: 'QR พร้อมเพย์', card: 'บัตร', transfer: 'โอน' };
+const PAY: Record<string, string> = { cash: 'เงินสด', promptpay: 'QR พร้อมเพย์', card: 'บัตร', transfer: 'โอน', beam: 'เครื่องรับบัตร' };
 const short = (s: unknown, max = 80) => {
   const t = typeof s === 'string' ? s.trim() : '';
   return t ? (t.length > max ? `${t.slice(0, max)}…` : t) : null;

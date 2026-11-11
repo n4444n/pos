@@ -119,6 +119,7 @@ export const DEFAULT_SETTINGS: PublicSettings = {
     methods: [
       { id: 'cash', label: 'เงินสด', enabled: true, feePercent: 0, feeFixed: 0 },
       { id: 'promptpay', label: 'พร้อมเพย์ (QR)', enabled: true, feePercent: 0, feeFixed: 0 },
+      { id: 'beam', label: 'เครื่องรับบัตร (Beam)', enabled: false, feePercent: 0, feeFixed: 0 },
       { id: 'card', label: 'บัตรเครดิต/เดบิต', enabled: true, feePercent: 0, feeFixed: 0 },
       { id: 'transfer', label: 'โอนผ่านธนาคาร', enabled: true, feePercent: 0, feeFixed: 0 },
     ],

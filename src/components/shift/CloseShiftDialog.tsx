@@ -223,7 +223,8 @@ export function CloseShiftDialog({ visible, shift, onClose, onClosed, onLogout }
       </View>
       <View style={[s.box, { marginTop: 10, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line }]}>
         <Text style={s.boxTitle}>ช่องทางอื่น (ไม่อยู่ในลิ้นชัก)</Text>
-        {(['promptpay', 'card', 'transfer'] as PaymentMethod[]).map((m) => (
+        {/* เครื่องรับบัตร (Beam) ขึ้นเฉพาะร้านที่ใช้ — ร้านอื่นไม่ต้องเห็นบรรทัด ฿0 */}
+        {(['promptpay', 'card', 'transfer', 'beam'] as PaymentMethod[]).filter((m) => m !== 'beam' || shift.byMethod.beam).map((m) => (
           <Line key={m} l={`${PAYMENT_LABEL[m]}${shift.countByMethod?.[m] ? ` (${shift.countByMethod[m]} บิล)` : ''}`} r={baht(shift.byMethod[m] ?? 0)} />
         ))}
         <View style={s.sep} />

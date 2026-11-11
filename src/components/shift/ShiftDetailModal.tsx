@@ -69,7 +69,7 @@ export function ShiftDetailModal({ shiftId, onClose }: { shiftId: number | null;
             </View>
             <View style={s_.card}>
               <Text style={s_.cardTitle}>ยอดขายตามช่องทาง</Text>
-              {(['cash', 'promptpay', 'card', 'transfer'] as PaymentMethod[]).map((m) => (
+              {(['cash', 'promptpay', 'card', 'transfer', 'beam'] as PaymentMethod[]).filter((m) => m !== 'beam' || s.byMethod.beam).map((m) => (
                 <Line key={m} l={PAYMENT_LABEL[m]} r={baht(s.byMethod[m] ?? 0)} />
               ))}
               <View style={s_.sep} />

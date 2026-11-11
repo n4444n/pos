@@ -9,7 +9,7 @@ import { ImportProductsSheet } from '../components/stock/ImportProductsSheet';
 import { ProductEditor } from '../components/stock/ProductEditor';
 import { Sheet } from '../components/Sheet';
 import { ToastView } from '../components/ToastView';
-import { baht, n0, priceRange, thaiDate } from '../format';
+import { baht, n0, priceRange } from '../format';
 import { can, useSession } from '../session';
 import { useAppSettings } from '../appSettings';
 import type { Toast } from '../store/usePos';
@@ -174,107 +174,94 @@ export function StockScreen({ onNavigate, onStockChanged }: Props) {
           />
         ) : (
           <>
-            {/* ---------- header ---------- */}
+            {/* ---------- header: ชื่อหน้า · ตัวเลขสรุป · ปุ่ม (บรรทัดเดียว) ---------- */}
             <View style={s.header}>
-              <View style={s.row}>
+              <View style={[s.row, { flexShrink: 1, minWidth: 0, flexWrap: 'wrap' }]}>
                 <Pressable style={s.iconBtn} onPress={() => (showSidebar ? toggleNavMode() : setDrawer(true))} accessibilityLabel="เมนู">
-                  <Icon name="menu-outline" size={24} color={colors.primary} />
+                  <Icon name="menu-outline" size={22} color={colors.primary} />
                 </Pressable>
                 <Text style={s.title}>สต็อกสินค้า</Text>
-              </View>
-              <View style={[s.row, { flexWrap: 'wrap', justifyContent: 'flex-end' }]}>
-                {!mobile ? (
-                  <View style={s.pillBtn}>
-                    <Text style={s.pillText}>{thaiDate(new Date())}</Text>
-                    <Icon name="calendar-outline" size={16} color={colors.primary} />
+                {summary ? (
+                  <View style={s.kpis}>
+                    <Kpi value={n0(summary.products)} label="สินค้า" />
+                    <Kpi value={n0(summary.skus)} label="SKU" />
+                    <Kpi value={n0(summary.units)} label="ชิ้น" />
+                    {summary.value != null ? <Kpi value={baht(summary.value)} label="มูลค่า (ทุน)" tone={colors.primary} /> : null}
                   </View>
                 ) : null}
-                {manager && isMain ? (
+              </View>
+              {manager && isMain ? (
+                <View style={s.row}>
                   <Pressable style={s.pillBtn} onPress={() => setImporting(true)} accessibilityLabel="นำเข้าสินค้าจากที่อื่น">
-                    <Icon name="cloud-upload-outline" size={18} color={colors.primary} />
-                    <Text style={[s.pillText, { color: colors.primary, fontWeight: '600' }]}>นำเข้าสินค้าจากที่อื่น</Text>
+                    <Icon name="cloud-upload-outline" size={17} color={colors.primary} />
+                    {!mobile ? <Text style={[s.pillText, { color: colors.primary, fontWeight: '600' }]}>นำเข้า</Text> : null}
                   </Pressable>
-                ) : null}
-                {manager && isMain ? (
                   <Pressable style={[s.pillBtn, s.addBtn]} onPress={() => setEditing('new')} accessibilityLabel="เพิ่มสินค้า">
                     <Icon name="add" size={18} color="#fff" />
                     <Text style={[s.pillText, { color: '#fff' }]}>เพิ่มสินค้า</Text>
                   </Pressable>
-                ) : null}
-              </View>
+                </View>
+              ) : null}
             </View>
 
             {!isMain ? (
-              <View style={[s.alert, { backgroundColor: colors.primarySoft }]}>
-                <Icon name="information-circle-outline" size={18} color={colors.primary} />
+              <View style={[s.alert, { backgroundColor: colors.primarySoft, borderColor: colors.primarySoft }]}>
+                <Icon name="information-circle-outline" size={16} color={colors.primary} />
                 <Text style={[s.alertText, { color: colors.text }]}>
                   รายการสินค้าใช้ร่วมกับทุกสาขา — <Text style={{ fontWeight: '700' }}>เพิ่ม/แก้ไขสินค้าทำที่สาขาหลัก</Text> · สาขานี้รับสินค้าเข้า ปรับสต็อก และตั้งราคาขายของสาขาเองได้ที่{' '}
                   <Text style={{ color: colors.primary, fontWeight: '700' }} onPress={() => onNavigate('skus')}>สต็อกสินค้า (คุณสมบัติ)</Text>
                 </Text>
               </View>
             ) : null}
-            {/* ---------- แจ้งเตือนสินค้าเหลือน้อย ---------- */}
-            {summary && (summary.low > 0 || summary.out > 0) ? (
-              <View style={s.alert}>
-                <Icon name="notifications" size={18} color="#B26A00" />
-                <Text style={s.alertText}>
-                  แจ้งเตือนสต็อก: <Text style={{ fontWeight: '700' }}>เหลือน้อย {summary.low} SKU</Text> · <Text style={{ fontWeight: '700', color: colors.danger }}>หมด {summary.out} SKU</Text>
-                </Text>
-                <Pressable style={s.alertBtn} onPress={() => setStatus('low')}>
-                  <Text style={s.alertBtnText}>ดูที่เหลือน้อย</Text>
-                </Pressable>
-                <Pressable style={s.alertBtn} onPress={() => setStatus('out')}>
-                  <Text style={s.alertBtnText}>ดูที่หมด</Text>
-                </Pressable>
-              </View>
-            ) : null}
 
-            {/* ---------- สรุป ---------- */}
-            {summary ? (
-              <View style={[s.row, { flexWrap: 'wrap', gap: 10 }]}>
-                <Stat label="สินค้า" value={n0(summary.products)} />
-                <Stat label="SKU (สี/ไซซ์)" value={n0(summary.skus)} />
-                <Stat label="จำนวนคงเหลือ" value={`${n0(summary.units)} ชิ้น`} />
-                {summary.value != null ? <Stat label="มูลค่าสต็อก (ราคาทุน)" value={baht(summary.value)} tone={colors.primary} /> : null}
+            {/* ---------- ค้นหา + สถานะ (บรรทัดเดียว) · ตัวเลขแจ้งเตือนอยู่บนชิป "เหลือน้อย" / "มี SKU หมด" ---------- */}
+            <View style={s.toolbar}>
+              <View style={s.searchBox}>
+                <Icon name="barcode-outline" size={18} color={colors.text} />
+                <TextInput
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="ค้นหาชื่อสินค้า / สแกนบาร์โค้ด / รหัส SKU…"
+                  placeholderTextColor={colors.faint}
+                  style={s.searchInput}
+                  accessibilityLabel="ค้นหาสินค้า"
+                />
+                {query ? (
+                  <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityLabel="ล้างคำค้นหา">
+                    <Icon name="close-circle" size={16} color={colors.faint} />
+                  </Pressable>
+                ) : null}
               </View>
-            ) : null}
-
-            {/* ---------- ค้นหา + ตัวกรอง ---------- */}
-            <View style={s.searchBox}>
-              <Icon name="barcode-outline" size={18} color={colors.text} />
-              <TextInput
-                value={query}
-                onChangeText={setQuery}
-                placeholder="ค้นหาชื่อสินค้า / สแกนบาร์โค้ด / รหัส SKU…"
-                placeholderTextColor={colors.faint}
-                style={s.searchInput}
-                accessibilityLabel="ค้นหาสินค้า"
-              />
-              {query ? (
-                <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityLabel="ล้างคำค้นหา">
-                  <Icon name="close-circle" size={16} color={colors.faint} />
-                </Pressable>
-              ) : null}
+              <View style={[s.row, { flexWrap: 'wrap', gap: 6 }]}>
+                {STATUS.map((st) => {
+                  const on = status === st.id;
+                  const count = st.id === 'low' ? summary?.low : st.id === 'out' ? summary?.out : undefined;
+                  const tone = st.id === 'out' ? colors.danger : '#B26A00';
+                  return (
+                    <Pressable key={st.id || 'all'} style={[s.chip, on && s.chipOn]} onPress={() => setStatus(st.id)}>
+                      <Text style={[s.chipText, on && s.chipTextOn]}>
+                        {st.label}
+                        {count ? <Text style={{ fontWeight: '700', color: on ? '#fff' : tone }}>{` ${n0(count)}`}</Text> : null}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
-            <View style={[s.row, { flexWrap: 'wrap', gap: 6 }]}>
-              {STATUS.map((st) => (
-                <Pressable key={st.id || 'all'} style={[s.chip, status === st.id && s.chipOn]} onPress={() => setStatus(st.id)}>
-                  <Text style={[s.chipText, status === st.id && s.chipTextOn]}>{st.label}</Text>
-                </Pressable>
-              ))}
-              <View style={s.sep} />
+            {/* หมวดหมู่: แถวเดียว เลื่อนซ้าย-ขวา */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 6, alignItems: 'center' }}>
               <Pressable style={[s.chip, !category && s.chipOn]} onPress={() => setCategory('')}>
                 <Text style={[s.chipText, !category && s.chipTextOn]}>ทุกหมวด</Text>
               </Pressable>
               {categories.map((c) => (
                 <Pressable key={c.id} style={[s.chip, category === c.id && s.chipOn]} onPress={() => setCategory(category === c.id ? '' : c.id)}>
-                  <Text style={[s.chipText, category === c.id && s.chipTextOn]}>
+                  <Text style={[s.chipText, category === c.id && s.chipTextOn]} numberOfLines={1}>
                     {c.name}
-                    {!category && catCount.get(c.id) ? ` ${catCount.get(c.id)}` : ''}
+                    {!category && catCount.get(c.id) ? <Text style={{ color: colors.faint }}>{` ${catCount.get(c.id)}`}</Text> : null}
                   </Text>
                 </Pressable>
               ))}
-            </View>
+            </ScrollView>
 
             {/* ---------- แถบจัดการหลายรายการ ---------- */}
             {manager && selected.size ? (
@@ -492,11 +479,12 @@ export function StockScreen({ onNavigate, onStockChanged }: Props) {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
+/** ตัวเลขสรุปแบบย่อข้างชื่อหน้า: "126 สินค้า" */
+function Kpi({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <View style={s.stat}>
-      <Text style={s.statLabel}>{label}</Text>
-      <Text style={[s.statValue, tone ? { color: tone } : null]}>{value}</Text>
+    <View style={s.kpi}>
+      <Text style={[s.kpiValue, tone ? { color: tone } : null]}>{value}</Text>
+      <Text style={s.kpiLabel}>{label}</Text>
     </View>
   );
 }
@@ -547,24 +535,26 @@ const s = StyleSheet.create({
   main: { flex: 1, minWidth: 0, backgroundColor: colors.panel, borderRadius: radius.xl, padding: 16, gap: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  iconBtn: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  iconBtn: { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   title: { fontFamily: font, fontSize: 20, fontWeight: '600', color: colors.text },
   pillBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 6, height: 40, paddingHorizontal: 14,
     borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.panel,
   },
   addBtn: { backgroundColor: colors.primary, borderColor: colors.primary },
   pillText: { fontFamily: font, fontSize: 13, color: colors.text, fontWeight: '500' },
-  alert: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', backgroundColor: '#FFF8EA', borderWidth: 1, borderColor: '#F5DEB0', borderRadius: radius.md, padding: 10 },
+  alert: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', backgroundColor: '#FFF8EA', borderWidth: 1, borderColor: '#F5DEB0', borderRadius: radius.md, paddingVertical: 7, paddingHorizontal: 10 },
   alertText: { fontFamily: font, fontSize: 13, color: '#7A5300', flex: 1, minWidth: 200 },
   alertBtn: { paddingHorizontal: 12, height: 30, borderRadius: radius.pill, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F5DEB0', justifyContent: 'center' },
   alertBtnText: { fontFamily: font, fontSize: 12, color: '#7A5300', fontWeight: '600' },
-  stat: { flexGrow: 1, flexBasis: 140, backgroundColor: colors.surface, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 14 },
-  statLabel: { fontFamily: font, fontSize: 11, color: colors.sub },
-  statValue: { fontFamily: font, fontSize: 17, fontWeight: '700', color: colors.text, marginTop: 2 },
-  searchBox: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 46, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.surface },
+  kpis: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginLeft: 6 },
+  kpi: { flexDirection: 'row', alignItems: 'baseline', gap: 4, paddingHorizontal: 10, height: 30, borderRadius: radius.pill, backgroundColor: colors.surface, alignSelf: 'center', paddingTop: 5 },
+  kpiValue: { fontFamily: font, fontSize: 14, fontWeight: '700', color: colors.text },
+  kpiLabel: { fontFamily: font, fontSize: 12, color: colors.sub },
+  toolbar: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
+  searchBox: { flexGrow: 1, flexBasis: 280, flexDirection: 'row', alignItems: 'center', gap: 8, height: 40, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.surface },
   searchInput: { flex: 1, fontFamily: font, fontSize: 14, color: colors.text, outlineStyle: 'none', minWidth: 0 } as object,
-  chip: { paddingHorizontal: 12, height: 32, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line, justifyContent: 'center' },
+  chip: { paddingHorizontal: 12, height: 30, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line, justifyContent: 'center' },
   chipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipText: { fontFamily: font, fontSize: 12, color: colors.text },
   chipTextOn: { color: '#fff', fontWeight: '600' },
