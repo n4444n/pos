@@ -27,6 +27,8 @@ run-test.bat
 test-printer.bat
 test-beam.bat
 start-ngrok.bat
+reset-license.bat
+อ่านก่อน-พัฒนา.txt
 run-ngrok.bat
 license-demo.bat
 build-web.bat
